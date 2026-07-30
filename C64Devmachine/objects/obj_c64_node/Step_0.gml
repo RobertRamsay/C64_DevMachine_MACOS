@@ -1040,27 +1040,61 @@ if ((mouse_check_button_pressed(mb_left) or scr_opt_pressed()) && !is_dragging &
 		
 		
 case "COMMENT":
-    if (!global.comments_visible) break;
-    if (point_in_rectangle(mouse_x, mouse_y, draw_x, y + 20, draw_x + width, y + height)) {
-        with (obj_workspace_manager) {
-            is_entering_text     = true;
-            input_target_node    = other.id;
-            input_target_index   = 0;
-            current_input_string = string(other.instructions[0][1]);
-            keyboard_string      = "";
-            cursor_pos           = string_length(current_input_string);
+        if (!global.comments_visible) break;
+        if (point_in_rectangle(mouse_x, mouse_y, draw_x, y + 20, draw_x + width, y + height)) {
+            with (obj_workspace_manager) {
+                is_entering_text     = true;
+                input_target_node    = other.id;
+                input_target_index   = 0;
+                current_input_string = string(other.instructions[0][1]);
+                keyboard_string      = "";
+                cursor_pos           = string_length(current_input_string);
+            }
         }
-    }
-    break;
+        break;
     
 
-        case "ORG": {
-            var _chk_x   = draw_x + 10;
-            var _chk_y   = y + 60;
-            var _org_row_y = y + 24 + 6;
+            case "ORG": {
+                var _chk_x   = draw_x + 10;
+                var _chk_y   = y + 60;
+                var _org_row_y = y + 24 + 6;
+            
+                // Fast-Add Variable Buttons Click Handler
+                if (node_title == "VARIABLES") {
+                    var _btn_defs = [
+                        { lbl: "+B",   type: "NEW_UV_BYTE",  sz: 1, enc: "byte" },
+                        { lbl: "+sB",  type: "NEW_UV_SBYTE", sz: 1, enc: "sbyte" },
+                        { lbl: "+W",   type: "NEW_UV_WORD",  sz: 2, enc: "word" },
+                        { lbl: "+BCD", type: "NEW_UV_BCD",   sz: 1, enc: "bcd" },
+                        { lbl: "+STR", type: "NEW_STR",      sz: 1, enc: "str" }
+                    ];
+                    var _bx = draw_x + 8;
+                    var _by = y - 30; 
+                    var _bw = 26;
+                    var _bh = 16;
+                
+                    for (var _bi = 0; _bi < array_length(_btn_defs); _bi++) {
+                        var _bdef = _btn_defs[_bi];
+                        if (point_in_rectangle(mouse_x, mouse_y, _bx, _by, _bx + _bw, _by + _bh)) {
+                            with (obj_workspace_manager) {
+                                uv_pending_size      = _bdef.sz;
+                                uv_pending_enc       = _bdef.enc;
+                                is_entering_text     = true;
+                                input_target_node    = noone;
+                                input_target_index   = -99;
+                                current_input_string = "";
+                                keyboard_string      = "";
+                                cursor_pos           = 0;
+								other.height_dirty = true;
+                            }
+                            exit;
+                        }
+                        _bx += _bw + 14;
+                    }
+                }
 
-            // 0. Wire Dot Click
-            if (node_title != "VARIABLES" && node_title != "HW REGISTERS") {
+                // 0. Wire Dot Click
+                if (node_title != "VARIABLES" && node_title != "HW REGISTERS") {
                 var _dot_r     = 5;
                 var _dot_in_x  = draw_x;
                 var _dot_out_x = draw_x + width;
