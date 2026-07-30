@@ -1,0 +1,13 @@
+{
+  "$GMScript":"v1",
+  "%Name":"scr_mbb_emit_mask_cells",
+  "isCompatibility":false,
+  "isDnD":false,
+  "name":"scr_mbb_emit_mask_cells",
+  "parent":{
+    "name":"BITMAP_BUILDER",
+    "path":"folders/SCRIPTS/BITMAP_BUILDER.yy",
+  },
+  "resourceType":"GMScript",
+  "resourceVersion":"2.0",
+}

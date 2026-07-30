@@ -1,0 +1,13 @@
+{
+  "$GMScript":"v1",
+  "%Name":"scr_vbmp_editor",
+  "isCompatibility":false,
+  "isDnD":false,
+  "name":"scr_vbmp_editor",
+  "parent":{
+    "name":"VECTOR_BITMAP",
+    "path":"folders/SCRIPTS/CORE/VECTOR_BITMAP.yy",
+  },
+  "resourceType":"GMScript",
+  "resourceVersion":"2.0",
+}

@@ -1,0 +1,13 @@
+{
+  "$GMScript":"v1",
+  "%Name":"scr_strip_key_ghosts",
+  "isCompatibility":false,
+  "isDnD":false,
+  "name":"scr_strip_key_ghosts",
+  "parent":{
+    "name":"MAC_OS",
+    "path":"folders/SCRIPTS/MAC_OS.yy",
+  },
+  "resourceType":"GMScript",
+  "resourceVersion":"2.0",
+}

@@ -1,0 +1,13 @@
+{
+  "$GMScript":"v1",
+  "%Name":"scr_vbmp_raster_ellipsefill_outline",
+  "isCompatibility":false,
+  "isDnD":false,
+  "name":"scr_vbmp_raster_ellipsefill_outline",
+  "parent":{
+    "name":"VECTOR_BITMAP",
+    "path":"folders/SCRIPTS/CORE/VECTOR_BITMAP.yy",
+  },
+  "resourceType":"GMScript",
+  "resourceVersion":"2.0",
+}

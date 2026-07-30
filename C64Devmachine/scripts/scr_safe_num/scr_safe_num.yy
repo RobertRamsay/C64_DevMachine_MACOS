@@ -1,0 +1,13 @@
+{
+  "$GMScript":"v1",
+  "%Name":"scr_safe_num",
+  "isCompatibility":false,
+  "isDnD":false,
+  "name":"scr_safe_num",
+  "parent":{
+    "name":"IO",
+    "path":"folders/SCRIPTS/IO.yy",
+  },
+  "resourceType":"GMScript",
+  "resourceVersion":"2.0",
+}

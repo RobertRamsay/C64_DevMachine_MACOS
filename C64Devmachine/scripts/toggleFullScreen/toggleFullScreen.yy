@@ -1,0 +1,13 @@
+{
+  "$GMScript":"v1",
+  "%Name":"toggleFullScreen",
+  "isCompatibility":false,
+  "isDnD":false,
+  "name":"toggleFullScreen",
+  "parent":{
+    "name":"UI",
+    "path":"folders/SCRIPTS/UI.yy",
+  },
+  "resourceType":"GMScript",
+  "resourceVersion":"2.0",
+}
