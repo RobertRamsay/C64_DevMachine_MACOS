@@ -2030,33 +2030,13 @@ draw_set_font(fnt_c64_tiny);
 draw_set_halign(fa_left);
 draw_set_valign(fa_bottom);
 draw_set_colour(c_yellow)
-
-
-
-var _debug_line= gui_h-140
-
-var _debug_lnHeight= 15
-
-draw_text(10, _debug_line, (keyboard_key))
-_debug_line+=_debug_lnHeight;
-
-draw_text(10, _debug_line, "WindW: " + string(window_get_width()) + " : WindH:  " + string(window_get_height()));
-_debug_line+=_debug_lnHeight;
-
-draw_text(10, _debug_line, "DispW: " + string(display_get_width()) + " : DispH:  " + string(display_get_height()));
-_debug_line+=_debug_lnHeight;
-
-draw_text(10, _debug_line, "Mx: " + string(gui_mouse_x) + " : My:  " + string(gui_mouse_y));
-_debug_line+=_debug_lnHeight;
-
-draw_text(10, _debug_line, "CAMx: " + string(cam_x) + " : CAMy:  " + string(cam_y));
-_debug_line+=_debug_lnHeight;
-
+draw_text(10, gui_h - 55, "Mx: " + string(gui_mouse_x) + " : My:  " + string(gui_mouse_y))
+draw_text(10, gui_h - 40, "CAMx: " + string(cam_x) + " : CAMy:  " + string(cam_y))
 var fps_col = (fps >= 55) ? c_lime : ((fps >= 30) ? c_yellow : c_red);
 draw_set_color(fps_col);
-draw_text(10, _debug_line, "FPS: " + string(fps) + " (REAL: " + string(fps_real) + ")");
+draw_text(10, gui_h - 10, "FPS: " + string(fps) + " (REAL: " + string(fps_real) + ")");
 draw_set_color(c_white);
-draw_text(180, _debug_line, "NODES: " + string(instance_number(obj_c64_node)));
+draw_text(180, gui_h - 10, "NODES: " + string(instance_number(obj_c64_node)));
 draw_set_valign(fa_top);
 draw_set_halign(fa_left);
 
