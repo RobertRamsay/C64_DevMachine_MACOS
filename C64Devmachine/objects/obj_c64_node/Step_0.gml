@@ -614,7 +614,6 @@ if (label_picker_open && mouse_check_button_pressed(mb_left)) {
                     if (_picked_name != "" && label_picker_target.label_picker_tab != "HW") {
                         _picked_name = string_upper(_picked_name);
                     }
-
                     if (label_picker_target.label_picker_mode == "VAR_SRC") {
                         // SET_VAR source byte — write to slot 6, keep src_mode = VAR
                         while (array_length(label_picker_target.instructions[0]) < 7) array_push(label_picker_target.instructions[0], "");
