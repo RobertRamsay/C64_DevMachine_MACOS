@@ -224,6 +224,7 @@ global.gui_mouse_x = 0;
 global.gui_mouse_y = 0;
 global.gui_w       = 0;
 global.is_any_text_active = false;
+global.user_quick_menu = []; // {type, label} entries added via SHIFT+Q, max 24
 global.nodepad = 40;
 _was_entering_text = false;
 box_select_active  = false;
@@ -553,6 +554,42 @@ input_target_node    = noone;
 input_target_index   = 0;
 current_input_string = "";
 
+// W QUICK-SPAWN MENU
+// Hold W for ~0.07s to pop a small hexagonal grid of common nodes at
+// the cursor; move over one and release W to spawn it there.
+qmenu_active   = false;
+qmenu_open     = false;
+qmenu_timer    = 0;
+qmenu_anchor_x = 0;
+qmenu_anchor_y = 0;
+qmenu_gui_x    = 0;
+qmenu_gui_y    = 0;
+qmenu_hover    = -1;
+qmenu_items    = [
+    { label: "GET VAR", type: "GET_VAR" },
+    { label: "SET VAR", type: "SET_VAR" },
+    { label: "INC VAR", type: "INC_VAR" },
+    { label: "DEC VAR", type: "DEC_VAR" },
+    { label: "IF BYTE", type: "COND_IF" },
+    { label: "IF WORD", type: "COND_IF_WORD" },
+];
+
+// USER CUSTOM QUICK MENU (Q key)
+// Built up by the user via SHIFT+Q while hovering a MACROS menu item.
+// Circular layout that grows to fit up to 24 items.
+uqmenu_active   = false;
+uqmenu_open     = false;
+uqmenu_timer    = 0;
+uqmenu_anchor_x = 0;
+uqmenu_anchor_y = 0;
+uqmenu_gui_x    = 0;
+uqmenu_gui_y    = 0;
+uqmenu_hover    = -1;
+
+// Captured every frame the MACROS dropdown is open, read by SHIFT+Q
+hover_macro_type  = "";
+hover_macro_title = "";
+
 showPaletteHelper=1;
 
 // GLOBAL FX INITIALIZATION
@@ -859,6 +896,7 @@ if (global.project_name != "") {
 }
 
 ini_close();
+scr_uqmenu_load();
 //window_set_position(_x, _y);
 
 
