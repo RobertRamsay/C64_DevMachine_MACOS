@@ -73,9 +73,12 @@ welcome_open           = false;
 welcome_hide_checked   = false;
 welcome_credits_y      = 0;
 welcome_whats_new = [
-    "Quick menu Q or W",
-    "Load and Save game Macros",
-    "This panel!",
+    "Quick menu Q(custom) or W(Var Based)",
+    "VAR quick add buttons (above Var Org)",
+    "Load-game and Save-game Macros to save/load vars",
+    "Asset Sorting options",
+    "This Welcome Panel!!",
+    
 ];
 welcome_credits_lines = [
     "CODE and DESIGN",
