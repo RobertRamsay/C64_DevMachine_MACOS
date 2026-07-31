@@ -129,11 +129,11 @@ case "LABEL": {
 
 		// -------------------------------------------------------
 		// MACRO_SPR
-        // -------------------------------------------------------
-        case "MACRO_SPR":
-            _n.node_title   = "SPRITE";
-            _n.instructions = [["macro_spr", "", 0, 175, 128, 0, 1]]; 
-		    //                               ^name ^slot ^x ^y ^frame ^set_globals
+		// -------------------------------------------------------
+		case "MACRO_SPR":
+		    _n.node_title   = "SPRITE";
+		    _n.instructions = [["macro_spr", "", 0, 175, 128, 0, 1]];
+		    //                       ^name ^slot ^x ^y ^frame ^set_globals
 		    _n.pc_address   = global.start_pc;
 		    with (_n) { event_user(0); }
 		    break;
@@ -684,6 +684,20 @@ case "LABEL": {
         case "MACRO_LOADER":
             _n.node_title   = "MACRO LOADER";
             _n.instructions = [["macro_loader", "", "", 0]];
+            _n.pc_address   = global.start_pc;
+            with (_n) { event_user(0); }
+            break;
+
+        case "MACRO_SAVE_GAME":
+            _n.node_title   = "SAVE GAME";
+            _n.instructions = [["macro_save_game", "", "", 0]];
+            _n.pc_address   = global.start_pc;
+            with (_n) { event_user(0); }
+            break;
+
+        case "MACRO_LOAD_GAME":
+            _n.node_title   = "LOAD GAME";
+            _n.instructions = [["macro_load_game", "", "", 0]];
             _n.pc_address   = global.start_pc;
             with (_n) { event_user(0); }
             break;
