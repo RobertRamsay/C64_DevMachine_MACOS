@@ -429,7 +429,7 @@ if (global.question_result == "reset_paths_confirm_yes") {
     global.skip_autosave_restore = true;
 
     // Trigger project directory re-prompt via the existing startup alarm
-    alarm[5] = 10;
+    alarm[5] = 50;
 }
 
 if (global.question_result == "reset_paths_confirm_no") {

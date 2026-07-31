@@ -1,6 +1,6 @@
 /// @desc Deferred Autosave Check (Safe for Mac)
 if (welcome_open) {
-    alarm[5] = 10; // wait for the welcome screen to close first
+    alarm[5] = 50; // wait for the welcome screen to close first
     exit;
 }
 
@@ -11,8 +11,9 @@ ini_close();
 if global.autosave_mode!=3
 	{
 	if (_last_autosave != "" && file_exists(_last_autosave)) {
-	    if (show_question("Autosave detected:\n" + filename_name(_last_autosave) + "\n\nLoad it?")) {
+	    if (scr_show_question_bool("Autosave detected:\n" + filename_name(_last_autosave) + "\n\nLoad it?")) {
 	        scr_load_workspace_from_path(_last_autosave);
 	    }
 	}
 }
+
