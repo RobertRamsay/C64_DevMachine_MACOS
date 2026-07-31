@@ -2568,10 +2568,11 @@ show_debug_message(_pbuf_dbg2);
         }
     }
 
-// Require a connected MACRO_LOADER node to justify a D64 build
+// Require a connected MACRO_LOADER, MACRO_SAVE_GAME, or MACRO_LOAD_GAME
+// node to justify a D64 build
     var _has_loader = false;
     with (obj_c64_node) {
-        if (node_type == "MACRO_LOADER" && is_connected) {
+        if ((node_type == "MACRO_LOADER" || node_type == "MACRO_SAVE_GAME" || node_type == "MACRO_LOAD_GAME") && is_connected) {
             _has_loader = true;
         }
     }
@@ -3494,7 +3495,7 @@ if (export_trigger) {
     }
     var _exp_has_loader = false;
     with (obj_c64_node) {
-        if (node_type == "MACRO_LOADER" && is_connected) {
+        if ((node_type == "MACRO_LOADER" || node_type == "MACRO_SAVE_GAME" || node_type == "MACRO_LOAD_GAME") && is_connected) {
             _exp_has_loader = true;
         }
     }
