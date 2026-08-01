@@ -1241,7 +1241,7 @@ if (gui_menu_open == 0) {
     ];
 
     // ---- 9-slice panel geometry ----
-    var _item_h     = ;
+    var _item_h     = 20;
     var _panel_w    = 200;
     var _slice_top  = 20;
     var _slice_bot  = 20;
