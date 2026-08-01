@@ -2150,7 +2150,7 @@ draw_set_color(_cell_bg_col);
             // --- 1. SELECTION (Control + Left Click/Drag) ---
             if (scr_ctrl_held()) {
                 if (mouse_check_button(mb_left)) {
-                    _m.sel_grid[_pidx] = 1; // Mark as selected
+                    _m.sel_grid[_midx] = 1; // Mark as selected
                 }
             }
             // --- 2. STAMPING (Left Click with stamp data) ---

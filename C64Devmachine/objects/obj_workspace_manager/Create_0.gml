@@ -1,5 +1,5 @@
 /// @desc Setup Workspace, Palette & C64 Environment
-global.lite=0;
+global.lite=1;
 global.build_date = "August 1st, 2026"; // edit this string for each release
 
 // --- GLOBAL CRASH HANDLER ---
@@ -93,7 +93,7 @@ welcome_credits_lines = [
     "funkygallo",
     "keefnayls",
     "markc.sherman",
-    "Sch31ßtyp",
+    "Sch31Btyp",
     "SLAXX",
     "SPEE-DEC",
     "sTERN",
