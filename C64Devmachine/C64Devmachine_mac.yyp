@@ -1,6 +1,6 @@
 {
   "$GMProject":"v1",
-  "%Name":"C64Devmachine_V099_97_mac_4",
+  "%Name":"C64Devmachine_mac",
   "AudioGroups":[
     {"$GMAudioGroup":"v1","%Name":"audiogroup_default","exportDir":"","name":"audiogroup_default","resourceType":"GMAudioGroup","resourceVersion":"2.0","targets":-1,},
   ],
@@ -920,7 +920,7 @@
   "MetaData":{
     "IDEVersion":"2026.0.0.16",
   },
-  "name":"C64Devmachine_V099_97_mac_4",
+  "name":"C64Devmachine_mac",
   "resources":[
     {"id":{"name":"execute_shell_simple_ext","path":"extensions/execute_shell_simple_ext/execute_shell_simple_ext.yy",},},
     {"id":{"name":"libdisableclose","path":"extensions/libdisableclose/libdisableclose.yy",},},
