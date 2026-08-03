@@ -77,7 +77,7 @@ welcome_whats_new = [
     "TOOLTIPS - Hover the cursor at the top right of a macro",
     "BUGFIX - Version detecion on mac was flawed",
     "TWEAK - Autosave detection has a 2nd question to stop asking.",
-    "TWEAK - Adding (shift+Q over macro in menu) or removing (right-click in Q-menu) shows a message.",
+    "TWEAK - Adding (shift+Q over macro in menu) or removing (right-click in Q-menu)",
     "TWEAK - Bitmap editor Line tool shows correct width when drawing.",
     "ADDED - Easter egg - Will you find it?"
     ];
@@ -616,6 +616,7 @@ qmenu_gui_x    = 0;
 qmenu_gui_y    = 0;
 qmenu_hover    = -1;
 qmenu_items    = [
+    { label: "COPY VAR", type: "COPY_VAR" },
     { label: "GET VAR", type: "GET_VAR" },
     { label: "SET VAR", type: "SET_VAR" },
     { label: "INC VAR", type: "INC_VAR" },
