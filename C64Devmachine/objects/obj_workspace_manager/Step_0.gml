@@ -4005,10 +4005,11 @@ var zoom_speed   = 0.1;
 
 
 if (!instance_exists(obj_asset_manager) || 
-    !point_in_rectangle(global.gui_mouse_x, global.gui_mouse_y,
-     obj_asset_manager.panel_x, obj_asset_manager.panel_y,
-     obj_asset_manager.panel_x + obj_asset_manager.panel_w,
-     display_get_gui_height() - 100)) {
+    (!obj_asset_manager.viewer_open && !obj_asset_manager.spred64_open &&
+     !point_in_rectangle(global.gui_mouse_x, global.gui_mouse_y,
+      obj_asset_manager.panel_x, obj_asset_manager.panel_y,
+      obj_asset_manager.panel_x + obj_asset_manager.panel_w,
+      display_get_gui_height() - 100))) {
 		// Check if any node has a picker open
 		var _any_picker = false;
 		var _picker_node = noone;
