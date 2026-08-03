@@ -1,0 +1,1385 @@
+diff --git a/C64Devmachine/C64Devmachine_V099_97_mac_4.yyp b/C64Devmachine/C64Devmachine_V099_97_mac_4.yyp
+index f46525e..8041865 100644
+--- a/C64Devmachine/C64Devmachine_V099_97_mac_4.yyp
++++ b/C64Devmachine/C64Devmachine_V099_97_mac_4.yyp
+@@ -1150,6 +1150,7 @@
+     {"id":{"name":"scr_node_draw_macro_print","path":"scripts/scr_node_draw_macro_print/scr_node_draw_macro_print.yy",},},
+     {"id":{"name":"scr_node_draw_macro_priority","path":"scripts/scr_node_draw_macro_priority/scr_node_draw_macro_priority.yy",},},
+     {"id":{"name":"scr_node_draw_macro_random","path":"scripts/scr_node_draw_macro_random/scr_node_draw_macro_random.yy",},},
++    {"id":{"name":"scr_node_draw_macro_reu","path":"scripts/scr_node_draw_macro_reu/scr_node_draw_macro_reu.yy",},},
+     {"id":{"name":"scr_node_draw_macro_save_game","path":"scripts/scr_node_draw_macro_save_game/scr_node_draw_macro_save_game.yy",},},
+     {"id":{"name":"scr_node_draw_macro_scroll","path":"scripts/scr_node_draw_macro_scroll/scr_node_draw_macro_scroll.yy",},},
+     {"id":{"name":"scr_node_draw_macro_seek","path":"scripts/scr_node_draw_macro_seek/scr_node_draw_macro_seek.yy",},},
+@@ -1204,6 +1205,7 @@
+     {"id":{"name":"scr_node_step_macro_print","path":"scripts/scr_node_step_macro_print/scr_node_step_macro_print.yy",},},
+     {"id":{"name":"scr_node_step_macro_priority","path":"scripts/scr_node_step_macro_priority/scr_node_step_macro_priority.yy",},},
+     {"id":{"name":"scr_node_step_macro_random","path":"scripts/scr_node_step_macro_random/scr_node_step_macro_random.yy",},},
++    {"id":{"name":"scr_node_step_macro_reu","path":"scripts/scr_node_step_macro_reu/scr_node_step_macro_reu.yy",},},
+     {"id":{"name":"scr_node_step_macro_save_game","path":"scripts/scr_node_step_macro_save_game/scr_node_step_macro_save_game.yy",},},
+     {"id":{"name":"scr_node_step_macro_scroll","path":"scripts/scr_node_step_macro_scroll/scr_node_step_macro_scroll.yy",},},
+     {"id":{"name":"scr_node_step_macro_seek","path":"scripts/scr_node_step_macro_seek/scr_node_step_macro_seek.yy",},},
+@@ -1224,6 +1226,7 @@
+     {"id":{"name":"scr_node_step_macro_vwait","path":"scripts/scr_node_step_macro_vwait/scr_node_step_macro_vwait.yy",},},
+     {"id":{"name":"scr_node_step_macro_wait","path":"scripts/scr_node_step_macro_wait/scr_node_step_macro_wait.yy",},},
+     {"id":{"name":"scr_node_step_new_str","path":"scripts/scr_node_step_new_str/scr_node_step_new_str.yy",},},
++    {"id":{"name":"scr_node_tooltip_text","path":"scripts/scr_node_tooltip_text/scr_node_tooltip_text.yy",},},
+     {"id":{"name":"scr_note_name_to_freq","path":"scripts/scr_note_name_to_freq/scr_note_name_to_freq.yy",},},
+     {"id":{"name":"scr_note_name_to_hz","path":"scripts/scr_note_name_to_hz/scr_note_name_to_hz.yy",},},
+     {"id":{"name":"scr_opcode_helper","path":"scripts/scr_opcode_helper/scr_opcode_helper.yy",},},
+diff --git a/C64Devmachine/C64Devmachine_mac.yyp b/C64Devmachine/C64Devmachine_mac.yyp
+index f46525e..8041865 100644
+--- a/C64Devmachine/C64Devmachine_mac.yyp
++++ b/C64Devmachine/C64Devmachine_mac.yyp
+@@ -1150,6 +1150,7 @@
+     {"id":{"name":"scr_node_draw_macro_print","path":"scripts/scr_node_draw_macro_print/scr_node_draw_macro_print.yy",},},
+     {"id":{"name":"scr_node_draw_macro_priority","path":"scripts/scr_node_draw_macro_priority/scr_node_draw_macro_priority.yy",},},
+     {"id":{"name":"scr_node_draw_macro_random","path":"scripts/scr_node_draw_macro_random/scr_node_draw_macro_random.yy",},},
++    {"id":{"name":"scr_node_draw_macro_reu","path":"scripts/scr_node_draw_macro_reu/scr_node_draw_macro_reu.yy",},},
+     {"id":{"name":"scr_node_draw_macro_save_game","path":"scripts/scr_node_draw_macro_save_game/scr_node_draw_macro_save_game.yy",},},
+     {"id":{"name":"scr_node_draw_macro_scroll","path":"scripts/scr_node_draw_macro_scroll/scr_node_draw_macro_scroll.yy",},},
+     {"id":{"name":"scr_node_draw_macro_seek","path":"scripts/scr_node_draw_macro_seek/scr_node_draw_macro_seek.yy",},},
+@@ -1204,6 +1205,7 @@
+     {"id":{"name":"scr_node_step_macro_print","path":"scripts/scr_node_step_macro_print/scr_node_step_macro_print.yy",},},
+     {"id":{"name":"scr_node_step_macro_priority","path":"scripts/scr_node_step_macro_priority/scr_node_step_macro_priority.yy",},},
+     {"id":{"name":"scr_node_step_macro_random","path":"scripts/scr_node_step_macro_random/scr_node_step_macro_random.yy",},},
++    {"id":{"name":"scr_node_step_macro_reu","path":"scripts/scr_node_step_macro_reu/scr_node_step_macro_reu.yy",},},
+     {"id":{"name":"scr_node_step_macro_save_game","path":"scripts/scr_node_step_macro_save_game/scr_node_step_macro_save_game.yy",},},
+     {"id":{"name":"scr_node_step_macro_scroll","path":"scripts/scr_node_step_macro_scroll/scr_node_step_macro_scroll.yy",},},
+     {"id":{"name":"scr_node_step_macro_seek","path":"scripts/scr_node_step_macro_seek/scr_node_step_macro_seek.yy",},},
+@@ -1224,6 +1226,7 @@
+     {"id":{"name":"scr_node_step_macro_vwait","path":"scripts/scr_node_step_macro_vwait/scr_node_step_macro_vwait.yy",},},
+     {"id":{"name":"scr_node_step_macro_wait","path":"scripts/scr_node_step_macro_wait/scr_node_step_macro_wait.yy",},},
+     {"id":{"name":"scr_node_step_new_str","path":"scripts/scr_node_step_new_str/scr_node_step_new_str.yy",},},
++    {"id":{"name":"scr_node_tooltip_text","path":"scripts/scr_node_tooltip_text/scr_node_tooltip_text.yy",},},
+     {"id":{"name":"scr_note_name_to_freq","path":"scripts/scr_note_name_to_freq/scr_note_name_to_freq.yy",},},
+     {"id":{"name":"scr_note_name_to_hz","path":"scripts/scr_note_name_to_hz/scr_note_name_to_hz.yy",},},
+     {"id":{"name":"scr_opcode_helper","path":"scripts/scr_opcode_helper/scr_opcode_helper.yy",},},
+diff --git a/C64Devmachine/objects/obj_c64_node/Create_0.gml b/C64Devmachine/objects/obj_c64_node/Create_0.gml
+index 1a3c9e6..1076b72 100644
+--- a/C64Devmachine/objects/obj_c64_node/Create_0.gml
++++ b/C64Devmachine/objects/obj_c64_node/Create_0.gml
+@@ -238,6 +238,7 @@ drag_indent_stash = 0;
+ // Label-reference hover highlight
+ hover_timer      = 0;       // counts up while mouse is over this node
+ hover_threshold  = 9;       // ~0.15s before highlight fires
++tooltip_hover_timer = 0;    // counts up while mouse is over the header tooltip zone
+ ref_highlight_on = false;   // true while this node is the broadcast source
+ ref_jump_index   = 0;       // cycle position when Enter-jumping through references
+ if (!variable_global_exists("ref_highlight_source")) global.ref_highlight_source = noone;
+diff --git a/C64Devmachine/objects/obj_c64_node/Draw_0.gml b/C64Devmachine/objects/obj_c64_node/Draw_0.gml
+index 2ce6c38..45b04f3 100644
+--- a/C64Devmachine/objects/obj_c64_node/Draw_0.gml
++++ b/C64Devmachine/objects/obj_c64_node/Draw_0.gml
+@@ -144,6 +144,7 @@ if (height_dirty) {
+     case "COND_IF":          height = _G * 4;  break;
+ 	case "COND_IF_WORD":     height = _G * 4;  break;
+     case "BANK_SWITCH":      height = _G * 6;  break;
++    case "MACRO_REU":        height = _G * 8;  break;
+     case "MACRO_COLLISION":  height = _G * 10;  break;
+ 	case "MACRO_COLL_ADV":   height = _G * 19;  break;    
+     case "MACRO_ANIM":       height = _G * 18;  break;
+@@ -815,6 +816,7 @@ switch (node_type) {
+ 	case "COND_IF":     _head_col = is_connected ? make_color_rgb(180, 120,  40) : make_color_rgb( 90, 60,  20);  break;
+ 	case "COND_IF_WORD": _head_col = is_connected ? make_color_rgb(180,  90,  40) : make_color_rgb( 90, 45,  20);  break;
+ 	case "BANK_SWITCH": _head_col = is_connected ? make_color_rgb(120, 80, 200) : make_color_rgb( 60, 40, 100);  break;
++	case "MACRO_REU":   _head_col = is_connected ? make_color_rgb(120, 80, 200) : make_color_rgb( 60, 40, 100);  break;
+ 	case "GET_VAR":     _head_col = is_connected ? make_color_rgb( 40,120,  80) : make_color_rgb( 20, 60,  40); break;
+     case "SET_VAR":     _head_col = is_connected ? make_color_rgb(140, 60,  40) : make_color_rgb( 70, 30,  20); break;
+     case "INC_VAR":     _head_col = is_connected ? make_color_rgb( 30,100,  50) : make_color_rgb( 15, 50,  25); break;
+@@ -1213,6 +1215,7 @@ if (_lod_body) switch (node_type) {
+ 	case "COND_IF":           scr_node_draw_cond_if(draw_x, y);    break;
+ 	case "COND_IF_WORD":      scr_node_draw_cond_if_word(draw_x, y); break;
+ 	case "BANK_SWITCH":       scr_node_draw_bank_switch(draw_x, y); break;
++	case "MACRO_REU":         scr_node_draw_macro_reu(draw_x, y);   break;
+ 	case "MACRO_COLLISION":   scr_node_draw_macro_collision(draw_x); break;
+ 	case "MACRO_COLL_ADV":    scr_node_draw_macro_coll_adv(draw_x);  break;
+ 	case "MACRO_ANIM":        scr_node_draw_macro_anim(draw_x);      break;
+diff --git a/C64Devmachine/objects/obj_c64_node/Step_0.gml b/C64Devmachine/objects/obj_c64_node/Step_0.gml
+index dc79fb0..711fc3f 100644
+--- a/C64Devmachine/objects/obj_c64_node/Step_0.gml
++++ b/C64Devmachine/objects/obj_c64_node/Step_0.gml
+@@ -102,6 +102,32 @@ if (node_type == "LABEL" && !is_dragging && !global.any_picker_open) {
+     }
+ }
+ 
++/////////////////////////////////////////////////////////////////
++// HEADER TOOLTIP HOVER
++// Hovering the right 20% of a node's header bar, with no mouse button
++// held, for node_tooltip_delay frames surfaces a floating description
++// of that node/macro (drawn by obj_workspace_manager in Draw GUI, since
++// that always renders on top of every node's own Draw event).
++/////////////////////////////////////////////////////////////////
++if (!is_dragging && !global.any_picker_open) {
++    var _tt_hdr_x1 = x + x_indent + (width * 0.8);
++    var _tt_hdr_x2 = x + x_indent + width;
++    var _tt_hov = point_in_rectangle(mouse_x, mouse_y, _tt_hdr_x1, y, _tt_hdr_x2, y + 24)
++               && !mouse_check_button(mb_left) && !mouse_check_button(mb_right) && !mouse_check_button(mb_middle);
++
++    if (_tt_hov) {
++        tooltip_hover_timer += 1;
++        if (tooltip_hover_timer >= obj_workspace_manager.node_tooltip_delay) {
++            obj_workspace_manager.node_tooltip_node = id;
++        }
++    } else {
++        tooltip_hover_timer = 0;
++        if (obj_workspace_manager.node_tooltip_node == id) {
++            obj_workspace_manager.node_tooltip_node = noone;
++        }
++    }
++}
++
+ // Check if this node is a group drag follower (used to skip conflicting logic below)
+ var _is_group_follower = false;
+ if (global.group_drag_active && id != global.group_drag_handle) {
+@@ -1039,6 +1065,7 @@ if ((mouse_check_button_pressed(mb_left) or scr_opt_pressed()) && !is_dragging &
+         case "COND_IF":      scr_node_step_cond_if(draw_x); break;
+ 		case "COND_IF_WORD": scr_node_step_cond_if_word(draw_x); break;
+         case "BANK_SWITCH":  scr_node_step_bank_switch(draw_x); break;
++        case "MACRO_REU":    scr_node_step_macro_reu(draw_x);   break;
+ 		
+ 		
+ 		
+diff --git a/C64Devmachine/objects/obj_workspace_manager/Create_0.gml b/C64Devmachine/objects/obj_workspace_manager/Create_0.gml
+index 37cc2b1..a594a2b 100644
+--- a/C64Devmachine/objects/obj_workspace_manager/Create_0.gml
++++ b/C64Devmachine/objects/obj_workspace_manager/Create_0.gml
+@@ -748,6 +748,13 @@ gui_menu_open         = -1;    // -1 = closed, 0..7 = which button is open
+ opcode_hover_key      = "";    // mnemonic currently being hovered
+ opcode_hover_timer    = 0;     // frames hovered so far
+ opcode_hover_delay    = 30;    // frames before tooltip shows (30 = 0.5s at 60fps)
++
++// Node header tooltip — hover the right 20% of a node's header bar with
++// no mouse button held for node_tooltip_delay frames to show a floating
++// description of that node/macro. Set by obj_c64_node's Step event,
++// drawn here in Draw GUI so it always renders on top.
++node_tooltip_node    = noone;
++node_tooltip_delay   = 60;     // frames before tooltip shows (60 = 1s at 60fps)
+ opcode_helper_on      = true;  // toggled via OPTIONS menu
+ gui_menu_drag_active  = false; // true once user starts dragging a macro from the menu
+ gui_menu_node_spawned = false; // guard: spawn only once per drag
+diff --git a/C64Devmachine/objects/obj_workspace_manager/Draw_64.gml b/C64Devmachine/objects/obj_workspace_manager/Draw_64.gml
+index efa716c..6f54432 100644
+--- a/C64Devmachine/objects/obj_workspace_manager/Draw_64.gml
++++ b/C64Devmachine/objects/obj_workspace_manager/Draw_64.gml
+@@ -672,6 +672,7 @@ if (gui_menu_open == 1 && !global.lite) {
+         { title: "BANK SWITCH",      type: "BANK_SWITCH"         },
+         { title: "MATH",             type: "MACRO_MATH"          },
+         { title: "RANDOM",           type: "MACRO_RANDOM"        },
++        { title: "REU",              type: "MACRO_REU"           },
+     ];
+ 
+     var _item_h_e     = 20;
+@@ -1444,6 +1445,57 @@ if (opcode_helper_on && opcode_hover_key != "" && opcode_hover_timer >= opcode_h
+     }
+ }
+ 
++/////////////////////////////////////////////////////////////////
++///// NODE HEADER TOOLTIP
++///// Hover the right 20% of a node's header bar for ~1s (no mouse
++///// button held) to show this. Floats just below the cursor, centred
++///// on the cursor's X. Content comes from scr_node_tooltip_text().
++/////////////////////////////////////////////////////////////////
++if (instance_exists(node_tooltip_node)) {
++    var _nt_info = scr_node_tooltip_text(node_tooltip_node.node_type);
++    if (_nt_info != undefined) {
++        var _font_before2 = draw_get_font();
++        draw_set_font(fnt_c64_code);
++
++        var _nt_scale = 1.4;
++        var _nt_pad   = 8  * _nt_scale;
++        var _nt_lh    = 14 * _nt_scale;
++        var _nt_w     = string_width(_nt_info.title) * _nt_scale;
++        for (var _nti = 0; _nti < array_length(_nt_info.lines); _nti++) {
++            _nt_w = max(_nt_w, string_width(_nt_info.lines[_nti]) * _nt_scale);
++        }
++        _nt_w += _nt_pad * 2;
++        var _nt_h = (_nt_pad * 2) + _nt_lh + (4 * _nt_scale) + (array_length(_nt_info.lines) * _nt_lh);
++
++        var _nt_x = gui_mouse_x - (_nt_w * 0.5);
++        var _nt_y = gui_mouse_y + 18;
++        _nt_x = clamp(_nt_x, 4, gui_w - _nt_w - 4);
++        _nt_y = clamp(_nt_y, 4, gui_h - _nt_h - 4);
++
++        draw_set_alpha(0.94);
++        draw_set_color(make_color_rgb(12, 12, 22));
++        draw_rectangle(_nt_x, _nt_y, _nt_x + _nt_w, _nt_y + _nt_h, false);
++        draw_set_alpha(1.0);
++        draw_set_color(make_color_rgb(80, 140, 220));
++        draw_rectangle(_nt_x, _nt_y, _nt_x + _nt_w, _nt_y + _nt_h, true);
++
++        var _nt_tx = _nt_x + _nt_pad;
++        var _nt_ty = _nt_y + _nt_pad;
++
++        draw_set_color(c_yellow);
++        draw_text_transformed(_nt_tx, _nt_ty, _nt_info.title, _nt_scale, _nt_scale, 0);
++        _nt_ty += _nt_lh + (4 * _nt_scale);
++
++        draw_set_color(c_white);
++        for (var _ntj = 0; _ntj < array_length(_nt_info.lines); _ntj++) {
++            draw_text_transformed(_nt_tx, _nt_ty, _nt_info.lines[_ntj], _nt_scale, _nt_scale, 0);
++            _nt_ty += _nt_lh;
++        }
++
++        draw_set_font(_font_before2);
++    }
++}
++
+ /////////////////////////////////////////////////////////////////
+ ///// 2. GLOBAL SHORTCUTS (TOP RIGHT)
+ /////////////////////////////////////////////////////////////////
+diff --git a/C64Devmachine/scripts/scr_compile_chain/scr_compile_chain.gml b/C64Devmachine/scripts/scr_compile_chain/scr_compile_chain.gml
+index 5cb5d4d..8b80a1c 100644
+--- a/C64Devmachine/scripts/scr_compile_chain/scr_compile_chain.gml
++++ b/C64Devmachine/scripts/scr_compile_chain/scr_compile_chain.gml
+@@ -6446,7 +6446,64 @@ case "BANK_SWITCH": {
+         array_push(_list, ["cli", 0, _id]);
+     }
+ } break;
+-	
++
++// --------------------------------------------------------
++// MACRO_REU
++// Triggers a DMA transfer on the 17xx/1750/GeoRAM-style REU at $DF00-$DF0A.
++// All six address/length/bank bytes are written first, then the command
++// byte is written last to $DF01 with EXEC (bit7) set, which fires the DMA.
++// FF00 disable (bit5) is always set — without it, a stray write to $FF00
++// (used by some cartridges/carts detection code) can retrigger the last
++// queued transfer, which is a classic REU footgun.
++// --------------------------------------------------------
++case "MACRO_REU": {
++    var _id        = _curr;
++    var _reu_op    = is_real(_curr.instructions[0][1]) ? real(_curr.instructions[0][1]) : 0;
++    var _reu_c64   = is_real(_curr.instructions[0][2]) ? real(_curr.instructions[0][2]) & 0xFFFF : 0xC000;
++    var _reu_addr  = is_real(_curr.instructions[0][3]) ? real(_curr.instructions[0][3]) & 0xFFFF : 0x0000;
++    var _reu_bank  = is_real(_curr.instructions[0][4]) ? real(_curr.instructions[0][4]) & 0xFF   : 0;
++    var _reu_len   = is_real(_curr.instructions[0][5]) ? real(_curr.instructions[0][5]) & 0xFFFF : 0x0100;
++    var _reu_auto  = is_real(_curr.instructions[0][6]) ? real(_curr.instructions[0][6]) : 0;
++    var _reu_fixc  = is_real(_curr.instructions[0][7]) ? real(_curr.instructions[0][7]) : 0;
++    var _reu_fixr  = is_real(_curr.instructions[0][8]) ? real(_curr.instructions[0][8]) : 0;
++
++    // Type field: 00 stash, 01 fetch, 10 swap, 11 compare
++    var _reu_type = clamp(_reu_op, 0, 3);
++
++    var _reu_cmd = 0x80;               // EXEC
++    _reu_cmd    |= 0x20;                // FF00 disable (always on — see note above)
++    if (_reu_auto == 1) { _reu_cmd |= 0x10; }  // autoload
++    _reu_cmd    |= _reu_type;
++
++    var _reu_ctrl = 0x00;
++    if (_reu_fixc == 1) { _reu_ctrl |= 0x80; } // fix C64 address
++    if (_reu_fixr == 1) { _reu_ctrl |= 0x40; } // fix REU address
++
++    array_push(_list, ["lda_imm", _reu_c64 & 0xFF,        _id]);
++    array_push(_list, ["sta_abs", 0xDF02,                 _id]);
++    array_push(_list, ["lda_imm", (_reu_c64 >> 8) & 0xFF, _id]);
++    array_push(_list, ["sta_abs", 0xDF03,                 _id]);
++
++    array_push(_list, ["lda_imm", _reu_addr & 0xFF,        _id]);
++    array_push(_list, ["sta_abs", 0xDF04,                  _id]);
++    array_push(_list, ["lda_imm", (_reu_addr >> 8) & 0xFF, _id]);
++    array_push(_list, ["sta_abs", 0xDF05,                  _id]);
++
++    array_push(_list, ["lda_imm", _reu_bank, _id]);
++    array_push(_list, ["sta_abs", 0xDF06,    _id]);
++
++    array_push(_list, ["lda_imm", _reu_len & 0xFF,        _id]);
++    array_push(_list, ["sta_abs", 0xDF07,                 _id]);
++    array_push(_list, ["lda_imm", (_reu_len >> 8) & 0xFF, _id]);
++    array_push(_list, ["sta_abs", 0xDF08,                 _id]);
++
++    array_push(_list, ["lda_imm", _reu_ctrl, _id]);
++    array_push(_list, ["sta_abs", 0xDF0A,    _id]);
++
++    array_push(_list, ["lda_imm", _reu_cmd, _id]);
++    array_push(_list, ["sta_abs", 0xDF01,   _id]);
++} break;
++
+ // --------------------------------------------------------
+ // MACRO_FLIP_X
+ // Flips selected sprites horizontally using a LUT.
+diff --git a/C64Devmachine/scripts/scr_node_commit/scr_node_commit.gml b/C64Devmachine/scripts/scr_node_commit/scr_node_commit.gml
+index 061e787..d980433 100644
+--- a/C64Devmachine/scripts/scr_node_commit/scr_node_commit.gml
++++ b/C64Devmachine/scripts/scr_node_commit/scr_node_commit.gml
+@@ -1030,6 +1030,28 @@
+ 	            global.addresses_dirty = true;
+ 	        }
+ 
++	    // --- MACRO_REU ---
++	    // idx 2 = C64 addr (hex, 16-bit), idx 3 = REU addr (hex, 16-bit),
++	    // idx 4 = bank (decimal, 0-255), idx 5 = length (hex, 16-bit).
++	    } else if (_target.node_type == "MACRO_REU") {
++	        while (array_length(_target.instructions[0]) < 9) { array_push(_target.instructions[0], 0); }
++	        if (_idx == 2 || _idx == 3 || _idx == 5) {
++	            var _clean = (string_char_at(_input, 1) == "$")
++	                       ? string_delete(_input, 1, 1) : _input;
++	            var _val = 0;
++	            if (string_char_at(_input, 1) == "$") {
++	                _val = real(hex_to_decimal(string_upper(_clean)));
++	            } else {
++	                var _digits = string_digits(_input);
++	                _val = (_digits != "") ? real(_digits) : 0;
++	            }
++	            _target.instructions[0][_idx] = clamp(_val, 0, 0xFFFF);
++	        } else if (_idx == 4) {
++	            var _digits = string_digits(_input);
++	            _target.instructions[0][4] = clamp((_digits != "") ? real(_digits) : 0, 0, 255);
++	        }
++	        global.addresses_dirty = true;
++
+ 	    // --- COND_IF ---
+ 	    } else if (_target.node_type == "COND_IF_WORD") {
+ 	        if (_idx == 2) {
+diff --git a/C64Devmachine/scripts/scr_node_draw_macro_reu/scr_node_draw_macro_reu.gml b/C64Devmachine/scripts/scr_node_draw_macro_reu/scr_node_draw_macro_reu.gml
+new file mode 100644
+index 0000000..f55b405
+--- /dev/null
++++ b/C64Devmachine/scripts/scr_node_draw_macro_reu/scr_node_draw_macro_reu.gml
+@@ -0,0 +1,168 @@
++/// @desc Draw body content for MACRO_REU node
++function scr_node_draw_macro_reu(_draw_x, _y) {
++
++    var _header_h = 24;
++    var _line_h   = 16;
++    var _inst     = instructions[0];
++
++    while (array_length(_inst) < 9) {
++        array_push(_inst, 0);
++    }
++
++    var _op       = real(_inst[1]);
++    var _c64_addr = real(_inst[2]);
++    var _reu_addr = real(_inst[3]);
++    var _bank     = real(_inst[4]);
++    var _len      = real(_inst[5]);
++    var _autoload = real(_inst[6]);
++    var _fix_c64  = real(_inst[7]);
++    var _fix_reu  = real(_inst[8]);
++
++    var _lx = _draw_x + 8;
++    var _rx = _draw_x + width - 6;
++    var _cy = _y + _header_h + 4;
++
++    var _op_labels = ["STASH (C64->REU)", "FETCH (REU->C64)", "SWAP", "COMPARE"];
++
++    // Row 0: OP dropdown
++    draw_set_font(fnt_C64_Angled_tiny);
++    draw_set_color(c_gray);
++    draw_text(_lx, _cy, "OP:");
++
++    var _op_bx1 = _lx + 30;
++    var _op_bx2 = _rx;
++    var _op_hov = point_in_rectangle(mouse_x, mouse_y, _op_bx1, _cy + 4, _op_bx2, _cy + 10);
++    draw_set_color(_op_hov ? make_color_rgb(90, 60, 160) : make_color_rgb(40, 30, 70));
++    draw_rectangle(_op_bx1, _cy + 1, _op_bx2, _cy + 11, false);
++
++    var _op_txt = (_op >= 0 && _op <= 3) ? _op_labels[_op] : "STASH (C64->REU)";
++    draw_set_color(c_white);
++    draw_set_halign(fa_center);
++    draw_text((_op_bx1 + _op_bx2) / 2, _cy, _op_txt);
++    draw_set_halign(fa_left);
++    _cy += _line_h;
++
++    // Row 1: C64 ADDR
++    draw_set_color(c_gray);
++    draw_text(_lx, _cy, "C64:");
++
++    var _c64_bx1 = _lx + 44;
++    var _c64_bx2 = _rx;
++    var _c64_hov = point_in_rectangle(mouse_x, mouse_y, _c64_bx1, _cy + 4, _c64_bx2, _cy + 10);
++    draw_set_color(_c64_hov ? make_color_rgb(60, 80, 140) : make_color_rgb(34, 44, 64));
++    draw_rectangle(_c64_bx1, _cy + 1, _c64_bx2, _cy + 11, false);
++
++    var _c64_hex = decimal_to_hex(_c64_addr);
++    while (string_length(_c64_hex) < 4) {
++        _c64_hex = "0" + _c64_hex;
++    }
++    draw_set_color(c_yellow);
++    draw_set_halign(fa_center);
++    draw_text((_c64_bx1 + _c64_bx2) / 2, _cy, "$" + string_upper(_c64_hex));
++    draw_set_halign(fa_left);
++    _cy += _line_h;
++
++    // Row 2: REU ADDR
++    draw_set_color(c_gray);
++    draw_text(_lx, _cy, "REU:");
++
++    var _reu_bx1 = _lx + 44;
++    var _reu_bx2 = _rx;
++    var _reu_hov = point_in_rectangle(mouse_x, mouse_y, _reu_bx1, _cy + 4, _reu_bx2, _cy + 10);
++    draw_set_color(_reu_hov ? make_color_rgb(60, 80, 140) : make_color_rgb(34, 44, 64));
++    draw_rectangle(_reu_bx1, _cy + 1, _reu_bx2, _cy + 11, false);
++
++    var _reu_hex = decimal_to_hex(_reu_addr);
++    while (string_length(_reu_hex) < 4) {
++        _reu_hex = "0" + _reu_hex;
++    }
++    draw_set_color(c_yellow);
++    draw_set_halign(fa_center);
++    draw_text((_reu_bx1 + _reu_bx2) / 2, _cy, "$" + string_upper(_reu_hex));
++    draw_set_halign(fa_left);
++    _cy += _line_h;
++
++    // Row 3: BANK
++    draw_set_color(c_gray);
++    draw_text(_lx, _cy, "BANK:");
++
++    var _bank_bx1 = _lx + 44;
++    var _bank_bx2 = _rx;
++    var _bank_hov = point_in_rectangle(mouse_x, mouse_y, _bank_bx1, _cy + 4, _bank_bx2, _cy + 10);
++    draw_set_color(_bank_hov ? make_color_rgb(60, 80, 140) : make_color_rgb(34, 44, 64));
++    draw_rectangle(_bank_bx1, _cy + 1, _bank_bx2, _cy + 11, false);
++
++    draw_set_color(c_aqua);
++    draw_set_halign(fa_center);
++    draw_text((_bank_bx1 + _bank_bx2) / 2, _cy, string(_bank));
++    draw_set_halign(fa_left);
++    _cy += _line_h;
++
++    // Row 4: LEN
++    draw_set_color(c_gray);
++    draw_text(_lx, _cy, "LEN:");
++
++    var _len_bx1 = _lx + 44;
++    var _len_bx2 = _rx;
++    var _len_hov = point_in_rectangle(mouse_x, mouse_y, _len_bx1, _cy + 4, _len_bx2, _cy + 10);
++    draw_set_color(_len_hov ? make_color_rgb(60, 80, 140) : make_color_rgb(34, 44, 64));
++    draw_rectangle(_len_bx1, _cy + 1, _len_bx2, _cy + 11, false);
++
++    var _len_hex = decimal_to_hex(_len);
++    while (string_length(_len_hex) < 4) {
++        _len_hex = "0" + _len_hex;
++    }
++    draw_set_color(c_lime);
++    draw_set_halign(fa_center);
++    draw_text((_len_bx1 + _len_bx2) / 2, _cy, "$" + string_upper(_len_hex));
++    draw_set_halign(fa_left);
++    _cy += _line_h;
++
++    // Row 5: AUTOLOAD toggle
++    var _al_bx1 = _lx;
++    var _al_bx2 = _rx;
++    var _al_hov = point_in_rectangle(mouse_x, mouse_y, _al_bx1, _cy + 4, _al_bx2, _cy + 10);
++    if (_autoload == 1) {
++        draw_set_color(_al_hov ? make_color_rgb(50, 80, 50) : make_color_rgb(30, 50, 30));
++    } else {
++        draw_set_color(_al_hov ? make_color_rgb(80, 60, 40) : make_color_rgb(50, 40, 25));
++    }
++    draw_rectangle(_al_bx1, _cy + 1, _al_bx2, _cy + 11, false);
++    draw_set_color(c_white);
++    draw_set_halign(fa_center);
++    draw_text((_al_bx1 + _al_bx2) / 2, _cy, (_autoload == 1) ? "AUTOLOAD: ON" : "AUTOLOAD: OFF");
++    draw_set_halign(fa_left);
++    _cy += _line_h;
++
++    // Row 6: FIX C64 toggle
++    var _fc_bx1 = _lx;
++    var _fc_bx2 = _rx;
++    var _fc_hov = point_in_rectangle(mouse_x, mouse_y, _fc_bx1, _cy + 4, _fc_bx2, _cy + 10);
++    if (_fix_c64 == 1) {
++        draw_set_color(_fc_hov ? make_color_rgb(50, 80, 50) : make_color_rgb(30, 50, 30));
++    } else {
++        draw_set_color(_fc_hov ? make_color_rgb(80, 60, 40) : make_color_rgb(50, 40, 25));
++    }
++    draw_rectangle(_fc_bx1, _cy + 1, _fc_bx2, _cy + 11, false);
++    draw_set_color(c_white);
++    draw_set_halign(fa_center);
++    draw_text((_fc_bx1 + _fc_bx2) / 2, _cy, (_fix_c64 == 1) ? "FIX C64 ADDR: ON" : "FIX C64 ADDR: OFF");
++    draw_set_halign(fa_left);
++    _cy += _line_h;
++
++    // Row 7: FIX REU toggle
++    var _fr_bx1 = _lx;
++    var _fr_bx2 = _rx;
++    var _fr_hov = point_in_rectangle(mouse_x, mouse_y, _fr_bx1, _cy + 4, _fr_bx2, _cy + 10);
++    if (_fix_reu == 1) {
++        draw_set_color(_fr_hov ? make_color_rgb(50, 80, 50) : make_color_rgb(30, 50, 30));
++    } else {
++        draw_set_color(_fr_hov ? make_color_rgb(80, 60, 40) : make_color_rgb(50, 40, 25));
++    }
++    draw_rectangle(_fr_bx1, _cy + 1, _fr_bx2, _cy + 11, false);
++    draw_set_color(c_white);
++    draw_set_halign(fa_center);
++    draw_text((_fr_bx1 + _fr_bx2) / 2, _cy, (_fix_reu == 1) ? "FIX REU ADDR: ON" : "FIX REU ADDR: OFF");
++    draw_set_halign(fa_left);
++    _cy += _line_h;
++}
+diff --git a/C64Devmachine/scripts/scr_node_draw_macro_reu/scr_node_draw_macro_reu.yy b/C64Devmachine/scripts/scr_node_draw_macro_reu/scr_node_draw_macro_reu.yy
+new file mode 100644
+index 0000000..3d10c14
+--- /dev/null
++++ b/C64Devmachine/scripts/scr_node_draw_macro_reu/scr_node_draw_macro_reu.yy
+@@ -0,0 +1,13 @@
++{
++  "$GMScript":"v1",
++  "%Name":"scr_node_draw_macro_reu",
++  "isCompatibility":false,
++  "isDnD":false,
++  "name":"scr_node_draw_macro_reu",
++  "parent":{
++    "name":"MACROS",
++    "path":"folders/SCRIPTS/MACROS.yy",
++  },
++  "resourceType":"GMScript",
++  "resourceVersion":"2.0",
++}
+diff --git a/C64Devmachine/scripts/scr_node_spawn/scr_node_spawn.gml b/C64Devmachine/scripts/scr_node_spawn/scr_node_spawn.gml
+index f1d5077..d2d830e 100644
+--- a/C64Devmachine/scripts/scr_node_spawn/scr_node_spawn.gml
++++ b/C64Devmachine/scripts/scr_node_spawn/scr_node_spawn.gml
+@@ -400,6 +400,26 @@ case "LABEL": {
+ 		    break;
+ 
+ 		// -------------------------------------------------------
++		// MACRO_REU
++		// REU (RAM Expansion Unit) DMA transfer — $DF00-$DF0A.
++		// instructions[0]: ["macro_reu", op, c64_addr, reu_addr, bank, len, autoload, fix_c64, fix_reu]
++		//   op       = 0 STASH (C64->REU), 1 FETCH (REU->C64), 2 SWAP, 3 COMPARE
++		//   c64_addr = 16-bit C64 RAM address
++		//   reu_addr = 16-bit REU RAM address (within the bank)
++		//   bank     = REU bank (0-255, most REUs only populate bank 0)
++		//   len      = 16-bit transfer length ($0000 = 65536 bytes)
++		//   autoload = 1 = reload start addresses after the transfer completes
++		//   fix_c64  = 1 = don't advance the C64 address (fill/scan pattern)
++		//   fix_reu  = 1 = don't advance the REU address (fill/scan pattern)
++		// -------------------------------------------------------
++		case "MACRO_REU":
++		    _n.node_title   = "REU";
++		    _n.instructions = [["macro_reu", 0, 0xC000, 0x0000, 0, 0x0100, 0, 0, 0]];
++		    _n.pc_address   = global.start_pc;
++		    with (_n) { event_user(0); }
++		    break;
++
++		// -------------------------------------------------------
+         // COND_IF
+         // -------------------------------------------------------
+         case "COND_IF":
+diff --git a/C64Devmachine/scripts/scr_node_step_macro_reu/scr_node_step_macro_reu.gml b/C64Devmachine/scripts/scr_node_step_macro_reu/scr_node_step_macro_reu.gml
+new file mode 100644
+index 0000000..3fc4c79
+--- /dev/null
++++ b/C64Devmachine/scripts/scr_node_step_macro_reu/scr_node_step_macro_reu.gml
+@@ -0,0 +1,133 @@
++/// @desc Handle LMB clicks for MACRO_REU nodes
++function scr_node_step_macro_reu(_draw_x) {
++
++    var _header_h = 24;
++    var _line_h   = 16;
++    var _inst     = instructions[0];
++    var _lx       = _draw_x + 8;
++    var _rx       = _draw_x + width - 6;
++    var _cy       = y + _header_h + 4;
++
++    while (array_length(_inst) < 9) {
++        array_push(_inst, 0);
++    }
++
++    var _open_hex = function(_idx, _digits) {
++        with (obj_workspace_manager) {
++            is_entering_text     = true;
++            input_target_node    = other.id;
++            input_target_index   = _idx;
++            var _raw = real(other.instructions[0][_idx]);
++            var _h   = string_upper(decimal_to_hex(_raw));
++            while (string_length(_h) < _digits) {
++                _h = "0" + _h;
++            }
++            current_input_string = "$" + _h;
++            keyboard_string      = "";
++            cursor_pos           = string_length(current_input_string);
++        }
++    };
++    var _open_num = function(_idx) {
++        with (obj_workspace_manager) {
++            is_entering_text     = true;
++            input_target_node    = other.id;
++            input_target_index   = _idx;
++            current_input_string = string(real(other.instructions[0][_idx]));
++            keyboard_string      = "";
++            cursor_pos           = string_length(current_input_string);
++        }
++    };
++
++    // Row 0: OP dropdown — cycle STASH -> FETCH -> SWAP -> COMPARE -> STASH
++    var _op_bx1 = _lx + 30;
++    var _op_bx2 = _rx;
++    if (point_in_rectangle(mouse_x, mouse_y, _op_bx1, _cy + 4, _op_bx2, _cy + 10)) {
++        var _cur  = real(_inst[1]);
++        var _next = _cur + 1;
++        if (_next > 3) {
++            _next = 0;
++        }
++        instructions[0][1] = _next;
++        global.addresses_dirty = true;
++        scr_c64_do_update_addresses();
++        exit;
++    }
++    _cy += _line_h;
++
++    // Row 1: C64 ADDR
++    var _c64_bx1 = _lx + 44;
++    var _c64_bx2 = _rx;
++    if (point_in_rectangle(mouse_x, mouse_y, _c64_bx1, _cy + 4, _c64_bx2, _cy + 10)) {
++        _open_hex(2, 4); exit;
++    }
++    _cy += _line_h;
++
++    // Row 2: REU ADDR
++    var _reu_bx1 = _lx + 44;
++    var _reu_bx2 = _rx;
++    if (point_in_rectangle(mouse_x, mouse_y, _reu_bx1, _cy + 4, _reu_bx2, _cy + 10)) {
++        _open_hex(3, 4); exit;
++    }
++    _cy += _line_h;
++
++    // Row 3: BANK
++    var _bank_bx1 = _lx + 44;
++    var _bank_bx2 = _rx;
++    if (point_in_rectangle(mouse_x, mouse_y, _bank_bx1, _cy + 4, _bank_bx2, _cy + 10)) {
++        _open_num(4); exit;
++    }
++    _cy += _line_h;
++
++    // Row 4: LEN
++    var _len_bx1 = _lx + 44;
++    var _len_bx2 = _rx;
++    if (point_in_rectangle(mouse_x, mouse_y, _len_bx1, _cy + 4, _len_bx2, _cy + 10)) {
++        _open_hex(5, 4); exit;
++    }
++    _cy += _line_h;
++
++    // Row 5: AUTOLOAD toggle
++    var _al_bx1 = _lx;
++    var _al_bx2 = _rx;
++    if (point_in_rectangle(mouse_x, mouse_y, _al_bx1, _cy + 4, _al_bx2, _cy + 10)) {
++        if (real(_inst[6]) == 1) {
++            instructions[0][6] = 0;
++        } else {
++            instructions[0][6] = 1;
++        }
++        global.addresses_dirty = true;
++        scr_c64_do_update_addresses();
++        exit;
++    }
++    _cy += _line_h;
++
++    // Row 6: FIX C64 ADDR toggle
++    var _fc_bx1 = _lx;
++    var _fc_bx2 = _rx;
++    if (point_in_rectangle(mouse_x, mouse_y, _fc_bx1, _cy + 4, _fc_bx2, _cy + 10)) {
++        if (real(_inst[7]) == 1) {
++            instructions[0][7] = 0;
++        } else {
++            instructions[0][7] = 1;
++        }
++        global.addresses_dirty = true;
++        scr_c64_do_update_addresses();
++        exit;
++    }
++    _cy += _line_h;
++
++    // Row 7: FIX REU ADDR toggle
++    var _fr_bx1 = _lx;
++    var _fr_bx2 = _rx;
++    if (point_in_rectangle(mouse_x, mouse_y, _fr_bx1, _cy + 4, _fr_bx2, _cy + 10)) {
++        if (real(_inst[8]) == 1) {
++            instructions[0][8] = 0;
++        } else {
++            instructions[0][8] = 1;
++        }
++        global.addresses_dirty = true;
++        scr_c64_do_update_addresses();
++        exit;
++    }
++    _cy += _line_h;
++}
+diff --git a/C64Devmachine/scripts/scr_node_step_macro_reu/scr_node_step_macro_reu.yy b/C64Devmachine/scripts/scr_node_step_macro_reu/scr_node_step_macro_reu.yy
+new file mode 100644
+index 0000000..ed16d1c
+--- /dev/null
++++ b/C64Devmachine/scripts/scr_node_step_macro_reu/scr_node_step_macro_reu.yy
+@@ -0,0 +1,13 @@
++{
++  "$GMScript":"v1",
++  "%Name":"scr_node_step_macro_reu",
++  "isCompatibility":false,
++  "isDnD":false,
++  "name":"scr_node_step_macro_reu",
++  "parent":{
++    "name":"MACROS",
++    "path":"folders/SCRIPTS/MACROS.yy",
++  },
++  "resourceType":"GMScript",
++  "resourceVersion":"2.0",
++}
+diff --git a/C64Devmachine/scripts/scr_node_tooltip_text/scr_node_tooltip_text.gml b/C64Devmachine/scripts/scr_node_tooltip_text/scr_node_tooltip_text.gml
+new file mode 100644
+index 0000000..44db035
+--- /dev/null
++++ b/C64Devmachine/scripts/scr_node_tooltip_text/scr_node_tooltip_text.gml
+@@ -0,0 +1,646 @@
++/// @desc scr_node_tooltip_text()
++/// Returns a struct { title, lines[] } describing a node type, for the
++/// header-hover tooltip system (hover the right 20% of a node's header
++/// bar for ~1s with no mouse button held). Returns undefined for any
++/// node_type with no entry yet, so unlisted nodes simply show nothing.
++/// Covers MACRO_* nodes only — opcode nodes already have their own
++/// tooltip via scr_opcode_helper().
++function scr_node_tooltip_text(_node_type) {
++    static _map = {
++
++        "MACRO_VIC": {
++            title: "VIC - UNIFIED MODE SETUP",
++            lines: [
++                "One-stop VIC-II mode configuration: text, bitmap,",
++                "multicolour, ECM, and their combinations.",
++                "",
++                "Sets screen/char/bitmap base pointers, $D011/$D016",
++                "mode bits, and border/background colours in one node.",
++                "Usually the first macro on the spine after INIT."
++            ]
++        },
++
++        "MACRO_PRINT": {
++            title: "PRINT",
++            lines: [
++                "Prints text to screen RAM at a given row/column.",
++                "",
++                "SOURCE: INLINE fixed text, or an ASSET (TEXT_DATA)",
++                "read through a start/end byte window. Either end of",
++                "that window can be a literal offset or a named VAR,",
++                "so the printed slice can shift at runtime - e.g.",
++                "paging through a longer block of asset text.",
++                "",
++                "COL sets the single text colour (0-15) - not a fill,",
++                "just the colour the characters print in.",
++                "PRE-CLEAR optionally wipes screen RAM before printing.",
++                "",
++                "H/V alignment can auto-left/centre/right and",
++                "top/mid/bottom the text instead of a fixed X/Y."
++            ]
++        },
++
++        "MACRO_PRINT_EXT": {
++            title: "PRINT EXT",
++            lines: [
++                "Prints a numeric value - a named VAR or a CPU",
++                "register (A/X/Y/SP/FLAGS) - to screen RAM.",
++                "",
++                "FORMAT: DEC, HEX, BIN, or BCD. FLAGS is always",
++                "shown in binary with an N V - B D I Z C legend",
++                "row underneath. Width follows the VAR's own size.",
++                "Zero- or space-padding and H/V alignment options."
++            ]
++        },
++
++        "MACRO_PLACE_CHAR": {
++            title: "PLACE CHAR",
++            lines: [
++                "Writes one screencode (and optionally a colour) at",
++                "a given row/column of screen + colour RAM.",
++                "",
++                "Address maths is shift-add (row*40 = row<<5 + row<<3),",
++                "so it works against any screen base, not just $0400."
++            ]
++        },
++
++        "MACRO_GET_CHAR": {
++            title: "GET CHAR",
++            lines: [
++                "Reads the screencode (and optionally the colour)",
++                "at a given row/column into named VARs.",
++                "",
++                "Companion read to PLACE CHAR - same pointer maths,",
++                "opposite direction."
++            ]
++        },
++
++        "MACRO_CLR_SCREEN": {
++            title: "CLR SCRN RAM",
++            lines: [
++                "Fills 1000 bytes of screen RAM with a fill byte,",
++                "starting at a chosen base address.",
++                "",
++                "Stops 8 bytes short of the full 1024-byte page so",
++                "it never touches the sprite pointer table living",
++                "at base+$3F8-$3FF."
++            ]
++        },
++
++        "MACRO_CLEAR_BMP_RECT": {
++            title: "CLR BMP RECT",
++            lines: [
++                "Zeroes a rectangular block of bitmap data, given in",
++                "char-cell col/row/width/height, not pixels.",
++                "",
++                "Every zeroed bit-pair renders as background colour",
++                "($D021) regardless of screen/colour RAM contents -",
++                "a true wipe that doesn't touch either palette plane.",
++                "",
++                "Drop it before MOVE BMP BLK to pre-clear a room's",
++                "target area, since MASK00 blending lets old pixels",
++                "show through any gaps left by a previous room."
++            ]
++        },
++
++        "MACRO_VWAIT": {
++            title: "VWAIT",
++            lines: [
++                "Waits for one specific raster line, gated on the",
++                "$D011 bit-8 flag so it only fires in the top frame",
++                "(lines 0-255), never the phantom repeat in the",
++                "lower border.",
++                "",
++                "Use to sync code to a precise scanline, e.g. before",
++                "a raster-split IRQ trick."
++            ]
++        },
++
++        "MACRO_WAIT": {
++            title: "WAIT",
++            lines: [
++                "Blocking delay measured in whole frames (PAL 50/s,",
++                "NTSC 60/s), up to 255 frames (~5.1s PAL).",
++                "",
++                "Counts raster wraps at line 255, gated on $D011 bit",
++                "8 so only the top-frame instance is latched.",
++                "Counter lives in X - no ZP used; clobbers A and X."
++            ]
++        },
++
++        "MACRO_DISPLAY": {
++            title: "DISPLAY",
++            lines: [
++                "Toggles the screen on/off via the DEN bit ($D011",
++                "bit 4), a read-modify-write that preserves every",
++                "other bit in the register.",
++                "",
++                "Safe alongside VSCROLL, bitmap mode, ECM, and the",
++                "9th raster bit. Fixed cost: 8 bytes."
++            ]
++        },
++
++        "MACRO_TEXT_SCROLL": {
++            title: "TXT SCROLL",
++            lines: [
++                "Scrolls a line of inline text across the screen at",
++                "a chosen row, one character-column per call.",
++                "",
++                "Speed, direction, screen row, and a working RAM",
++                "buffer address are all configurable per node."
++            ]
++        },
++
++        "MACRO_CHR": {
++            title: "CHARSET",
++            lines: [
++                "Points the VIC at a custom character set asset and",
++                "sets its base address in $D018.",
++                "",
++                "Pair with a MACRO_VIC node for full mode setup -",
++                "this node only handles the charset pointer."
++            ]
++        },
++
++        "MACRO_MAP": {
++            title: "MAP",
++            lines: [
++                "Copies a flat char+colour map asset to screen RAM",
++                "using a fast (zp),Y pointer-walk loop.",
++                "",
++                "Map width/height and the destination screen base",
++                "are all configurable. For the newer tileset-driven",
++                "flow with per-room stamping, see METAMAP instead."
++            ]
++        },
++
++        "MACRO_METAMAP": {
++            title: "METAMAP",
++            lines: [
++                "Flattens a META_TILESET room to screen + colour RAM.",
++                "",
++                "LIT mode: bakes one chosen room at compile time,",
++                "copied to screen with a MAP-style loop.",
++                "",
++                "VAR mode: every room is compiled as a placement",
++                "list + stamp table; a runtime stamper reads a named",
++                "VAR and draws whichever room it points to - re-run",
++                "the node any time that var changes to redraw."
++            ]
++        },
++
++        "MACRO_MAP_SWITCH": {
++            title: "MAP SWITCH",
++            lines: [
++                "Points an existing MACRO_MAP node at a different",
++                "MAP_DATA asset: rewrites its ZP char/colour source",
++                "pointers, resets scroll position to zero, and calls",
++                "the shared map redraw routine.",
++                "",
++                "Needs a MACRO_MAP node already connected on the",
++                "spine to read its ZP base from - this node only",
++                "switches which map that setup is pointing at."
++            ]
++        },
++
++        "MACRO_SCROLL": {
++            title: "MAP H-SCROLL",
++            lines: [
++                "Horizontal map scrolling with a unified delta core:",
++                "scroll_fine (0-7) and scrollx (column) are the",
++                "single source of truth. $D016 is only ever written",
++                "from scroll_fine, never read back.",
++                "",
++                "Left/right variants just set the direction sign",
++                "and share the same scrolling routine."
++            ]
++        },
++
++        "MACRO_VSCROLL": {
++            title: "V-SCROLL",
++            lines: [
++                "Vertical scrolling for an 18-column map centred on",
++                "the 40-column screen (offset 11). Scroll window is",
++                "rows 1-22; rows 0/23/24 are blanked once at init.",
++                "",
++                "Chars and colour RAM scroll in lockstep. Two entry",
++                "points: one scrolls content up, the other down."
++            ]
++        },
++
++        "MACRO_BMP": {
++            title: "BITMAP",
++            lines: [
++                "Auto-configures VIC bitmap mode from a Koala / raw",
++                "bitmap asset: sets bitmap base, screen base, and",
++                "loads the asset's screen+colour+bitmap planes.",
++                "",
++                "Simplest way to get a static hi-res or multicolour",
++                "picture on screen."
++            ]
++        },
++
++        "MACRO_VECTOR_BMP": {
++            title: "VECTOR BMP",
++            lines: [
++                "Sets up the shared vector-bitmap runtime (interpreter",
++                "+ multicolour plot routine) and streams a VECTOR_",
++                "BITMAP asset's PLOT/SETCOL/END command list into it.",
++                "",
++                "The runtime is emitted once per build no matter how",
++                "many VECTOR BMP/PAGE nodes reference it. Must sit",
++                "before any VECTOR PAGE nodes that use the same asset."
++            ]
++        },
++
++        "MACRO_VECTOR_PAGE": {
++            title: "VECTOR PAGE",
++            lines: [
++                "Flips a multi-page VECTOR_BITMAP asset to a chosen",
++                "page: clears the bitmap, fills screen/colour RAM +",
++                "border from that page's 4 colours, then renders",
++                "that page's command stream.",
++                "",
++                "Doesn't touch VIC mode registers - the VECTOR BMP",
++                "setup node earlier on the spine owns that."
++            ]
++        },
++
++        "MACRO_MOVE_BMP_BLOCK": {
++            title: "MOVE BMP BLK",
++            lines: [
++                "Copies a rectangular block of bitmap data (char-cell",
++                "units) from one bitmap to another, or within the",
++                "same one. Optionally copies the matching screen +",
++                "colour RAM too.",
++                "",
++                "X/Y offset VARs (in cells) are added to source and",
++                "dest at runtime. Self-modifying operands keep each",
++                "row a single fast LDA/STA pair."
++            ]
++        },
++
++        "MACRO_FLIP_X": {
++            title: "FLIP X",
++            lines: [
++                "Flips selected sprites horizontally using a lookup",
++                "table: reads sprite data from an asset address,",
++                "writes the flipped copy to a temp block, and points",
++                "the sprite pointer table at the flipped copy.",
++                "",
++                "Auto-detects hi-res vs multicolour per sprite via",
++                "$D01C at runtime - both LUTs are emitted inline."
++            ]
++        },
++
++        "MACRO_SPR": {
++            title: "SPRITE",
++            lines: [
++                "Sets up one hardware sprite: pointer, X/Y position,",
++                "colour, and enable state.",
++                "",
++                "Combine with MOVE, ANIMATE, PRIORITY, ENABLER and",
++                "the other sprite macros for full behaviour."
++            ]
++        },
++
++        "MACRO_MOVE": {
++            title: "MOVE (SPRITE)",
++            lines: [
++                "Minimal-byte unison sprite movement: applies a",
++                "per-frame X/Y delta to a group of sprites (chosen",
++                "by bitmask), as a literal or a named VAR.",
++                "",
++                "VAR mode reads the delta as a SIGNED byte: its sign",
++                "bit picks the move direction at runtime, so one VAR",
++                "can drive a sprite left/right or up/down just by",
++                "changing sign - no separate direction flag needed.",
++                "",
++                "WRAP vs BOUNDED: by default the position simply",
++                "rolls over at the 8-bit edge. Enable STOP to clamp",
++                "movement at fixed screen walls instead.",
++                "",
++                "WIDE X toggles the $D010 9th-bit MSB register so X",
++                "can range the full 0-343 sprite-visible width rather",
++                "than wrapping at the 8-bit 0-255 boundary."
++            ]
++        },
++
++        "MACRO_SEEK": {
++            title: "SEEK",
++            lines: [
++                "Directional / AI seek movement: steers a sprite",
++                "toward a target X/Y (literal or from named VARs),",
++                "at a configurable speed with optional deceleration",
++                "near the target and a widening catch box.",
++                "",
++                "Can also report distance/angle to the target into",
++                "named VARs for further logic."
++            ]
++        },
++
++        "MACRO_COLLISION": {
++            title: "COLLIDE",
++            lines: [
++                "Basic sprite-vs-map collision probe: checks the map",
++                "tile type under a sprite's position and reports a",
++                "hit/type result into a named VAR."
++            ]
++        },
++
++        "MACRO_COLL_ADV": {
++            title: "COLL.ADV",
++            lines: [
++                "Advanced multi-point collision probe against map",
++                "tile types, with per-edge/per-corner checks.",
++                "",
++                "DIRECT mode (bitmap hybrid): reads the screen byte",
++                "itself as the collision type - the same byte that",
++                "MOVE BMP BLK's WRITE COLL option writes from source",
++                "tags - so no per-room tile-type table is needed.",
++                "SCAN mode (char maps): looks the screen byte up in",
++                "the map's generated <map>_TILE_TYPES table instead."
++            ]
++        },
++
++        "MACRO_PRIORITY": {
++            title: "PRIORITY",
++            lines: [
++                "Sets whether a sprite draws in front of or behind",
++                "background characters, via $D01B."
++            ]
++        },
++
++        "MACRO_SPR_ENABLE": {
++            title: "ENABLER",
++            lines: [
++                "Turns a hardware sprite on or off via $D015 -",
++                "a clean single-purpose toggle rather than hand-",
++                "rolling the bitmask each time."
++            ]
++        },
++
++        "MACRO_SPR_EXPAND": {
++            title: "EXPANDER",
++            lines: [
++                "Toggles X and/or Y double-size expansion for a",
++                "sprite via $D01D / $D017."
++            ]
++        },
++
++        "MACRO_ANIM": {
++            title: "ANIMATE",
++            lines: [
++                "Per-sprite-slot animation: up to 8 slots, each with",
++                "its own list of frame values and X/Y position",
++                "offsets (+/-) to step through over time.",
++                "",
++                "Place the node once before your core game loop to",
++                "set it up - it exposes a JSR entry point that then",
++                "appears in the picker on any JSR node, so the",
++                "actual per-frame advance is called from wherever",
++                "your loop needs it.",
++                "",
++                "DELAY is a frame counter, not a speed value: a lower",
++                "DELAY advances sooner, so lower = faster animation."
++            ]
++        },
++
++        "MACRO_JOY": {
++            title: "JOYSTICK",
++            lines: [
++                "Reads a CIA joystick port and dispatches to JMP",
++                "targets based on which direction/fire bits are",
++                "set, via an AND/BNE test per bit.",
++                "",
++                "Connect JMP-target nodes for whichever directions/",
++                "fire button you want to react to."
++            ]
++        },
++
++        "MACRO_SID": {
++            title: "SID",
++            lines: [
++                "Full SID music setup with a raster IRQ: configures",
++                "the player, hooks a raster interrupt, and starts",
++                "playback of an imported SID_MUSIC or SID_SFX asset.",
++                "",
++                "For the built-in MUSIC_MAKER authoring tool instead",
++                "of an imported .sid file - with multi-song support,",
++                "hard restart and tempo control - see SID SONG."
++            ]
++        },
++
++        "MACRO_SID_SONG": {
++            title: "SID SONG",
++            lines: [
++                "Multi-song player driven by the built-in MUSIC_MAKER",
++                "authoring tool (an asset you compose songs in), with",
++                "hard-restart support, per-asset tempo, and a write-",
++                "only SID register shadow so playback never read-",
++                "modify-writes $D400-$D41C.",
++                "",
++                "Banks BASIC ROM out permanently at init ($01=$36),",
++                "keeping the KERNAL in so $0314/$0315 IRQ chaining",
++                "still works, freeing $03-$8F for player state.",
++                "",
++                "Pattern sentinels: $FF = REST (gate off, tail still",
++                "runs), $FE = HOLD (ringing note continues), 0-95 =",
++                "chromatic note index."
++            ]
++        },
++
++        "MACRO_SID_SOUND": {
++            title: "SID SOUND",
++            lines: [
++                "Plays a single note/sound on a chosen SID voice:",
++                "waveform, frequency, ADSR, and pulse width are all",
++                "configurable as literals or named VARs.",
++                "",
++                "WAVE ($D404) carries both the waveform bits and the",
++                "gate bit, and is always written last so the note",
++                "gates on only once everything else is set.",
++                "",
++                "Note can also come from a TEXT_DATA asset acting as",
++                "a note list, indexed at runtime."
++            ]
++        },
++
++        "MACRO_SFX": {
++            title: "SFX",
++            lines: [
++                "Plays a compiled INS2SND2 sound-effect binary blob",
++                "asset - a pre-authored SFX rather than a single",
++                "note built from raw ADSR/waveform fields."
++            ]
++        },
++
++        "MACRO_TRACK": {
++            title: "TRACK",
++            lines: [
++                "Runtime music track switcher: polls GETIN each",
++                "frame and swaps to a different SID/track on input.",
++                "",
++                "SEI/CLI guards prevent an IRQ firing mid-init or",
++                "mid-GETIN. Requires sid_getin to resolve to $FFE4",
++                "at build time."
++            ]
++        },
++
++        "MACRO_RANDOM": {
++            title: "RANDOM",
++            lines: [
++                "SID voice-3 noise generator RNG: optionally sets up",
++                "the oscillator once, reads $D41B, and can clamp the",
++                "result branchlessly into a [MIN,MAX] range.",
++                "",
++                "Result is left in A and/or stored to a named VAR."
++            ]
++        },
++
++        "MACRO_MATH": {
++            title: "MATH",
++            lines: [
++                "ADD / SUB / MUL / DIV / ONE-MINUS / INVERT-SIGN on",
++                "named VARs, signed two's-complement throughout.",
++                "",
++                "Each operand's width follows its own VAR meta (byte",
++                "or word). ADD/SUB/ONEMINUS/INVSIGN are inlined; MUL/",
++                "DIV call a shared math_mul16 / math_div16 routine",
++                "emitted once per build.",
++                "",
++                "Working ZP: $F2-$F8, chosen to avoid the MACRO_MAP",
++                "reservation ($FB-$FE) and vector-bmp scratch."
++            ]
++        },
++
++        "MACRO_MOVE_MEM": {
++            title: "MOVE MEM",
++            lines: [
++                "Copies a byte range [src_start..src_end) to a",
++                "destination address at runtime.",
++                "",
++                "Unrolled inline if 8 bytes or fewer, otherwise a",
++                "page-aware loop (capped at 1024 bytes).",
++                "",
++                "Forward copy only - overlapping ranges where dest",
++                "is above source will corrupt data."
++            ]
++        },
++
++        "MACRO_IRQ": {
++            title: "IRQ",
++            lines: [
++                "Declares one raster interrupt: the line it fires on,",
++                "and optionally a JSR into SID music playback.",
++                "",
++                "Exposes two labels other nodes can JSR to: the",
++                "handler entry point, and an init routine that hooks",
++                "the vector. Needs an IRQ SHELL elsewhere on the",
++                "spine to actually dispatch to it."
++            ]
++        },
++
++        "MACRO_IRQ_HANDLER": {
++            title: "IRQ SHELL",
++            lines: [
++                "Emits the unified table-driven raster IRQ dispatcher.",
++                "",
++                "Reads every connected IRQ node, sorts them by raster",
++                "line, builds the raster/target lookup tables, and",
++                "emits a self-modifying JSR dispatch handler.",
++                "",
++                "Vector mode: Kernal-chained ($0314/$0315) or direct",
++                "hardware vector ($FFFE/$FFFF)."
++            ]
++        },
++
++        "MACRO_CODE": {
++            title: "CODE",
++            lines: [
++                "A freeform block of hand-written 6502 assembly,",
++                "assembled inline exactly where the node sits on",
++                "the spine.",
++                "",
++                "Escape hatch for anything the macro library doesn't",
++                "cover yet - labels, opcodes and directives all work",
++                "as normal."
++            ]
++        },
++
++        "MACRO_LOADER": {
++            title: "MACRO LOADER",
++            lines: [
++                "Loads one file from a LOAD_ORG D64 image on demand,",
++                "via KERNAL SETLFS/SETNAM/LOAD with secondary $01,",
++                "so the file loads to its own embedded PRG header",
++                "address.",
++                "",
++                "Called wherever it's needed on the spine - there's",
++                "no fixed load-order requirement for this macro."
++            ]
++        },
++
++        "MACRO_LOAD_GAME": {
++            title: "LOAD GAME",
++            lines: [
++                "Loads a save file from a LOAD_ORG D64 back into RAM",
++                "at runtime, restoring whatever it holds.",
++                "",
++                "Relies on a BYTE_DATA asset with USE AS SAVE FILE",
++                "enabled and linked into the LOAD_ORG. That block is",
++                "where your persisted VARs actually live - lives,",
++                "coins, stats, or anything else you want to survive",
++                "a reset."
++            ]
++        },
++
++        "MACRO_SAVE_GAME": {
++            title: "SAVE GAME",
++            lines: [
++                "Writes a BYTE_DATA asset's current contents to disk",
++                "via a LOAD_ORG D64, persisting it between sessions.",
++                "",
++                "The asset must have USE AS SAVE FILE enabled and be",
++                "linked into the LOAD_ORG - that's the block your",
++                "game's persistent VARs (lives, coins, stats, etc.)",
++                "should be reading from and writing to."
++            ]
++        },
++
++        "MACRO_REU": {
++            title: "REU - RAM EXPANSION UNIT",
++            lines: [
++                "DMA transfer between C64 RAM and REU RAM,",
++                "via registers $DF00-$DF0A.",
++                "",
++                "OP  STASH  copies C64 -> REU",
++                "    FETCH  copies REU -> C64",
++                "    SWAP   exchanges both directions",
++                "    COMPARE verifies only, no write",
++                "",
++                "C64   16-bit start address in C64 RAM",
++                "REU   16-bit start address in REU RAM",
++                "BANK  REU bank, 0-255 (most units: bank 0 only)",
++                "LEN   bytes to move, $0000 = 65536",
++                "",
++                "AUTOLOAD reloads the start addresses once the",
++                "transfer finishes, so the node can fire again",
++                "without re-setting anything.",
++                "",
++                "FIX C64 / FIX REU hold that side's address",
++                "still during the transfer - use for fills or",
++                "repeated single-byte reads/writes.",
++                "",
++                "FF00-disable is always set on the command byte:",
++                "without it, a stray write to $FF00 can",
++                "re-trigger the last queued transfer."
++            ]
++        }
++    };
++
++    if (variable_struct_exists(_map, _node_type)) {
++        return _map[$ _node_type];
++    }
++    return undefined;
++}
+diff --git a/C64Devmachine/scripts/scr_node_tooltip_text/scr_node_tooltip_text.yy b/C64Devmachine/scripts/scr_node_tooltip_text/scr_node_tooltip_text.yy
+new file mode 100644
+index 0000000..625eebf
+--- /dev/null
++++ b/C64Devmachine/scripts/scr_node_tooltip_text/scr_node_tooltip_text.yy
+@@ -0,0 +1,13 @@
++{
++  "$GMScript":"v1",
++  "%Name":"scr_node_tooltip_text",
++  "isCompatibility":false,
++  "isDnD":false,
++  "name":"scr_node_tooltip_text",
++  "parent":{
++    "name":"MACROS",
++    "path":"folders/SCRIPTS/MACROS.yy",
++  },
++  "resourceType":"GMScript",
++  "resourceVersion":"2.0",
++}
