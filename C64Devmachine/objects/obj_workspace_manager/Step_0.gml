@@ -1319,7 +1319,7 @@ if (!global.any_picker_open) {
 	if (keyboard_check(vk_pageup))   cam_zoom_target -= zoom_speed * _pgzoom_mul;
 	if (keyboard_check(vk_pagedown)) cam_zoom_target += zoom_speed * _pgzoom_mul;
 }
-if (!is_entering_text && !global.is_any_text_active && !global.c64u_overlay_active && !global.any_picker_open) {
+if (!is_entering_text && !global.is_any_text_active && !global.c64u_overlay_active && !global.any_picker_open and !obj_asset_manager.viewer_open) {
     var _pan_mul = 1.0;
     if (keyboard_check(vk_shift)) {
         _pan_mul = 3.0;
@@ -1522,8 +1522,8 @@ if (uqmenu_active) {
     }
 }
 
-/// --- NODE SPAWNING (blocked during text entry) ---
-if (!is_entering_text && !global.is_any_text_active) {
+// --- NODE SPAWNING (blocked during text entry) ---
+if (!is_entering_text && !global.is_any_text_active and !obj_asset_manager.viewer_open) {
 
     // Block shortcut spawning when hovering any connected node, or while
     // any picker (VAR/JUMP/asset) is open — letters like A/O/N/etc. are also
