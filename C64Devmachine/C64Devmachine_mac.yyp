@@ -48,6 +48,7 @@
   ],
   "ForcedPrefabProjectReferences":[],
   "IncludedFiles":[
+    {"$GMIncludedFile":"","%Name":"c64dmstart.prg","CopyToMask":-1,"filePath":"datafiles/C64DMResources/PRG","name":"c64dmstart.prg","resourceType":"GMIncludedFile","resourceVersion":"2.0",},
     {"$GMIncludedFile":"","%Name":"NULLSID.sid","CopyToMask":-1,"filePath":"datafiles/C64DMResources/SID","name":"NULLSID.sid","resourceType":"GMIncludedFile","resourceVersion":"2.0",},
     {"$GMIncludedFile":"","%Name":"execute_shell_simple_ext.html","CopyToMask":-1,"filePath":"datafiles","name":"execute_shell_simple_ext.html","resourceType":"GMIncludedFile","resourceVersion":"2.0",},
     {"$GMIncludedFile":"","%Name":"65XEDebugger.exe","CopyToMask":-1,"filePath":"datafiles/vice","name":"65XEDebugger.exe","resourceType":"GMIncludedFile","resourceVersion":"2.0",},
@@ -1091,6 +1092,7 @@
     {"id":{"name":"scr_instrument_parse","path":"scripts/scr_instrument_parse/scr_instrument_parse.yy",},},
     {"id":{"name":"scr_is_address_conflicted","path":"scripts/scr_is_address_conflicted/scr_is_address_conflicted.yy",},},
     {"id":{"name":"scr_is_conflict_ignored","path":"scripts/scr_is_conflict_ignored/scr_is_conflict_ignored.yy",},},
+    {"id":{"name":"scr_is_pristine_default_workspace","path":"scripts/scr_is_pristine_default_workspace/scr_is_pristine_default_workspace.yy",},},
     {"id":{"name":"scr_json_pretty","path":"scripts/scr_json_pretty/scr_json_pretty.yy",},},
     {"id":{"name":"scr_kernal_routine_list","path":"scripts/scr_kernal_routine_list/scr_kernal_routine_list.yy",},},
     {"id":{"name":"scr_kla_encode_surface","path":"scripts/scr_kla_encode_surface/scr_kla_encode_surface.yy",},},
