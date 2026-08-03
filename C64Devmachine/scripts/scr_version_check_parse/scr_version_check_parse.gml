@@ -102,44 +102,17 @@ function scr_version_check_parse(_body)
         var _remote_parts = string_split(_remote_str, ".");
         
         // ---------------------------------------------------------
-        // Normalise Mac-style 3-segment versions to 4 segments.
-        // Windows GameMaker exports GM_version as "0.9.9.72".
-        // Mac GameMaker collapses the middle two blocks: "0.99.72".
-        // We split segment 1 of any 3-part version into two digits
-        // so both platforms compare on equal footing.
-        // Single-digit middle segment (e.g. "0.9.72") is treated
-        // as "0.0.9.72" by left-padding with a leading "0".
+        // Both platforms now publish a clean 3-segment version
+        // (e.g. "1.0.1" = major.minor.patch), so we just compare
+        // those three segments directly - no more trying to split
+        // Mac's collapsed "0.99.72" style back into 4 parts.
+        // Anything past the 3rd segment is ignored; anything
+        // missing counts as 0.
         // ---------------------------------------------------------
-        if (array_length(_local_parts) == 3)
-        {
-            var _mid = _local_parts[1];
-            if (string_length(_mid) < 2)
-            {
-                _mid = "0" + _mid;
-            }
-            var _mid_a = string_copy(_mid, 1, string_length(_mid) - 1);
-            var _mid_b = string_copy(_mid, string_length(_mid), 1);
-            _local_parts = [_local_parts[0], _mid_a, _mid_b, _local_parts[2]];
-        }
-        
-        if (array_length(_remote_parts) == 3)
-        {
-            var _mid = _remote_parts[1];
-            if (string_length(_mid) < 2)
-            {
-                _mid = "0" + _mid;
-            }
-            var _mid_a = string_copy(_mid, 1, string_length(_mid) - 1);
-            var _mid_b = string_copy(_mid, string_length(_mid), 1);
-            _remote_parts = [_remote_parts[0], _mid_a, _mid_b, _remote_parts[2]];
-        }
-        
         var _local_count  = array_length(_local_parts);
         var _remote_count = array_length(_remote_parts);
-        var _max_count    = max(_local_count, _remote_count);
-        var _local_count  = array_length(_local_parts);
-        var _remote_count = array_length(_remote_parts);
-        var _max_count    = max(_local_count, _remote_count);
+        var _max_count    = 3;
+
         
         var _remote_is_newer = false;
         var _decided         = false;
