@@ -219,10 +219,14 @@ if (code_editor_cache_dirty) {
     var _full_parsed = scr_parse_asm_text(_txt);
     var _fpi = 0;
     
-    var _rep_stack = []; 
+    var _rep_stack = [];
+    code_editor_cached_line_cyc = array_create(_total_lines, 0);
+    code_editor_cached_run_cyc  = array_create(_total_lines, 0);
+    var _running_cyc = 0;
 
     for (var _pi = 0; _pi < _total_lines; _pi++) {
         code_editor_cached_pcs[_pi] = _rpc;
+        code_editor_cached_run_cyc[_pi] = _running_cyc;
         var _pline = string_trim(_lines[_pi]);
         var _p_low = string_lower(_pline);
 
@@ -233,7 +237,7 @@ if (code_editor_cache_dirty) {
             if (_open > 0) {
                 var _digit_str = string_digits(string_copy(_pline, 7, _open - 7));
                 var _cnt = (_digit_str != "") ? real(_digit_str) : 1;
-                array_push(_rep_stack, { s_pc: _rpc, s_fpi: _fpi, count: _cnt });
+                array_push(_rep_stack, { s_pc: _rpc, s_fpi: _fpi, s_cyc: _running_cyc, count: _cnt });
             }
             continue;
         }
@@ -243,8 +247,10 @@ if (code_editor_cache_dirty) {
                 var _rData = array_pop(_rep_stack);
                 var _blockSize = _rpc - _rData.s_pc;
                 var _blockInst = _fpi - _rData.s_fpi;
+                var _blockCyc  = _running_cyc - _rData.s_cyc;
                 _rpc += (_rData.count - 1) * _blockSize;
                 _fpi += (_rData.count - 1) * _blockInst;
+                _running_cyc += (_rData.count - 1) * _blockCyc;
             }
             continue;
         }
@@ -267,6 +273,9 @@ if (code_editor_cache_dirty) {
                 _rpc += array_length(_pinst) - 1;
             } else if (_ptype != "label" && _ptype != "const") {
                 _rpc += obj_opCodeManager.get_size(_ptype);
+                var _cyc = obj_opCodeManager.get_cycles(_ptype);
+                code_editor_cached_line_cyc[_pi] = _cyc;
+                _running_cyc += _cyc;
             }
         }
     }
@@ -434,10 +443,8 @@ if (code_editor_cache_dirty) {
         var _is_rep_line = (string_pos("repeat", _tlow) > 0 || string_pos("{", _tlow) > 0 || string_pos("}", _tlow) > 0);
 
         if (_trimmed != "" && !_is_comment) {
-            // Multi-label declaration "!:" or "!name:" — ONLY valid alone on its line.
-            // Anything trailing the colon makes the whole line garbage.
-            if (string_char_at(_trimmed, 1) == "!" && string_pos(":", _trimmed) > 1
-                && string_trim(string_delete(_trimmed, 1, string_pos(":", _trimmed))) == "") {
+            // Anonymous / named multi-label declaration "!:" or "!name:" — label line
+            if (string_char_at(_trimmed, 1) == "!" && string_pos(":", _trimmed) > 1) {
                 _is_label = true;
                 _is_valid = true;
             }
@@ -456,8 +463,13 @@ if (code_editor_cache_dirty) {
                 var _mnem_check = (_sp2 > 0) ? string_copy(_tlow, 1, _sp2 - 1) : _tlow;
                 
                 // Check Directives
-                _is_byte_dir = (string_copy(_tlow, 1, 5) == ".byte" || string_copy(_tlow, 1, 7) == ".string");
-                _is_org_dir  = !_is_byte_dir && (string_copy(_mnem_check, 1, 3) == ".pc" || (string_length(_mnem_check) >= 2 && (string_copy(_mnem_check, 1, 2) == "*." || string_copy(_mnem_check, 1, 2) == ".*")));
+                _is_byte_dir = (string_copy(_tlow, 1, 5) == ".byte" || string_copy(_tlow, 1, 7) == ".string");
+                var _is_star_eq = false;
+                if (string_char_at(_trimmed, 1) == "*") {
+                    var _after_star = string_trim(string_delete(_trimmed, 1, 1));
+                    if (string_char_at(_after_star, 1) == "=") _is_star_eq = true;
+                }
+                _is_org_dir  = !_is_byte_dir && (string_copy(_mnem_check, 1, 3) == ".pc" || _is_star_eq || (string_length(_mnem_check) >= 2 && (string_copy(_mnem_check, 1, 2) == "*." || string_copy(_mnem_check, 1, 2) == ".*")));
                 
                 // Check Constants
                 var _eq_chk  = string_pos("=", _trimmed);
@@ -510,7 +522,7 @@ draw_set_font(_code_font);
         // ─── Syntax colouring ───
         if (_is_comment) {
             // Comments — grey-green
-            draw_set_color(make_color_rgb(80, 210, 100));
+            draw_set_color(make_color_rgb(90, 120, 98));
             draw_text(_code_x_s + _auto_indent, _ly, _line_text);
 
         } else if (_is_label) {
@@ -520,7 +532,7 @@ draw_set_font(_code_font);
             } else if (string_char_at(_lbl_name, 1) == ".") {
                 draw_set_color(make_color_rgb(200, 255, 255));
             } else if (code_editor_scope_depth[_line_idx] > 0) {
-                draw_set_color(make_color_rgb(255, 200, 255));   // scope-contained label — pink
+                draw_set_color(make_color_rgb(255, 120, 255));   // scope-contained label — pink
             } else {
                 draw_set_color(c_white);
             }
@@ -889,11 +901,11 @@ var _g_is_valid = false;
             if (_g_is_label) {
                 _g_is_valid = true;
             } else {
-                var _g_known = "adc,and,asl,bcc,bcs,beq,bit,bmi,bne,bpl,brk,bvc,bvs,clc,cld,cli,clv,cmp,cpx,cpy,dec,dex,dey,eor,inc,inx,iny,jmp,jsr,lda,ldx,ldy,lsr,nop,ora,pha,php,pla,plp,rol,ror,rti,rts,sbc,sec,sed,sei,sta,stx,sty,tax,tay,tsx,txa,txs,tya,lax,sax,dcp,isc,rla,rra,slo,sre,anc,anc2,alr,arr,axs";
-                var _g_sp2 = string_pos(" ", _g_trimmed);
-                var _g_mnem = string_lower(_g_sp2 > 0 ? string_copy(_g_trimmed, 1, _g_sp2 - 1) : _g_trimmed);
-                var _g_tlow = string_lower(_g_trimmed);
-                _g_eq = string_pos("=", _g_trimmed);
+                var _g_known = "adc,and,asl,bcc,bcs,beq,bit,bmi,bne,bpl,brk,bvc,bvs,clc,cld,cli,clv,cmp,cpx,cpy,dec,dex,dey,eor,inc,inx,iny,jmp,jsr,lda,ldx,ldy,lsr,nop,ora,pha,php,pla,plp,rol,ror,rti,rts,sbc,sec,sed,sei,sta,stx,sty,tax,tay,tsx,txa,txs,tya,lax,sax,dcp,isc,rla,rra,slo,sre,anc,anc2,alr,arr,axs";
+                var _g_sp2 = string_pos(" ", _g_trimmed);
+                var _g_mnem = string_lower(_g_sp2 > 0 ? string_copy(_g_trimmed, 1, _g_sp2 - 1) : _g_trimmed);
+                var _g_tlow = string_lower(_g_trimmed);
+                _g_eq = string_pos("=", _g_trimmed);
                 if (_g_eq > 1) {
                     var _g_const_name = string_trim(string_copy(_g_trimmed, 1, _g_eq - 1));
                     _g_is_const = (_g_const_name != "" && string_pos(" ", _g_const_name) == 0
@@ -905,6 +917,12 @@ var _g_is_valid = false;
                 // Ensure repeat syntax doesn't get a gutter address
                 if (string_pos("repeat", _g_tlow) > 0 || string_pos("{", _g_tlow) > 0 || string_pos("}", _g_tlow) > 0) {
                     _g_is_valid = false;
+                }
+                
+                // Ensure '* =' org directive doesn't get a gutter address
+                if (string_char_at(_g_trimmed, 1) == "*") {
+                    var _g_after_star = string_trim(string_delete(_g_trimmed, 1, 1));
+                    if (string_char_at(_g_after_star, 1) == "=") _g_is_valid = false;
                 }
             }
         }
@@ -1050,28 +1068,33 @@ var _g_is_valid = false;
         ));
         draw_rectangle(_hthumb_x, _hsb_y, _hthumb_x + _hthumb_w, _hsb_y + 6, false);
     }
-	
-	// ─── Type suffix legend ───
+
+// ─── Type suffix legend ───
     draw_set_font(fnt_c64_code);
     draw_set_color(make_color_rgb(120, 120, 120));
     draw_text(_px + 8, _py + _ph - 49,
               "VAR.W=WORD(2B)  VAR.B/none=BYTE(1B)  VAR.BCD=3B  VAR.BCD2=2B  VAR.BCD3=3B");
 
-// ─── Stats bar ───
+    // ─── Stats bar ───
     var _stats = code_editor_cached_stats;
-    draw_set_font(fnt_c64_code); // Switched to main code font
-    draw_set_color(c_aqua);
-    // Positioned higher to account for larger font size
+    
+    var _cyc_this = 0;
+    var _cyc_to = 0;
+    if (is_array(code_editor_cached_line_cyc) && _cur_line < array_length(code_editor_cached_line_cyc)) {
+        _cyc_this = code_editor_cached_line_cyc[_cur_line];
+        _cyc_to = code_editor_cached_run_cyc[_cur_line] + _cyc_this;
+    }
 
-    draw_set_color(make_color_rgb(200, 170, 140)); // Slightly brighter dim color
-    draw_text(_px + 8, _py + _ph - 34, 
-              "L" + string(_cur_line + 1) + ":" + string(_cur_col + 1) + 
-              "  (" + string(_total_lines) + " LINES)    " + string(_stats[0]) + " BYTES  " + string(_stats[1]) + " CYC");
+    draw_set_font(fnt_c64_code); // Switched to main code font
+    draw_set_color(make_color_rgb(200, 170, 140)); // Slightly brighter dim color
+    draw_text(_px + 8, _py + _ph - 34, 
+              "L" + string(_cur_line + 1) + ":" + string(_cur_col + 1) + 
+              "  (" + string(_total_lines) + " LINES)    " + string(_stats[0]) + " BYTES    " + string(_stats[1]) + " CYC (TOTAL)    CYCLES TO LINE: " + string(_cyc_to) + "    THIS LINE: " + string(_cyc_this));
 
     // ─── Hints bar ───
     draw_set_color(make_color_rgb(100, 180, 200));
     draw_text(_px + 8, _py + _ph - 19, "(CTRL+ENTER) or ESCAPE to  CLOSE  |  F5: BUILD  |  CTRL+C/X/V  |  CTRL+A  |  TAB |  F12 : FONT  Z CTRL/(+SHIFT)+F FIND+REPLACE");
-    
-    if (code_editor_find_open) scr_code_editor_draw_find_dialogue(_px, _py, _pw, _mx, _my);
+	
+	if (code_editor_find_open) scr_code_editor_draw_find_dialogue(_px, _py, _pw, _mx, _my);
 	
 }
