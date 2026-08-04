@@ -349,11 +349,28 @@
 		
 		// --- MACRO_MOVE ---
 		} else if (_target.node_type == "MACRO_MOVE") {
-		    var _is_neg = (string_char_at(_input, 1) == "-");
-		    var _digits = string_digits(_input);
-		    var _val    = (_digits != "") ? real(_digits) : 0;
-		    if (_is_neg) _val = -_val;
-		    _target.instructions[0][_idx] = clamp(_val, -15, 15);
+		    if (_idx == 2 || _idx == 3) {
+		        // DX / DY literal delta — signed, -15..15
+		        var _is_neg = (string_char_at(_input, 1) == "-");
+		        var _digits = string_digits(_input);
+		        var _val    = (_digits != "") ? real(_digits) : 0;
+		        if (_is_neg) _val = -_val;
+		        _target.instructions[0][_idx] = clamp(_val, -64, 64);
+		    } else if (_idx == 11) {
+		        // MIN X — unsigned, full 9-bit reach for wide-X mode
+		        var _digits = string_digits(_input);
+		        _target.instructions[0][11] = clamp((_digits != "") ? real(_digits) : 0, 0, 343);
+		    } else if (_idx == 12) {
+		        // MAX X — unsigned; capped at 255 unless 9TH BIT (wide-X) is on
+		        var _mm_widex = real(_target.instructions[0][4]);
+		        var _mm_x_cap = (_mm_widex == 1) ? 343 : 255;
+		        var _digits = string_digits(_input);
+		        _target.instructions[0][12] = clamp((_digits != "") ? real(_digits) : 0, 0, _mm_x_cap);
+		    } else if (_idx == 13 || _idx == 14) {
+		        // MIN Y / MAX Y — unsigned, 0-255
+		        var _digits = string_digits(_input);
+		        _target.instructions[0][_idx] = clamp((_digits != "") ? real(_digits) : 0, 0, 255);
+		    }
 
 		// --- MACRO_SEEK ---
 		} else if (_target.node_type == "MACRO_SEEK") {
