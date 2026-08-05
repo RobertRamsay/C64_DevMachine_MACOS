@@ -1,0 +1,15 @@
+diff --git a/C64Devmachine/scripts/scr_reu_support/scr_reu_support.yy b/C64Devmachine/scripts/scr_reu_support/scr_reu_support.yy
+index 6a46ecc..f34a75d 100644
+--- a/C64Devmachine/scripts/scr_reu_support/scr_reu_support.yy
++++ b/C64Devmachine/scripts/scr_reu_support/scr_reu_support.yy
+@@ -5,8 +5,8 @@
+   "isDnD":false,
+   "name":"scr_reu_support",
+   "parent":{
+-    "name":"LOADER_SUPPORT",
+-    "path":"folders/SCRIPTS/MACROS/LOADER_SUPPORT.yy",
++    "name":"MACROS",
++    "path":"folders/SCRIPTS/MACROS.yy",
+   },
+   "resourceType":"GMScript",
+   "resourceVersion":"2.0",

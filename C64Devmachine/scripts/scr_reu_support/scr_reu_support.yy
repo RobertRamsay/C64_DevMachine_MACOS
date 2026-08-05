@@ -5,8 +5,8 @@
   "isDnD":false,
   "name":"scr_reu_support",
   "parent":{
-    "name":"LOADER_SUPPORT",
-    "path":"folders/SCRIPTS/MACROS/LOADER_SUPPORT.yy",
+    "name":"MACROS",
+    "path":"folders/SCRIPTS/MACROS.yy",
   },
   "resourceType":"GMScript",
   "resourceVersion":"2.0",
