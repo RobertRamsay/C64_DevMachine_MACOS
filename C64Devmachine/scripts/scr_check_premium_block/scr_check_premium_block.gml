@@ -10,6 +10,7 @@ function scr_check_premium_block(_action_verb) {
 
     var _premium_found = false;
     with (obj_c64_node) {
+        if (variable_instance_exists(id, "egg_temp") && egg_temp) continue;
         if (is_connected && (node_type == "MACRO_CODE" || node_type == "MACRO_IRQ" || node_type == "MACRO_MOVE_MEM" )) {
             _premium_found = true;
             break;
