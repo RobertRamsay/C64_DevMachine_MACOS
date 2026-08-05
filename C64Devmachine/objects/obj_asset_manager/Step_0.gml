@@ -1,21 +1,5 @@
 /// @desc obj_asset_manager Step
 // Find the max whole-number scale that fits inside the current window size
-// DEBUG — watch for unauthorised writes to the imported .txt
-{
-    var _watch_path = "C:\\Users\\me\\Downloads\\Mechs_Demo.txt";
-    if (file_exists(_watch_path)) {
-        var _new_md5 = md5_file(_watch_path);
-        if (!variable_instance_exists(id, "_watch_md5")) {
-            _watch_md5 = _new_md5;
-            show_debug_message("WATCH: initial MD5 = " + _new_md5);
-        } else if (_watch_md5 != _new_md5) {
-            show_debug_message("!!! WATCH: FILE CHANGED");
-            show_debug_message("    old MD5: " + _watch_md5);
-            show_debug_message("    new MD5: " + _new_md5);
-            _watch_md5 = _new_md5;
-        }
-    }
-}
 
 var _scale_x = window_get_width() div 480;
 var _scale_y = window_get_height() div 300;
@@ -656,6 +640,12 @@ for (var _di = 0; _di < ds_list_size(asset_list); _di++) {
                             string(instructions[0][2]) == _old_name)
                             instructions[0][2] = _proposed;
                         break;
+                    case "MACRO_REU":
+                        if (array_length(instructions[0]) > 10 && string(instructions[0][10]) == _old_name)
+                            instructions[0][10] = _proposed;
+                        if (array_length(instructions[0]) > 11 && string(instructions[0][11]) == _old_name)
+                            instructions[0][11] = _proposed;
+                        break;
                     case "NEW_STR":
                         // slot 4 = "uses linked asset" flag, slot 5 = linked TEXT_DATA name
                         if (array_length(instructions[0]) > 5 &&
@@ -701,7 +691,7 @@ for (var _di = 0; _di < ds_list_size(asset_list); _di++) {
             var _new_auto_d64 = string_upper(string_copy(_proposed, 1, 16));
             for (var _loi = 0; _loi < ds_list_size(asset_list); _loi++) {
                 var _loa = ds_list_find_value(asset_list, _loi);
-                if (_loa.type != "LOAD_ORG") continue;
+                if (_loa.type != "LOAD_ORG" && _loa.type != "LOAD_REU") continue;
                 if (!variable_struct_exists(_loa, "linked_assets")) continue;
                 for (var _loli = 0; _loli < array_length(_loa.linked_assets); _loli++) {
                     var _link_ref = _loa.linked_assets[_loli];
@@ -1030,55 +1020,128 @@ if (mouse_check_button_pressed(mb_left) && !global.ui_click_consumed && !global.
 }
 
 // -------------------------------------------------------
-// LOAD_ORG ASSET PICKER
+// LOAD_REU MANIFEST ASSET PICKER
 // -------------------------------------------------------
-// MACRO_LOADER — LOAD_ORG picker (pick which D64 the node references)
-	if (loader_org_picker_open) {
-		if (!instance_exists(loader_org_picker_node)) {
-			loader_org_picker_open  = false;
-			loader_org_picker_node  = noone;
-			loader_org_picker_hover = -1;
-		} else {
-			// Build LOAD_ORG list
-			var _lop_matches = [];
-			for (var _i = 0; _i < ds_list_size(asset_list); _i++) {
-				var _a = ds_list_find_value(asset_list, _i);
-				if (_a.type == "LOAD_ORG") array_push(_lop_matches, _a);
-			}
-			loader_org_picker_hover = -1;
-			var _drop_x = loader_org_picker_node.x + 68;
-			var _drop_y = loader_org_picker_node.y + 36;
-			for (var _i = 0; _i < array_length(_lop_matches); _i++) {
-				var _ry = _drop_y + (_i * 16);
-				if (point_in_rectangle(mouse_x, mouse_y, _drop_x, _ry, _drop_x + 180, _ry + 16)) {
-					loader_org_picker_hover = _i;
-					break;
-				}
-			}
-			if (mouse_check_button_pressed(mb_left)) {
-				if (loader_org_picker_hover >= 0) {
-					var _picked = _lop_matches[loader_org_picker_hover];
-					while (array_length(loader_org_picker_node.instructions[0]) <= 3) {
-						array_push(loader_org_picker_node.instructions[0], "");
-					}
-					// If LOAD_ORG changed, clear file selection
-					if (string(loader_org_picker_node.instructions[0][1]) != _picked.name) {
-						loader_org_picker_node.instructions[0][2] = "";
-					}
-					loader_org_picker_node.instructions[0][1] = _picked.name;
-					scr_c64_update_addresses();
-				}
-				loader_org_picker_open  = false;
-				loader_org_picker_node  = noone;
-				loader_org_picker_hover = -1;
-			}
-			if (mouse_check_button_pressed(mb_right) || keyboard_check_pressed(vk_escape)) {
-				loader_org_picker_open  = false;
-				loader_org_picker_node  = noone;
-				loader_org_picker_hover = -1;
-			}
-		}
-	}
+if (load_reu_picker_open) {
+    var _lpw     = 240;
+    var _lih     = 20;
+    var _lpx     = _vx1 + 10;
+    var _lpy     = _vy1 + 200;
+    var _matches = [];
+
+    if (load_reu_picker_asset >= 0 &&
+        load_reu_picker_asset < ds_list_size(asset_list)) {
+
+        // Build a list of unclaimed assets.
+        for (var _i = 0; _i < ds_list_size(asset_list); _i++) {
+            var _candidate = ds_list_find_value(asset_list, _i);
+
+            // Manifests cannot be added to another manifest.
+            if (_candidate.type == "LOAD_ORG" ||
+                _candidate.type == "LOAD_REU") {
+                continue;
+            }
+
+            // An asset can belong to only one LOAD_ORG or LOAD_REU.
+            var _claimed = false;
+
+            for (var _mi = 0;
+                 _mi < ds_list_size(asset_list);
+                 _mi++) {
+
+                var _manifest = ds_list_find_value(asset_list, _mi);
+
+                if (_manifest.type != "LOAD_ORG" &&
+                    _manifest.type != "LOAD_REU") {
+                    continue;
+                }
+
+                if (!variable_struct_exists(
+                        _manifest,
+                        "linked_assets")) {
+                    continue;
+                }
+
+                var _manifest_links = _manifest.linked_assets;
+
+                for (var _li = 0;
+                     _li < array_length(_manifest_links);
+                     _li++) {
+
+                    if (_manifest_links[_li].asset_name ==
+                        _candidate.name) {
+
+                        _claimed = true;
+                        break;
+                    }
+                }
+
+                if (_claimed) break;
+            }
+
+            if (!_claimed) {
+                array_push(_matches, _candidate);
+            }
+        }
+    }
+
+    load_reu_picker_hover = -1;
+
+    for (var _i = 0; _i < array_length(_matches); _i++) {
+        var _iy = _lpy + 20 + (_i * _lih);
+
+        if (point_in_rectangle(
+                _mx,
+                _my,
+                _lpx,
+                _iy,
+                _lpx + _lpw,
+                _iy + _lih)) {
+
+            load_reu_picker_hover = _i;
+            break;
+        }
+    }
+
+    if (mouse_check_button_pressed(mb_left) &&
+        !global.ui_click_consumed &&
+        !global.any_picker_open) {
+
+        if (load_reu_picker_hover >= 0) {
+            var _reu_manifest = ds_list_find_value(
+                asset_list,
+                load_reu_picker_asset
+            );
+
+            var _picked_asset =
+                _matches[load_reu_picker_hover];
+
+            array_push(
+                _reu_manifest.linked_assets,
+                {
+                    asset_name : _picked_asset.name,
+                    reu_address: 0x100,
+                    auto_pack  : true
+                }
+            );
+
+            scr_reu_repack(_reu_manifest);
+        }
+
+        load_reu_picker_open  = false;
+        load_reu_picker_asset = -1;
+        load_reu_picker_hover = -1;
+        exit;
+    }
+
+    if (mouse_check_button_pressed(mb_right)) {
+        load_reu_picker_open  = false;
+        load_reu_picker_asset = -1;
+        load_reu_picker_hover = -1;
+    }
+
+    exit;
+}
 
 	// MACRO_LOADER — FILE picker (pick which linked asset inside the LOAD_ORG)
 	if (loader_file_picker_open) {
@@ -1143,20 +1206,29 @@ if (mouse_check_button_pressed(mb_left) && !global.ui_click_consumed && !global.
     var _lpx  = _vx1 + 10;
     var _lpy  = _vy1 + 200;
 
-    // Build list of all non-LOAD_ORG assets not already linked
+    // Match the Draw GUI exactly: only assets unclaimed by every external
+    // manifest are clickable. Keeping these arrays identical prevents a
+    // visible row selecting a different hidden asset.
     var _lo_matches = [];
     if (load_org_picker_asset >= 0 && load_org_picker_asset < ds_list_size(asset_list)) {
-        var _lo_asset = ds_list_find_value(asset_list, load_org_picker_asset);
-        var _lo_links = variable_struct_exists(_lo_asset, "linked_assets") ? _lo_asset.linked_assets : [];
         for (var _i = 0; _i < ds_list_size(asset_list); _i++) {
-            var _a = ds_list_find_value(asset_list, _i);
-            if (_a.type == "LOAD_ORG") continue;
-            // Check not already linked
-            var _already = false;
-            for (var _li = 0; _li < array_length(_lo_links); _li++) {
-                if (_lo_links[_li].asset_name == _a.name) { _already = true; break; }
+            var _candidate = ds_list_find_value(asset_list, _i);
+            if (_candidate.type == "LOAD_ORG" || _candidate.type == "LOAD_REU") continue;
+
+            var _claimed = false;
+            for (var _mi = 0; _mi < ds_list_size(asset_list); _mi++) {
+                var _manifest = ds_list_find_value(asset_list, _mi);
+                if (_manifest.type != "LOAD_ORG" && _manifest.type != "LOAD_REU") continue;
+                if (!variable_struct_exists(_manifest, "linked_assets")) continue;
+                for (var _li = 0; _li < array_length(_manifest.linked_assets); _li++) {
+                    if (_manifest.linked_assets[_li].asset_name == _candidate.name) {
+                        _claimed = true;
+                        break;
+                    }
+                }
+                if (_claimed) break;
             }
-            if (!_already) array_push(_lo_matches, _a);
+            if (!_claimed) array_push(_lo_matches, _candidate);
         }
     }
 
@@ -1194,6 +1266,8 @@ if (mouse_check_button_pressed(mb_left) && !global.ui_click_consumed && !global.
     }
     exit;
 }
+
+
 
 // -------------------------------------------------------
 // META TILESET CHARSET PICKER
@@ -1583,7 +1657,10 @@ if (mouse_check_button_pressed(mb_left) && !global.any_picker_open) {
 			    meta          : _new_meta,
 			    load_later    : false,
 			    d64_filename  : (_type == "LOAD_ORG") ? string_upper(_proposed) : "",
-			    linked_assets : (_type == "LOAD_ORG") ? [] : [],
+			    reu_filename  : (_type == "LOAD_REU") ? _proposed + ".reu" : "",
+			    reu_size      : (_type == "LOAD_REU") ? 0x1000000 : 0,
+			    reu_used      : (_type == "LOAD_REU") ? 0x100 : 0,
+			    linked_assets : (_type == "LOAD_ORG" || _type == "LOAD_REU") ? [] : [],
 			};
 			
 			if (_type == "SPRITE_SET") {
@@ -1968,6 +2045,22 @@ if (_asset.type == "META_TILESET") {
             exit;
         }
 
+        // LOAD_REU viewer clicks
+        if (_asset.type == "LOAD_REU") {
+            var _links=variable_struct_exists(_asset,"linked_assets")?_asset.linked_assets:[];
+            var _ry=load_reu_rows_y, _cm=_vx1+465;
+            for(var _li=0;_li<array_length(_links);_li++){
+                if(point_in_rectangle(_mx,_my,_vx2-26,_ry+2,_vx2-8,_ry+18)){array_delete(_links,_li,1);scr_reu_repack(_asset);exit;}
+                if(point_in_rectangle(_mx,_my,_cm,_ry+2,_cm+45,_ry+18)){_links[_li].auto_pack=!_links[_li].auto_pack;scr_reu_repack(_asset);exit;}
+                if(point_in_rectangle(_mx,_my,_cm+48,_ry+2,_cm+64,_ry+18)){_links[_li].auto_pack=false;_links[_li].reu_address=max(0x100,real(_links[_li].reu_address)-0x100);scr_reu_repack(_asset);exit;}
+                if(point_in_rectangle(_mx,_my,_cm+66,_ry+2,_cm+82,_ry+18)){_links[_li].auto_pack=false;_links[_li].reu_address=min(0xFFFFFF,real(_links[_li].reu_address)+0x100);scr_reu_repack(_asset);exit;}
+                _ry+=22;
+            }
+            if(point_in_rectangle(_mx,_my,_vx1+10,load_reu_add_y,_vx1+90,load_reu_add_y+22)){load_reu_picker_open=true;load_reu_picker_asset=viewer_asset;load_reu_picker_hover=-1;exit;}
+            if(point_in_rectangle(_mx,_my,_vx1+100,load_reu_add_y,_vx1+200,load_reu_add_y+22)){for(var _li=0;_li<array_length(_links);_li++)_links[_li].auto_pack=true;scr_reu_repack(_asset);exit;}
+            exit;
+        }
+
         // LOAD FILE / IMPORT button — suppressed for SPRITE_SET while V2 is
         // active on this asset. Importing through V2 overwrites the asset's
         // meta (compositor, anim, palette) while V2 holds stale working
@@ -2002,7 +2095,8 @@ if (_asset.type == "META_TILESET") {
 
         // ADDRESS click in viewer — LOAD_ORG is a manifest, BITMAP_BUILDER is an
         // internal authoring asset. Neither has an editable load address.
-        if (_asset.type != "LOAD_ORG" && _asset.type != "BITMAP_BUILDER" && _asset.type != "MUSIC_MAKER" &&
+        if (_asset.type != "LOAD_ORG" && _asset.type != "LOAD_REU" &&
+            _asset.type != "BITMAP_BUILDER" && _asset.type != "MUSIC_MAKER" &&
             point_in_rectangle(_mx, _my, _vx1 + 74, _vy1 + 65, _vx1 + 162, _vy1 + 79)) {
             editing_address     = true;
             editing_address_idx = viewer_asset;
@@ -2029,7 +2123,8 @@ if (_asset.type == "META_TILESET") {
         if (_asset.type == "SPRITE_SET" && _asset.file != "")
             scr_asset_spr_cache_sprites(_asset);
 
-        if (_asset.type != "LOAD_ORG" && _asset.type != "BITMAP_BUILDER" && _asset.type != "MUSIC_MAKER" &&
+        if (_asset.type != "LOAD_ORG" && _asset.type != "LOAD_REU" &&
+            _asset.type != "BITMAP_BUILDER" && _asset.type != "MUSIC_MAKER" &&
             point_in_rectangle(_mx, _my, _addr_x, _iy, _panel_right, _iy + item_h)) {
             editing_address     = true;
             editing_address_idx = hover_idx;
@@ -2200,6 +2295,15 @@ scr_undo_snapshot()
                     _ref_name = string(instructions[0][2]);
                 }
                 break;
+            case "MACRO_REU":
+                // ASSET mode: slot 10 is the LOAD_REU manifest and slot 11
+                // is the selected linked asset.
+                if (array_length(instructions[0]) > 10 && string(instructions[0][10]) == other._delete_check_name) {
+                    _ref_name = string(instructions[0][10]);
+                } else if (array_length(instructions[0]) > 11 && string(instructions[0][11]) == other._delete_check_name) {
+                    _ref_name = string(instructions[0][11]);
+                }
+                break;
             case "MACRO_TEXT_SCROLL":
                 // slot 10 = text/scroll asset, slot 13 = charset asset
                 if (array_length(instructions[0]) > 10 &&
@@ -2230,29 +2334,12 @@ scr_undo_snapshot()
     }
 
     // Also block deletion if the asset lives inside any LOAD_ORG's manifest.
-    if (!_is_referenced) {
-        for (var _dlci = 0; _dlci < ds_list_size(asset_list); _dlci++) {
-            var _dlca = ds_list_find_value(asset_list, _dlci);
-            if (_dlca.type != "LOAD_ORG") continue;
-            if (_dlca == _asset) continue;
-            if (!variable_struct_exists(_dlca, "linked_assets")) continue;
-            for (var _dllki = 0; _dllki < array_length(_dlca.linked_assets); _dllki++) {
-                if (_dlca.linked_assets[_dllki].asset_name == _asset.name) {
-                    _is_referenced = true;
-                    break;
-                }
-            }
-            if (_is_referenced) break;
-        }
-    }
-
-    // Also block deletion if the asset lives inside any LOAD_ORG's manifest.
     // (Cosmetic delete cleanup further down also wipes these refs, but we
     //  want the user to consciously remove from the LOAD_ORG first.)
     if (!_is_referenced) {
         for (var _dlci = 0; _dlci < ds_list_size(asset_list); _dlci++) {
             var _dlca = ds_list_find_value(asset_list, _dlci);
-            if (_dlca.type != "LOAD_ORG") continue;
+            if (_dlca.type != "LOAD_ORG" && _dlca.type != "LOAD_REU") continue;
             if (_dlca == _asset) continue;
             if (!variable_struct_exists(_dlca, "linked_assets")) continue;
             for (var _dllki = 0; _dllki < array_length(_dlca.linked_assets); _dllki++) {
@@ -2317,7 +2404,7 @@ scr_undo_snapshot()
         // Remove stale LOAD_ORG linked_asset references to this asset
         for (var _loi = 0; _loi < ds_list_size(asset_list); _loi++) {
             var _loa = ds_list_find_value(asset_list, _loi);
-            if (_loa.type != "LOAD_ORG") continue;
+            if (_loa.type != "LOAD_ORG" && _loa.type != "LOAD_REU") continue;
             if (!variable_struct_exists(_loa, "linked_assets")) continue;
             for (var _loli = array_length(_loa.linked_assets) - 1; _loli >= 0; _loli--) {
                 if (_loa.linked_assets[_loli].asset_name == _asset.name)
