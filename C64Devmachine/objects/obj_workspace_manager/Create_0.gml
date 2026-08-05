@@ -29,7 +29,7 @@ version_last_seen_remote = "";
 global.fullScreen=0;
 
 // Restore saved fullscreen state
-ini_open("c64desvmachine.ini");
+ini_open("c64devmachine.ini");
 global.fullScreen = ini_read_real("window", "fullscreen", 0);
 ini_close();
 
