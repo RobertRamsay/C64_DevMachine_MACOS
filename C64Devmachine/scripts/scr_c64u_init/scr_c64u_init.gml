@@ -12,9 +12,19 @@ function scr_c64u_init()
     global.c64u_status      = "";        // Last status string for HUD display
     global.c64u_status_t    = 0;         // Status display timer (frames)
 
+    // --- Raw SocketDMA REU upload state (Ultimate TCP port 64) ---
+    global.c64u_reu_socket       = -1;
+    global.c64u_reu_state        = "idle";
+    global.c64u_reu_deadline     = 0;
+    global.c64u_reu_after        = "";
+    global.c64u_reu_path_a       = "";
+    global.c64u_reu_path_b       = "";
+    global.reu_last_image        = "";
+    global.reu_last_used         = 0;
+    global.reu_build_error       = "";
+
     // --- Overlay state ---
     global.c64u_overlay_active = false;
-	
     global.c64u_overlay_text   = "";
     global.c64u_overlay_error  = "";
     global.c64u_overlay_after  = "";     // "send_prg" = build+send after IP entered, "" = save only
@@ -45,3 +55,17 @@ function scr_c64u_init()
     global.c64u_password = ini_read_string("C64U", "password", "");
     ini_close();
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+

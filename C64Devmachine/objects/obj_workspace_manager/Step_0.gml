@@ -1,3 +1,6 @@
+// Advance the asynchronous C64U REU upload.
+scr_c64u_reu_step();
+
 // Track windowed geometry so it can be saved/restored
 if (global.win_geo_ready && !global.fullScreen && !window_get_fullscreen()) {
     global.win_x = window_get_x();
@@ -2973,7 +2976,7 @@ show_debug_message(_pbuf_dbg2);
             full_save_path = _d64_path;
             if (trigger_c64u) {
                 trigger_c64u = false;
-                scr_c64u_send_d64_and_run(_d64_path, _boot_prg_path);
+                scr_c64u_reu_begin("D64", _d64_path, _boot_prg_path);
             } else {
                 if (os_type == os_windows) {
                     global.vice_path_cache = working_directory + "vice\\bin\\x64sc.exe";

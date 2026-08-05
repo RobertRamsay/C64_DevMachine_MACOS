@@ -1,9 +1,9 @@
 {
   "$GMScript":"v1",
-  "%Name":"scr_reu_support",
+  "%Name":"scr_c64u_reu_send_auth",
   "isCompatibility":false,
   "isDnD":false,
-  "name":"scr_reu_support",
+  "name":"scr_c64u_reu_send_auth",
   "parent":{
     "name":"ULTIMATE",
     "path":"folders/SCRIPTS/ULTIMATE.yy",

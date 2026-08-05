@@ -25,7 +25,12 @@ var _vice_app_path = global.vice_path_cache;
 var _inner = "";
 _inner += "pkill -x x64sc; pkill -x x64; ";
 _inner += "xattr -dr com.apple.quarantine \\\"" + _vice_app_path + "\\\"; ";
-_inner += "/usr/bin/open -n -a \\\"" + _vice_app_path + "\\\" --args -autostart \\\"" + full_save_path + "\\\"";
+_inner += "/usr/bin/open -n -a \\\"" + _vice_app_path + "\\\" --args ";
+if (global.reu_last_image != "" && file_exists(global.reu_last_image)) {
+    _inner += "-reu -reusize 16384 -reuimage \\\"" + global.reu_last_image + "\\\" ";
+    show_debug_message("VICE REU IMAGE: " + global.reu_last_image);
+}
+_inner += "-autostart \\\"" + full_save_path + "\\\"";
 
 var _launch_command = "/bin/sh -c \"" + _inner + "\"";
 
