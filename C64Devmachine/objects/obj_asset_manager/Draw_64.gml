@@ -1226,7 +1226,8 @@ case "MAP_DATA": {
 			
 
 
-		    var _mw = _m.map_w;
+		    
+            var _mw = clamp(_m.map_w,40,216); // temporary fix, maps must be byte sized.
 		    var _mh = _m.map_h;
 
 		    // ---- INFO ROW ----
