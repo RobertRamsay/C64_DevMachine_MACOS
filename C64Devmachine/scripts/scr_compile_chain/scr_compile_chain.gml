@@ -6467,9 +6467,201 @@ case "MACRO_REU": {
     var _reu_fixc  = is_real(_curr.instructions[0][7]) ? real(_curr.instructions[0][7]) : 0;
     var _reu_fixr  = is_real(_curr.instructions[0][8]) ? real(_curr.instructions[0][8]) : 0;
 
+    // mode: 0 DIRECT, 1 ASSET (bakes one asset's addr/bank/len as immediates),
+    // 2 INDEXED (builds a bank/lo/hi/len-lo/len-hi table from every asset
+    // linked to the LOAD_REU manifest, then LDX a ZP var to pick the entry
+    // at runtime via LDA table,X hardware indexing).
+    var _reu_mode = (array_length(_curr.instructions[0]) > 9 && is_real(_curr.instructions[0][9])) ? real(_curr.instructions[0][9]) : 0;
+
+    // ---- INDEXED MODE ----
+    if (_reu_mode == 2) {
+        var _manifest_name = (array_length(_curr.instructions[0]) > 10) ? string(_curr.instructions[0][10]) : "";
+        var _index_var      = (array_length(_curr.instructions[0]) > 12) ? string(_curr.instructions[0][12]) : "";
+        // size_mode: 0 CUSTOM (fixed length from the node's own LEN field),
+        // 1 HRBITMAP (bitmap+screen only — HR mode never reads colour RAM),
+        // 2 MCBITMAP (full bitmap+screen+colour span). Missing slot 13
+        // (nodes built before this option existed) defaults to MCBITMAP,
+        // which is the auto-span behaviour they already compiled against.
+        var _size_mode = (array_length(_curr.instructions[0]) > 13 && is_real(_curr.instructions[0][13])) ? real(_curr.instructions[0][13]) : 2;
+        var _manifest = scr_reu_find_asset(_manifest_name);
+        if (is_undefined(_manifest) || _manifest.type != "LOAD_REU") {
+            show_debug_message("MACRO_REU INDEXED: manifest unresolved: " + _manifest_name);
+            break;
+        }
+        scr_reu_repack(_manifest);
+        var _all_links = variable_struct_exists(_manifest, "linked_assets") ? _manifest.linked_assets : [];
+
+        // Only bitmaps are valid indexed-fetch targets. A mixed manifest
+        // (SID data, byte tables, etc.) would poison the index numbering
+        // and each entry's implied destination/size, so non-bitmap links
+        // are skipped rather than occupying a table slot.
+        var _links = [];
+        for (var _li = 0; _li < array_length(_all_links); _li++) {
+            var _lasset = scr_reu_find_asset(_all_links[_li].asset_name);
+            if (!is_undefined(_lasset) && (_lasset.type == "BITMAP" || _lasset.type == "BITMAP_KLA")) {
+                array_push(_links, _all_links[_li]);
+            }
+        }
+        if (array_length(_links) == 0) {
+            show_debug_message("MACRO_REU INDEXED: no BITMAP assets linked in manifest: " + _manifest_name);
+            break;
+        }
+        var _index_addr = scr_resolve_var_addr(_index_var);
+        if (_index_addr == 0) {
+            show_debug_message("MACRO_REU INDEXED: index var unresolved: " + _index_var);
+            break;
+        }
+        // Index width decides the addressing scheme: a BYTE var drives an
+        // 8-bit X register directly (LDA table,X — fast, ≤256 entries). A
+        // WORD var can't sit in a hardware index register, so it drives a
+        // 16-bit pointer (table_base + index) computed at runtime and read
+        // via zero-page indirect addressing — slower per lookup, but scales
+        // to 65536 entries. Picked automatically from the variable's own
+        // declared encoding; no separate mode toggle needed.
+        var _idx_meta    = scr_nloc_find_meta(_index_var);
+        var _idx_is_word = (!is_undefined(_idx_meta) && variable_struct_exists(_idx_meta, "encoding") && _idx_meta.encoding == "word");
+        var _idx_cap     = _idx_is_word ? 65536 : 256;
+        if (array_length(_links) > _idx_cap) {
+            show_debug_message("MACRO_REU INDEXED: too many bitmap assets for a " + (_idx_is_word ? "16-bit" : "8-bit") + " index (" + string(array_length(_links)) + "): " + _manifest_name);
+            break;
+        }
+
+        // Gather every table column in one pass. CUSTOM/HRBITMAP never touch
+        // scr_reu_asset_payload — only MCBITMAP needs the full span buffer.
+        var _tn        = array_length(_links);
+        var _tbl_bank  = array_create(_tn, 0);
+        var _tbl_lo    = array_create(_tn, 0);
+        var _tbl_hi    = array_create(_tn, 0);
+        var _tbl_c64lo = array_create(_tn, 0);
+        var _tbl_c64hi = array_create(_tn, 0);
+        var _tbl_lenlo = array_create(_tn, 0);
+        var _tbl_lenhi = array_create(_tn, 0);
+        for (var _i = 0; _i < _tn; _i++) {
+            var _reu_at = real(_links[_i].reu_address);
+            _tbl_bank[_i] = (_reu_at >> 16) & 0xFF;
+            _tbl_lo[_i]   = _reu_at & 0xFF;
+            _tbl_hi[_i]   = (_reu_at >> 8) & 0xFF;
+
+            var _asset = scr_reu_find_asset(_links[_i].asset_name);
+            var _c64at = is_undefined(_asset) ? 0 : (real(_asset.address) & 0xFFFF);
+            _tbl_c64lo[_i] = _c64at & 0xFF;
+            _tbl_c64hi[_i] = (_c64at >> 8) & 0xFF;
+
+            var _sz = 0;
+            if (_size_mode == 0) {
+                // CUSTOM — fixed length declared on the node itself.
+                _sz = real(_curr.instructions[0][5]) & 0xFFFF;
+            } else if (_size_mode == 1) {
+                // HRBITMAP — bitmap + screen only.
+                var _br = scr_bmp_regions(_c64at);
+                _sz = (_br.scr_addr + _br.scr_size - _br.bmp_addr) & 0xFFFF;
+            } else {
+                // MCBITMAP — full three-region span (bitmap + screen + colour).
+                var _payload = scr_reu_asset_payload(_asset);
+                _sz = _payload.size & 0xFFFF;
+                if (buffer_exists(_payload.buffer)) buffer_delete(_payload.buffer);
+            }
+            _tbl_lenlo[_i] = _sz & 0xFF;
+            _tbl_lenhi[_i] = (_sz >> 8) & 0xFF;
+        }
+
+        var _pfx       = "reut" + string(real(_id)) + "_";
+        var _lbl_skip  = _pfx + "skip";
+        var _lbl_bank  = _pfx + "bank";
+        var _lbl_lo    = _pfx + "lo";
+        var _lbl_hi    = _pfx + "hi";
+        var _lbl_c64lo = _pfx + "c64lo";
+        var _lbl_c64hi = _pfx + "c64hi";
+        var _lbl_lenlo = _pfx + "llo";
+        var _lbl_lenhi = _pfx + "lhi";
+
+        var _emit_table = function(_lst, _lbl, _vals, _tid) {
+            array_push(_lst, ["label", _lbl]);
+            for (var _vi = 0; _vi < array_length(_vals); _vi++) {
+                array_push(_lst, ["byte", _vals[_vi], _tid]);
+            }
+        };
+
+        array_push(_list, ["jmp_abs", _lbl_skip, _id]);
+        _emit_table(_list, _lbl_bank,  _tbl_bank,  _id);
+        _emit_table(_list, _lbl_lo,    _tbl_lo,    _id);
+        _emit_table(_list, _lbl_hi,    _tbl_hi,    _id);
+        _emit_table(_list, _lbl_c64lo, _tbl_c64lo, _id);
+        _emit_table(_list, _lbl_c64hi, _tbl_c64hi, _id);
+        _emit_table(_list, _lbl_lenlo, _tbl_lenlo, _id);
+        _emit_table(_list, _lbl_lenhi, _tbl_lenhi, _id);
+        array_push(_list, ["label", _lbl_skip]);
+
+        var _reu_type2 = clamp(_reu_op, 0, 3);
+        var _reu_cmd2  = 0x80;
+        _reu_cmd2     |= 0x10;
+        if (_reu_auto == 1) { _reu_cmd2 |= 0x20; }
+        _reu_cmd2     |= _reu_type2;
+        var _reu_ctrl2 = 0x00;
+        if (_reu_fixc == 1) { _reu_ctrl2 |= 0x80; }
+        if (_reu_fixr == 1) { _reu_ctrl2 |= 0x40; }
+
+        if (_idx_is_word) {
+            // 16-bit indirect lookup: for each table, point a ZP pointer at
+            // the table's compile-time base, add the runtime 16-bit index to
+            // it, then LDA (ptr),Y with Y=0 to fetch the byte. Needs 2 ZP
+            // scratch bytes, configurable per node (slot 14) since any macro
+            // reserving ZP must let the user resolve conflicts — default $03.
+            var _zp_base = (array_length(_curr.instructions[0]) > 14 && is_real(_curr.instructions[0][14])) ? real(_curr.instructions[0][14]) & 0xFF : 0x03;
+            var _ptr_lo  = _zp_base;
+            var _ptr_hi  = _zp_base + 1;
+
+            var _emit_word_lookup = function(_lst, _tbl_lbl, _idx_addr, _plo, _phi, _dest_reg, _tid) {
+                array_push(_lst, ["lda_lab_lo", _tbl_lbl, _tid]);
+                array_push(_lst, ["sta_zp",     _plo,     _tid]);
+                array_push(_lst, ["lda_lab_hi", _tbl_lbl, _tid]);
+                array_push(_lst, ["sta_zp",     _phi,     _tid]);
+                array_push(_lst, ["clc",        0,        _tid]);
+                array_push(_lst, ["lda_zp",     _plo,     _tid]);
+                array_push(_lst, ["adc_abs",    _idx_addr, _tid]);
+                array_push(_lst, ["sta_zp",     _plo,     _tid]);
+                array_push(_lst, ["lda_zp",     _phi,     _tid]);
+                array_push(_lst, ["adc_abs",    _idx_addr + 1, _tid]);
+                array_push(_lst, ["sta_zp",     _phi,     _tid]);
+                array_push(_lst, ["ldy_imm",    0,        _tid]);
+                array_push(_lst, ["lda_izy",    _plo,     _tid]);
+                array_push(_lst, ["sta_abs",    _dest_reg, _tid]);
+            };
+
+            _emit_word_lookup(_list, _lbl_bank,  _index_addr, _ptr_lo, _ptr_hi, 0xDF06, _id);
+            _emit_word_lookup(_list, _lbl_lo,    _index_addr, _ptr_lo, _ptr_hi, 0xDF04, _id);
+            _emit_word_lookup(_list, _lbl_hi,    _index_addr, _ptr_lo, _ptr_hi, 0xDF05, _id);
+            _emit_word_lookup(_list, _lbl_c64lo, _index_addr, _ptr_lo, _ptr_hi, 0xDF02, _id);
+            _emit_word_lookup(_list, _lbl_c64hi, _index_addr, _ptr_lo, _ptr_hi, 0xDF03, _id);
+            _emit_word_lookup(_list, _lbl_lenlo, _index_addr, _ptr_lo, _ptr_hi, 0xDF07, _id);
+            _emit_word_lookup(_list, _lbl_lenhi, _index_addr, _ptr_lo, _ptr_hi, 0xDF08, _id);
+        } else {
+            array_push(_list, ["ldx_abs", _index_addr, _id]);
+            array_push(_list, ["lda_abx", _lbl_bank,   _id]);
+            array_push(_list, ["sta_abs", 0xDF06,      _id]);
+            array_push(_list, ["lda_abx", _lbl_lo,     _id]);
+            array_push(_list, ["sta_abs", 0xDF04,      _id]);
+            array_push(_list, ["lda_abx", _lbl_hi,     _id]);
+            array_push(_list, ["sta_abs", 0xDF05,      _id]);
+            array_push(_list, ["lda_abx", _lbl_c64lo,  _id]);
+            array_push(_list, ["sta_abs", 0xDF02,      _id]);
+            array_push(_list, ["lda_abx", _lbl_c64hi,  _id]);
+            array_push(_list, ["sta_abs", 0xDF03,      _id]);
+            array_push(_list, ["lda_abx", _lbl_lenlo,  _id]);
+            array_push(_list, ["sta_abs", 0xDF07,      _id]);
+            array_push(_list, ["lda_abx", _lbl_lenhi,  _id]);
+            array_push(_list, ["sta_abs", 0xDF08,      _id]);
+        }
+
+        array_push(_list, ["lda_imm", _reu_ctrl2, _id]);
+        array_push(_list, ["sta_abs", 0xDF0A,     _id]);
+        array_push(_list, ["lda_imm", _reu_cmd2,  _id]);
+        array_push(_list, ["sta_abs", 0xDF01,     _id]);
+        break;
+    }
+
     // ASSET mode resolves the three manual transfer fields from a LOAD_REU
     // manifest. Old workspaces have no slot 9, so they remain DIRECT.
-    var _reu_mode = (array_length(_curr.instructions[0]) > 9 && is_real(_curr.instructions[0][9])) ? real(_curr.instructions[0][9]) : 0;
     if (_reu_mode == 1) {
         var _manifest_name = (array_length(_curr.instructions[0]) > 10) ? string(_curr.instructions[0][10]) : "";
         var _asset_name = (array_length(_curr.instructions[0]) > 11) ? string(_curr.instructions[0][11]) : "";

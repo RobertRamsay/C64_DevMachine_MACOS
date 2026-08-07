@@ -1,0 +1,13 @@
+{
+  "$GMScript":"v1",
+  "%Name":"scr_draw_reu_memory_bar",
+  "isCompatibility":false,
+  "isDnD":false,
+  "name":"scr_draw_reu_memory_bar",
+  "parent":{
+    "name":"ULTIMATE",
+    "path":"folders/SCRIPTS/ULTIMATE.yy",
+  },
+  "resourceType":"GMScript",
+  "resourceVersion":"2.0",
+}
