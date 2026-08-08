@@ -1,5 +1,5 @@
 /// @desc Setup Workspace, Palette & C64 Environment
-global.lite=1;
+global.lite=0;
 global.build_date = "August 8th, 2026"; // edit this string for each release
 
 // --- GLOBAL CRASH HANDLER ---
@@ -919,6 +919,7 @@ global.node_destroy_fx = global.visual_fx;
 global.comments_visible = ini_read_real("Settings", "comments_visible",   1) == 1;
 opcode_headers_on      = ini_read_real("Settings", "opcode_headers",      0) == 1;
 opcode_extra_height    = ini_read_real("Settings", "opcode_extra_height", 1) == 1;
+flow_line_style        = ini_read_real("Settings", "flow_line_style",     1);
 var _hide_welcome = ini_read_real("Settings", "hide_welcome", 0);
 welcome_hide_checked = (_hide_welcome != 0);
 welcome_open          = !welcome_hide_checked;
@@ -976,6 +977,9 @@ scr_uqmenu_load();
 flow_overlay_mode = 0; // 0 = Off, 1 = Local Hover, 2 = Show All
 flow_overlay_edges  = [];
 flow_overlay_dirty  = true;
+// flow_line_style: 0 = Direct (straight lines), 1 = Angled (45-degree
+// chamfered routing, current default). Set above via ini_read_real so
+// it persists across sessions like the other OPTIONS menu toggles.
 
 // Rebuilding runs a full compile+assemble pass and can take a visible
 // moment on a large spine. Since the engine only presents a frame after
