@@ -1,6 +1,6 @@
 /// @desc Setup Workspace, Palette & C64 Environment
-global.lite=0;
-global.build_date = "August 6th, 2026"; // edit this string for each release
+global.lite=1;
+global.build_date = "August 8th, 2026"; // edit this string for each release
 
 // --- GLOBAL CRASH HANDLER ---
 exception_unhandled_handler(function(_ex) {
@@ -74,15 +74,9 @@ welcome_open           = false;
 welcome_hide_checked   = false;
 welcome_credits_y      = 0;
 welcome_whats_new = [
-    "MANUAL for CODE EDITOR added - See Documents menu.",
-    "MACRO REU - Tested Byte data and Bitmaps on VICE and C64 Ultimate",
-    "More options saved when changed.",
-    "Bitmap editor HiRes editing adjustment (Alt pick / Update cells Fg/Bg)",
-    "Sprite Movement now had clamp options",
-    "Expert mode added (CTRL/CMD + E to toggle) Removes opcode buttons panel",
-    "FIXED: Bitmap buidler tagging was not woring initially.",
-    "TWEAK - Bitmap editor Line tool now shows correct width when drawing.",
-    "UPDATED - EASTER EGG -- nobody found it yet??"
+    "FIXED - LOADER MACROS - Were Unable to Pick the LOAD ORG Asset",
+    "ADDED - Flow view now has 2 modes DIRECT and ANGLED (via options menu)",
+    "EASTER EGG - No-one found it yet? post on social media #c64devmachine"
     ];
     
 
