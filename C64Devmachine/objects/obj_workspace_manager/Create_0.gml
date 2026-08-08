@@ -973,6 +973,27 @@ if (global.project_name != "") {
 
 ini_close();
 scr_uqmenu_load();
+
+// FLOW OVERLAY (F key) — toggleable visualization of JMP/JSR/BRANCH/IRQ-
+// vector control flow across the spine. Cached and only rebuilt when
+// flow_overlay_dirty is set (by a genuine connected node move/add/delete)
+// — avoids re-running a full compile+assemble pass on every single
+// toggle when nothing changed.
+flow_overlay_mode = 0; // 0 = Off, 1 = Local Hover, 2 = Show All
+flow_overlay_edges  = [];
+flow_overlay_dirty  = true;
+
+// Rebuilding runs a full compile+assemble pass and can take a visible
+// moment on a large spine. Since the engine only presents a frame after
+// Step+Draw both finish, calling scr_build_flow_graph() inline would
+// freeze the screen for that whole pause with nothing shown. Instead the
+// trigger sites below queue the build (flow_overlay_build_pending) and
+// show "CONSTRUCTING FLOW DATA" immediately; the actual build runs first
+// thing next Step, once that frame has had a chance to render.
+flow_overlay_build_pending      = false;
+flow_overlay_pending_toast_text = "";
+flow_overlay_pending_toast_col  = c_yellow;
+
 //window_set_position(_x, _y);
 
 

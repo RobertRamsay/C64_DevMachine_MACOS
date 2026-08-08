@@ -1,6 +1,19 @@
 // Advance the asynchronous C64U REU upload.
 scr_c64u_reu_step();
 
+// Deferred flow-overlay rebuild — queued (not run inline) by whichever
+// trigger below needs it, so the "CONSTRUCTING FLOW DATA" toast gets a
+// full frame to actually render before this (potentially slow) compile
+// pass blocks the next one.
+if (flow_overlay_build_pending) {
+    flow_overlay_edges = scr_build_flow_graph();
+    flow_overlay_dirty = false;
+    flow_overlay_build_pending = false;
+    global.qmenu_toast_text = flow_overlay_pending_toast_text;
+    global.qmenu_toast_col  = flow_overlay_pending_toast_col;
+    global.qmenu_toast_t    = global.qmenu_toast_dur;
+}
+
 // Track windowed geometry so it can be saved/restored
 if (global.win_geo_ready && !global.fullScreen && !window_get_fullscreen()) {
     global.win_x = window_get_x();
@@ -100,6 +113,54 @@ if (welcome_open) {
 // F1 reopens the welcome screen at any time
 if (!is_entering_text && !global.is_any_text_active && keyboard_check_pressed(vk_f1)) {
     welcome_open = true;
+}
+
+// F toggles the flow overlay — rebuilds only if a node was added/removed
+// since the last build (flow_overlay_dirty), so re-toggling with no graph
+// changes is instant instead of re-running a full compile+assemble pass.
+// Deliberately excludes any modifier so it doesn't clash with existing
+// Ctrl/Shift/Cmd+F bindings.
+if (!is_entering_text && !global.is_any_text_active && keyboard_check_pressed(ord("F"))
+&& !keyboard_check(vk_control) && !keyboard_check(vk_shift) && !keyboard_check(vk_alt) && !scr_cmd_held()) {
+    flow_overlay_mode = (flow_overlay_mode + 1) mod 3; // Cycles 0 -> 1 -> 2 -> 0
+
+    // Set the toast message based on the new mode
+    if (flow_overlay_mode == 1) {
+        global.qmenu_toast_text = "FLOW LINES in LOCAL MODE\nHOVER over NODES to VIEW";
+        global.qmenu_toast_col  = c_yellow;
+        global.qmenu_toast_t    = global.qmenu_toast_dur;
+    } else if (flow_overlay_mode == 2) {
+        global.qmenu_toast_text = "FLOW LINES in GLOBAL MODE\nPRESS F to HIDE";
+        global.qmenu_toast_col  = c_yellow;
+        global.qmenu_toast_t    = global.qmenu_toast_dur;
+    } else {
+        global.qmenu_toast_text = "FLOW LINES: OFF";
+        global.qmenu_toast_col  = c_yellow;
+        global.qmenu_toast_t    = global.qmenu_toast_dur;
+    }
+
+    if (flow_overlay_mode > 0 && (flow_overlay_dirty || array_length(flow_overlay_edges) == 0)) {
+        flow_overlay_pending_toast_text = global.qmenu_toast_text;
+        flow_overlay_pending_toast_col  = global.qmenu_toast_col;
+        global.qmenu_toast_text = "CONSTRUCTING FLOW DATA";
+        global.qmenu_toast_col  = c_yellow;
+        global.qmenu_toast_t    = global.qmenu_toast_dur;
+        flow_overlay_build_pending = true;
+    }
+}
+
+// Auto-refresh the flow overlay the moment a real node-based change makes
+// it stale, right when the drag/edit that caused it ends (mouse release) —
+// no F-key press needed while the overlay is actively showing. The dirty
+// flag is only ever set for a genuine connected move/add/delete (see
+// obj_c64_node), so this fires once per real change, not every release.
+if (mouse_check_button_released(mb_left) && flow_overlay_mode > 0 && flow_overlay_dirty) {
+    flow_overlay_pending_toast_text = "FLOW LINES updated";
+    flow_overlay_pending_toast_col  = c_yellow;
+    global.qmenu_toast_text = "CONSTRUCTING FLOW DATA";
+    global.qmenu_toast_col  = c_yellow;
+    global.qmenu_toast_t    = global.qmenu_toast_dur;
+    flow_overlay_build_pending = true;
 }
 
 if (code_editor_open) {
