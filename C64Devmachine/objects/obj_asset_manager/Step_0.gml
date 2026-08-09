@@ -660,6 +660,12 @@ for (var _di = 0; _di < ds_list_size(asset_list); _di++) {
                             string(instructions[0][4]) == _old_name)
                             instructions[0][4] = _proposed;
                         break;
+                    case "MACRO_COLL_LINE":
+                        // slot 1 = LINE_COLL asset name
+                        if (array_length(instructions[0]) > 1 &&
+                            string(instructions[0][1]) == _old_name)
+                            instructions[0][1] = _proposed;
+                        break;
                     case "GET_VAR":
                         // slot 3 = BYTE_DATA asset name (asset src mode only)
                         if (array_length(instructions[0]) > 3 &&
@@ -1823,6 +1829,19 @@ if (mouse_check_button_pressed(mb_left) && !global.any_picker_open) {
 				_new_asset.meta.is_save_file           = false;
 				_new_asset.meta.save_file_size          = 256;
                 scr_asset_byte_data_flush(_new_asset);
+            }
+           if (_type == "LINE_COLL") {
+                _new_asset.meta.line_string           = "";
+				_new_asset.meta.lines                 = [];
+				_new_asset.meta.inline_edit_open      = false;
+				_new_asset.meta.inline_edit_text      = _new_asset.meta.line_string;
+				_new_asset.meta.inline_edit_cursor    = 0;
+				_new_asset.meta.inline_edit_scroll_y  = 0;
+				_new_asset.meta.inline_edit_sel_start = -1;
+				_new_asset.meta.inline_edit_sel_end   = -1;
+				_new_asset.meta.inline_edit_blink     = 0;
+				_new_asset.meta.inline_edit_key_timer = 0;
+                scr_line_coll_flush(_new_asset);
             }
         if (_type == "MAP_DATA") {
             _new_asset.meta = {
