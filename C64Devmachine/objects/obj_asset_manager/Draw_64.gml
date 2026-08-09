@@ -4753,6 +4753,15 @@ surface_reset_target();
 	                if (!variable_struct_exists(_asset.meta, "shape_y1")) _asset.meta.shape_y1 = -1;
 	                if (!variable_struct_exists(_asset.meta, "shape_drawing")) _asset.meta.shape_drawing = false;
 	                if (!variable_struct_exists(_asset.meta, "shape_btn")) _asset.meta.shape_btn = mb_left;
+	                if (!variable_struct_exists(_asset.meta, "gradient_x1")) _asset.meta.gradient_x1 = -1;
+	                if (!variable_struct_exists(_asset.meta, "gradient_y1")) _asset.meta.gradient_y1 = -1;
+	                if (!variable_struct_exists(_asset.meta, "gradient_drawing")) _asset.meta.gradient_drawing = false;
+	                if (!variable_struct_exists(_asset.meta, "gradient_btn")) _asset.meta.gradient_btn = mb_left;
+	                if (!variable_struct_exists(_asset.meta, "gradient_custom_active")) _asset.meta.gradient_custom_active = false;
+	                if (!variable_struct_exists(_asset.meta, "gradient_custom_cols")) {
+	                    _asset.meta.gradient_custom_cols = array_create(12, variable_struct_exists(_asset.meta, "active_color") ? _asset.meta.active_color : 1);
+	                }
+	                if (!variable_struct_exists(_asset.meta, "gradient_custom_count")) _asset.meta.gradient_custom_count = 12;
 	                if (!variable_struct_exists(_asset.meta, "preview_overlay")) _asset.meta.preview_overlay = -1;
 	                if (!variable_struct_exists(_asset.meta, "overlay_dirty")) _asset.meta.overlay_dirty = false;
                     
@@ -5605,7 +5614,70 @@ if (_asset.meta.grab_w > 0 && _asset.meta.grab_h > 0) {
 	                        _asset.meta.needs_clash_check = true;
 							_asset.meta.pixels_dirty = true;
 							_asset.meta.bmp_unsaved = true;
+	                    } else if ((mouse_check_button_pressed(mb_left) || mouse_check_button_pressed(mb_right)) && _asset.meta.active_tool == "GRADIENT") {
+	                        // Press sets the flood seed AND the gradient line's first point.
+	                        // Either button starts the drag — direction is always col1->col2.
+	                        _asset.meta.gradient_x1      = (_raw_px div _bmp_step) * _bmp_step;
+	                        _asset.meta.gradient_y1      = _raw_py;
+	                        _asset.meta.gradient_drawing = true;
+	                        _asset.meta.gradient_btn     = mouse_check_button_pressed(mb_left) ? mb_left : mb_right;
+	                        // Push pre-gradient snapshot in new struct format
+	                        if (variable_struct_exists(_asset.meta, "preview_surf") && surface_exists(_asset.meta.preview_surf)) {
+	                            var _grad_buf = buffer_create(320 * 200 * 4, buffer_fixed, 1);
+	                            buffer_get_surface(_grad_buf, _asset.meta.preview_surf, 0);
+	                            var _grad_mask_snap = array_create(64000, 0);
+	                            array_copy(_grad_mask_snap, 0, _asset.meta.bg_mask, 0, 64000);
+	                            var _grad_entry = { buf: _grad_buf, mask: _grad_mask_snap, bg_col: _asset.meta.bg_col };
+	                            array_push(_asset.meta.undo_stack, _grad_entry);
+	                            if (array_length(_asset.meta.undo_stack) > 25) {
+	                                var _gdrop0 = _asset.meta.undo_stack[0];
+	                                if (is_struct(_gdrop0) && buffer_exists(_gdrop0.buf)) {
+	                                    buffer_delete(_gdrop0.buf);
+	                                } else if (buffer_exists(_gdrop0)) {
+	                                    buffer_delete(_gdrop0);
+	                                }
+	                                array_delete(_asset.meta.undo_stack, 0, 1);
+	                            }
+	                            _asset.meta.redo_stack = [];
+	                        }
 	                    }
+	                }
+
+	                // ── GRADIENT RELEASE (fires even if the cursor has left the canvas) ──
+	                // Flood-fills the region matching the seed pixel's colour, then paints
+	                // each pixel col1/col2 by an 8x8 Bayer threshold against how far that
+	                // pixel projects onto the drawn line — a directional dithered gradient,
+	                // same approach as the Amiga Dev Machine bitmap editor's GRADIENT tool.
+	                if (_asset.meta.active_tool == "GRADIENT"
+	                &&  _asset.meta.gradient_drawing
+	                &&  (mouse_check_button_released(mb_left) || mouse_check_button_released(mb_right))) {
+	                    // Fixed direction: always col1 (seed end) -> col2 (drag end),
+	                    // regardless of which button was used to drag. CUSTOM
+	                    // overrides both with the 12-slot stop run when active.
+	                    var _grad_col_a = _asset.meta.active_color;    // col1
+	                    var _grad_col_b = _asset.meta.secondary_color; // col2
+	                    var _grad_stops = undefined;
+	                    if (_asset.meta.gradient_custom_active) {
+	                        var _grad_cnt = variable_struct_exists(_asset.meta, "gradient_custom_count") ? clamp(_asset.meta.gradient_custom_count, 1, 12) : 12;
+	                        if (_grad_cnt == 1) {
+	                            // Single stop -> flat fill, no dither. Duplicate it
+	                            // so the 2-stop path in scr_asset_bmp_gradient_fill
+	                            // always resolves to that one colour.
+	                            _grad_stops = [_asset.meta.gradient_custom_cols[0], _asset.meta.gradient_custom_cols[0]];
+	                        } else {
+	                            _grad_stops = array_create(_grad_cnt);
+	                            array_copy(_grad_stops, 0, _asset.meta.gradient_custom_cols, 0, _grad_cnt);
+	                        }
+	                    }
+	                    var _grad_x2 = (_raw_px div _bmp_step) * _bmp_step;
+	                    var _grad_y2 = _raw_py;
+	                    scr_asset_bmp_gradient_fill(_asset, _asset.meta.gradient_x1, _asset.meta.gradient_y1, _grad_x2, _grad_y2, _grad_col_a, _grad_col_b, _grad_stops);
+	                    _asset.meta.gradient_drawing = false;
+	                    _asset.meta.gradient_x1      = -1;
+	                    _asset.meta.needs_clash_check = true;
+	                    _asset.meta.pixels_dirty = true;
+	                    _asset.meta.bmp_unsaved = true;
+	                    if (surface_exists(_asset.meta.preview_overlay)) { surface_free(_asset.meta.preview_overlay); _asset.meta.preview_overlay = -1; }
 	                }
 
 	                // ── SHAPE RELEASE (fires even if the cursor has left the canvas) ──
@@ -5679,6 +5751,7 @@ if (_asset.meta.grab_w > 0 && _asset.meta.grab_h > 0) {
 	                var _need_overlay = false;
 	                if (_asset.meta.active_tool == "LINE" && _asset.meta.line_x1 >= 0) _need_overlay = true;
 	                if ((_asset.meta.active_tool == "RECT" || _asset.meta.active_tool == "CIRCLE") && _asset.meta.shape_drawing) _need_overlay = true;
+	                if (_asset.meta.active_tool == "GRADIENT" && _asset.meta.gradient_drawing) _need_overlay = true;
                     
 	                if (_need_overlay) {
 	                    // Rebuild overlay surface at canvas resolution (320x200)
@@ -5876,6 +5949,19 @@ if (_asset.meta.grab_w > 0 && _asset.meta.grab_h > 0) {
 	                        }
 	                    }
                         
+	                    if (_asset.meta.active_tool == "GRADIENT" && _asset.meta.gradient_drawing) {
+	                        // Lightweight direction indicator only (not a pixel-accurate
+	                        // brush stamp) — a thin line from seed to current endpoint,
+	                        // plus a small marker at each end, same idea as the Amiga
+	                        // Dev Machine bitmap editor's gradient-line preview.
+	                        var _gx1o = _asset.meta.gradient_x1, _gy1o = _asset.meta.gradient_y1;
+	                        var _gx2o = (_raw_px div _bmp_step) * _bmp_step, _gy2o = _raw_py;
+	                        draw_set_color(c_white);
+	                        draw_line(_gx1o, _gy1o, _gx2o, _gy2o);
+	                        draw_rectangle(_gx1o - 1, _gy1o - 1, _gx1o + 1, _gy1o + 1, false);
+	                        draw_rectangle(_gx2o - 1, _gy2o - 1, _gx2o + 1, _gy2o + 1, true);
+	                    }
+
 	                    surface_reset_target();
 						}
                         
@@ -6332,7 +6418,7 @@ gpu_set_texfilter(false);
 	                var _rtx = _thumb_x + _thumb_w + 45;
 	                var _rty = _thumb_y;
 
-	                var _tools_r = ["DRAW", "LINE", "CIRCLE", "RECT", "FILL"];
+	                var _tools_r = ["DRAW", "LINE", "CIRCLE", "RECT", "FILL", "GRADIENT"];
 	                for(var _i = 0; _i < array_length(_tools_r); _i++) {
 	                    var _tname = _tools_r[_i];
 	                    var _active = (_asset.meta.active_tool == _tname);
@@ -6514,14 +6600,17 @@ gpu_set_texfilter(false);
 						draw_set_color(scr_c64_pepto_colour(_c));
 						draw_rectangle(_px, _pyc, _px + _pw, _pyc + _ph, false);
 						if (_asset.meta.active_color == _c) {
+	                        // Primary (LMB / col1) — white double-border box outline.
 	                        draw_set_color(c_white);
 	                        draw_rectangle(_px-2, _pyc-2, _px + _pw+2, _pyc + _ph+2, true);
-	                    }
-	                    if (_bmp_is_hires && !_asset.meta.replace_mode && _asset.meta.secondary_color == _c) {
-	                        // Secondary (RMB) colour — HiRes only. Drawn as a wider inset
-	                        // border so it's still visible when primary == secondary.
-	                        draw_set_color(c_orange);
 	                        draw_rectangle(_px-4, _pyc-4, _px + _pw+4, _pyc + _ph+4, true);
+	                    }
+	                    if (!_asset.meta.replace_mode && _asset.meta.secondary_color == _c) {
+	                        // Secondary (RMB / col2) — aqua double-border box outline.
+	                        // Shown in MC too (not just HiRes) now that GRADIENT reads it.
+	                        draw_set_color(c_aqua);
+	                        draw_rectangle(_px-2, _pyc-2, _px + _pw+2, _pyc + _ph+2, true);
+	                        draw_rectangle(_px-6, _pyc-6, _px + _pw+6, _pyc + _ph+6, true);
 	                    }
 	                    if (_asset.meta.replace_mode) {
 	                        if (_asset.meta.replace_col_detect == _c) {
@@ -6536,7 +6625,7 @@ gpu_set_texfilter(false);
 	                        if (_phov && mouse_check_button_pressed(mb_right)) _asset.meta.replace_col_target = _c;
 	                    } else {
 	                        if (_phov && mouse_check_button_pressed(mb_left)) _asset.meta.active_color = _c;
-	                        if (_bmp_is_hires && _phov && mouse_check_button_pressed(mb_right)) _asset.meta.secondary_color = _c;
+	                        if (_phov && mouse_check_button_pressed(mb_right)) _asset.meta.secondary_color = _c;
 	                    }
 	                }
 	              
@@ -6710,6 +6799,77 @@ var _new_z = max(2, _old_z + (_wheel * 1.0));
 	                draw_text(_thumb_x + 60, _cy, "-- NO SELECTION --");
 	            }
 	            _cy += 16;
+
+	            // ── GRADIENT: CUSTOM stop row (shown whenever GRADIENT is the
+	            // active tool; only applied to the fill when the CUSTOM toggle
+	            // is on — otherwise the plain col1->col2 gradient is used). ──
+	            // Guarded with variable_struct_exists: this draw path can run
+	            // for an asset before its meta struct has been through the
+	            // input-handling init block (e.g. an autoload frame), same as
+	            // the active_color safety check above — reading active_tool
+	            // directly there crashes with "not set before reading it".
+	            if (variable_struct_exists(_asset.meta, "active_tool") && _asset.meta.active_tool == "GRADIENT") {
+	                if (!variable_struct_exists(_asset.meta, "gradient_custom_active")) _asset.meta.gradient_custom_active = false;
+	                if (!variable_struct_exists(_asset.meta, "gradient_custom_cols")) {
+	                    _asset.meta.gradient_custom_cols = array_create(12, variable_struct_exists(_asset.meta, "active_color") ? _asset.meta.active_color : 1);
+	                }
+	                if (!variable_struct_exists(_asset.meta, "gradient_custom_count")) _asset.meta.gradient_custom_count = 12;
+	                draw_set_font(fnt_c64_tiny);
+	                draw_set_color(make_color_rgb(90, 90, 120));
+	                draw_text(_thumb_x, _cy, "GRADIENT:");
+
+	                var _gc_btn_x1 = _thumb_x + 68;
+	                var _gc_btn_x2 = _gc_btn_x1 + 60;
+	                var _gc_btn_y1 = _cy ;
+	                var _gc_btn_y2 = _cy + 16;
+	                var _gc_hov = point_in_rectangle(_mx, _my, _gc_btn_x1, _gc_btn_y1, _gc_btn_x2, _gc_btn_y2);
+	                draw_set_color(_asset.meta.gradient_custom_active ? make_color_rgb(20, 60, 60) : (_gc_hov ? make_color_rgb(80, 80, 100) : make_color_rgb(40, 40, 60)));
+	                draw_rectangle(_gc_btn_x1, _gc_btn_y1, _gc_btn_x2, _gc_btn_y2, false);
+	                draw_set_color(_asset.meta.gradient_custom_active ? c_aqua : (_gc_hov ? c_white : c_black));
+	                draw_rectangle(_gc_btn_x1, _gc_btn_y1, _gc_btn_x2, _gc_btn_y2, true);
+	                draw_set_color(_asset.meta.gradient_custom_active ? c_aqua : c_white);
+	                draw_text(_gc_btn_x1 + 4, _cy, "CUSTOM");
+	                if (_gc_hov && mouse_check_button_pressed(mb_left)) {
+	                    _asset.meta.gradient_custom_active = !_asset.meta.gradient_custom_active;
+	                }
+
+	                // 12 stop slots. Left-click a slot to set it to the current
+	                // col1 (active_color) — pick col1 from the main palette above,
+	                // then click a slot; repeat per slot to build the stop run.
+	                var _gc_sw = 18, _gc_sh = 14, _gc_gap = 2;
+	                var _gc_slots_x = _gc_btn_x2 + 12;
+	                for (var _gs = 0; _gs < 12; _gs++) {
+	                    var _gsx1 = 16 + _gc_slots_x + _gs * (_gc_sw + _gc_gap);
+	                    var _gsx2 = _gsx1 + _gc_sw;
+	                    var _gsy1 = _cy ;
+	                    var _gsy2 = _cy + 16;
+	                    var _gs_hov = point_in_rectangle(_mx, _my, _gsx1, _gsy1, _gsx2, _gsy2);
+	                    draw_set_color(scr_c64_pepto_colour(_asset.meta.gradient_custom_cols[_gs]));
+	                    draw_rectangle(_gsx1, _gsy1, _gsx2, _gsy2, false);
+	                    draw_set_color(_gs_hov ? c_white : make_color_rgb(90, 90, 110));
+	                    draw_rectangle(_gsx1, _gsy1, _gsx2, _gsy2, true);
+	                    if (_gs_hov && mouse_check_button_pressed(mb_left)) {
+	                        _asset.meta.gradient_custom_cols[_gs] = _asset.meta.active_color;
+	                        // Editing a slot is a clear signal the person wants
+	                        // the custom gradient — flip CUSTOM on automatically
+	                        // so it isn't silently ignored. Still a toggle, so
+	                        // they can turn it back off if they really want to.
+	                        _asset.meta.gradient_custom_active = true;
+	                    }
+	                    // Right-click a slot to set how many stops are actually
+	                    // used, 1-based (slot 0 -> 1 colour / flat fill, slot 2
+	                    // -> 3 colours, etc). Trailing slots stay editable but
+	                    // are ignored by the fill until included again.
+	                    if (_gs_hov && mouse_check_button_pressed(mb_right)) {
+	                        _asset.meta.gradient_custom_count = _gs + 1;
+	                    }
+	                    if (_gs == _asset.meta.gradient_custom_count - 1) {
+	                        draw_set_color(c_yellow);
+	                        draw_text(_gsx1 + (_gc_sw * 0.5) - 3, _gsy2 + 2, "^");
+	                    }
+	                }
+	                _cy += 30;
+	            }
 
 	            // Metadata Details (Pushed below the canvas)
 	            draw_set_font(fnt_c64_tiny);
