@@ -91,7 +91,8 @@ if (height_dirty) {
         var _mm_dy_mod = (array_length(instructions[0]) > 6 && is_real(instructions[0][6])) ? real(instructions[0][6]) : 0;
         height = _G * 7 + (_mm_dx_mod == 1 ? _G : 0) + (_mm_dy_mod == 1 ? _G : 0);
         break;
-    case "MACRO_SID":    height = _G * 5;  break;         
+    case "MACRO_SID":    height = _G * 5;  break;   
+	case "MACRO_SPR":    height = _G * 7; break;
     case "MACRO_LOADER": height = _G * 5;  break;         // 120 — picker + status rows
     case "MACRO_SAVE_GAME": height = _G * 5;  break;
     case "MACRO_LOAD_GAME": height = _G * 5;  break;
