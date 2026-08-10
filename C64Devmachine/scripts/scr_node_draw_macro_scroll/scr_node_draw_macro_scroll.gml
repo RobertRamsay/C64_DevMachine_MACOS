@@ -129,16 +129,39 @@ function scr_node_draw_macro_scroll(_draw_x, _y, _cam_x, _cam_y, _cam_zoom) {
 
         draw_set_color(c_gray);
         draw_text(_px, _ly, "MAP IDX:");
-        draw_set_color(c_aqua);
-        draw_text(_px + 76, _ly, string(_mm_map_index));
+        var _mm_map_idx_mode = (array_length(instructions[0]) > 11 && is_real(instructions[0][11])) ? real(instructions[0][11]) : 0;
+        if (_mm_map_idx_mode == 0) {
+            draw_set_color(c_aqua);
+            draw_text(_px + 76, _ly, "LIT");
+            draw_set_color(c_yellow);
+            draw_text(_px + 108, _ly, string(_mm_map_index));
+        } else {
+            var _mm_map_var = (array_length(instructions[0]) > 12 && is_string(instructions[0][12])) ? string(instructions[0][12]) : "";
+            draw_set_color(c_lime);
+            draw_text(_px + 76, _ly, "VAR");
+            draw_set_color(c_yellow);
+            if (_mm_map_var == "") {
+                draw_text(_px + 108, _ly, "(SET VAR)");
+            } else {
+                draw_text(_px + 108, _ly, _mm_map_var);
+            }
+        }
         _ly += _lh;
 
         var _mm_base_addr = (array_length(instructions[0]) > 9 && is_real(instructions[0][9])) ? real(instructions[0][9]) : 0xA000;
         draw_set_color(c_gray);
         draw_text(_px, _ly, "BASE ADDR:");
         draw_set_color(c_aqua);
-        draw_text(_px + 76, _ly, "$" + string_upper(decimal_to_hex(_mm_base_addr)));
+        draw_text(_px + 100, _ly, "$" + string_upper(decimal_to_hex(_mm_base_addr)));
         _ly += _lh;
+
+        if (_mm_map_idx_mode == 1) {
+            draw_set_color(c_gray);
+            draw_text(_px, _ly, "SETMAP:");
+            draw_set_color(c_yellow);
+            draw_text(_px + 76, _ly, "Scroller_MapSet");
+            _ly += _lh;
+        }
 
         // Resolve the tileset to check for ignored colour overrides
         var _mm_has_override = false;
@@ -167,6 +190,20 @@ function scr_node_draw_macro_scroll(_draw_x, _y, _cam_x, _cam_y, _cam_zoom) {
             _ly += _lh;
         }
     }
+
+    // ROW — CLR UNUSED (click to toggle), index [10]. Always shown —
+    // applies to MAP_DATA source too, not just META_TILESET.
+    var _mm_clamp_blank = (array_length(instructions[0]) > 10 && is_real(instructions[0][10])) ? real(instructions[0][10]) : 1;
+    draw_set_color(c_gray);
+    draw_text(_px, _ly, "CLR UNUSED:");
+    if (_mm_clamp_blank == 0) {
+        draw_set_color(c_orange);
+        draw_text(_px + 104, _ly, "OFF");
+    } else {
+        draw_set_color(c_lime);
+        draw_text(_px + 104, _ly, "ON");
+    }
+    _ly += _lh;
 
 /*
     // ROW 5 — USE SID IRQ (checkbox)

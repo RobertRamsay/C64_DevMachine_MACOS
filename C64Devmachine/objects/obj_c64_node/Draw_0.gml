@@ -141,10 +141,14 @@ if (height_dirty) {
 	case "MACRO_SPR_ENABLE":  height = _G * 4; break;
 	case "MACRO_SPR_EXPAND":  height = _G * 6; break;
     case "MACRO_SCROLL": {
-        var _sc_rows     = 9;
+        var _sc_rows     = 10; // +1 base for the always-visible CLR UNUSED row
         var _sc_src_mode = (array_length(instructions[0]) > 6 && is_real(instructions[0][6])) ? real(instructions[0][6]) : 0;
         if (_sc_src_mode == 1) {
             _sc_rows += 3; // TILESET row + MAP IDX row + BASE ADDR row
+            var _sc_map_idx_mode = (array_length(instructions[0]) > 11 && is_real(instructions[0][11])) ? real(instructions[0][11]) : 0;
+            if (_sc_map_idx_mode == 1) {
+                _sc_rows += 1; // SETMAP info row
+            }
             var _sc_tileset_name = (array_length(instructions[0]) > 7 && is_string(instructions[0][7])) ? string(instructions[0][7]) : "";
             if (_sc_tileset_name != "" && instance_exists(obj_asset_manager)) {
                 var _sc_am = obj_asset_manager;
@@ -543,6 +547,11 @@ var _active_list = [];
                 if (node_type == "MACRO_SCROLL") {
                     array_push(other.label_picker_list, "Scroller_L");
                     array_push(other.label_picker_list, "Scroller_R");
+                    var _sc_src = (array_length(instructions[0]) > 6  && is_real(instructions[0][6]))  ? real(instructions[0][6])  : 0;
+                    var _sc_vm  = (array_length(instructions[0]) > 11 && is_real(instructions[0][11])) ? real(instructions[0][11]) : 0;
+                    if (_sc_src == 1 && _sc_vm == 1) {
+                        array_push(other.label_picker_list, "Scroller_MapSet");
+                    }
                 }
                 if (node_type == "MACRO_SID_SONG") {
                     array_push(other.label_picker_list, "sng" + string(stable_uid) + "_play");

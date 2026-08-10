@@ -2857,6 +2857,30 @@ case "MACRO_SCROLL": {
     var _mm_use_lut   = false;
     var _mm_lut_label = "";
 
+    var _mm_clamp_blank = 1;
+    if (array_length(_id.instructions[0]) > 10 && is_real(_id.instructions[0][10])) {
+        _mm_clamp_blank = real(_id.instructions[0][10]);
+    }
+
+    // [11] map_idx_mode: 0 = LIT (existing), 1 = VAR
+    // [12] map_idx_var_name (string, VAR mode only — a UV_ byte variable)
+    var _mm_map_idx_mode = 0;
+    if (array_length(_id.instructions[0]) > 11 && is_real(_id.instructions[0][11])) {
+        _mm_map_idx_mode = real(_id.instructions[0][11]);
+    }
+    var _mm_map_var = "";
+    if (array_length(_id.instructions[0]) > 12 && is_string(_id.instructions[0][12])) {
+        _mm_map_var = string(_id.instructions[0][12]);
+    }
+    // Declared here (not inside the src_mode branch below) since the loader
+    // call sites and the setmap-routine gate need to read these regardless
+    // of which branch actually set them.
+    var _mm_var_switch = false;
+    var _mm_var_addr   = -1;
+    var _mm_tbl_baselo = "";
+    var _mm_tbl_basehi = "";
+    var _mm_tbl_width  = "";
+
     // Resolve HR/Mixed from global workspace flag — single source of truth
     var _scroll_map_mode = obj_workspace_manager.map_global_mixed;
     // bits 7-4 of $D016 we always want set: $C0, plus the mode bit in bit 4
@@ -2901,28 +2925,6 @@ case "MACRO_SCROLL": {
         var _mm_stamp_data = _mm_tm.stamp_data;
         var _mm_cells_per  = _mm_sw * _mm_sh;
 
-        var _mm_grid = noone;
-        if (_mm_map_index >= 0 && _mm_map_index < _mm_tm.map_count) {
-            _mm_grid = _mm_tm.maps[_mm_map_index];
-        }
-        if (_mm_grid == noone) {
-            show_debug_message("MACRO_SCROLL(META): map index " + string(_mm_map_index) + " out of range — skipping");
-            break;
-        }
-
-        var _mm_w_ch = 40;
-        if (_mm_map_index >= 0 && _mm_map_index < array_length(_mm_tm.map_w)) {
-            _mm_w_ch = _mm_tm.map_w[_mm_map_index];
-        }
-        var _mm_cols = floor(_mm_w_ch / _mm_sw);
-        if (_mm_cols < 1) {
-            _mm_cols = 1;
-        }
-        var _mm_rows_mt = floor(array_length(_mm_grid) / _mm_cols);
-
-        _map_w = _mm_w_ch;
-        _map_h = _mm_rows_mt * _mm_sh;
-
         // Build-log warning — LUT-derived colour follows char only, so any
         // per-stamp colour override in the tileset cannot be honoured here.
         var _mm_has_override = false;
@@ -2938,50 +2940,168 @@ case "MACRO_SCROLL": {
             show_debug_message("MACRO_SCROLL(META): tileset '" + _mm_tileset_name + "' has per-stamp colour overrides — IGNORED during scroll (colour follows char_lut only)");
         }
 
-        // Flatten the metatile grid to a full char plane — no 40x25 clamp
-        var _mm_char_plane = array_create(_map_w * _map_h, 0);
-        for (var _mm_gy = 0; _mm_gy < _mm_rows_mt; _mm_gy++) {
-            for (var _mm_gx = 0; _mm_gx < _mm_cols; _mm_gx++) {
-                var _mm_mt = _mm_grid[_mm_gy * _mm_cols + _mm_gx];
-                if (_mm_mt < 0) {
-                    continue;
+        if (_mm_map_idx_mode == 1) {
+            // ── VAR MODE — bake EVERY map in the tileset, sequentially, and
+            // build a small per-map base/width table the runtime switch
+            // routine indexes with the UV_ variable's value. Colour is
+            // shared (one LUT, below) so this only costs char-plane bytes.
+            if (_mm_map_var != "" && ds_map_exists(global.named_loc_map, string_upper(_mm_map_var))) {
+                _mm_var_addr = ds_map_find_value(global.named_loc_map, string_upper(_mm_map_var));
+            }
+            if (_mm_var_addr < 0) {
+                show_debug_message("MACRO_SCROLL(META/VAR): map var '" + _mm_map_var + "' not resolved — skipping");
+                break;
+            }
+
+            var _mm_map_bases  = [];
+            var _mm_map_widths = [];
+            var _mm_run_addr   = _mm_base_addr;
+
+            for (var _mm_mi = 0; _mm_mi < _mm_tm.map_count; _mm_mi++) {
+                var _mm_grid_v = _mm_tm.maps[_mm_mi];
+                var _mm_w_ch_v = 40;
+                if (_mm_mi < array_length(_mm_tm.map_w)) {
+                    _mm_w_ch_v = _mm_tm.map_w[_mm_mi];
                 }
-                if (_mm_mt >= _mm_tm.stamp_count) {
-                    continue;
+                var _mm_cols_v = floor(_mm_w_ch_v / _mm_sw);
+                if (_mm_cols_v < 1) {
+                    _mm_cols_v = 1;
                 }
-                for (var _mm_cy = 0; _mm_cy < _mm_sh; _mm_cy++) {
-                    for (var _mm_cx = 0; _mm_cx < _mm_sw; _mm_cx++) {
-                        var _mm_cell      = _mm_cy * _mm_sw + _mm_cx;
-                        var _mm_data_base = (_mm_mt * _mm_cells_per + _mm_cell);
-                        if (_mm_data_base >= array_length(_mm_stamp_data)) {
+                var _mm_rows_v = floor(array_length(_mm_grid_v) / _mm_cols_v);
+                var _mm_w_v = _mm_w_ch_v;
+                var _mm_h_v = _mm_rows_v * _mm_sh;
+
+                if (_mm_w_v > 255) {
+                    show_debug_message("MACRO_SCROLL(META/VAR): map " + string(_mm_mi) + " is " + string(_mm_w_v) + " cols wide — VAR-mode switching only supports maps up to 255 cols (byte-mode addressing). Clamping to 255; this map will render incorrectly if selected at runtime.");
+                    _mm_w_v = 255;
+                }
+
+                var _mm_plane_v = array_create(_mm_w_v * _mm_h_v, 0);
+                for (var _mm_gy = 0; _mm_gy < _mm_rows_v; _mm_gy++) {
+                    for (var _mm_gx = 0; _mm_gx < _mm_cols_v; _mm_gx++) {
+                        var _mm_mt = _mm_grid_v[_mm_gy * _mm_cols_v + _mm_gx];
+                        if (_mm_mt < 0) {
                             continue;
                         }
-                        var _mm_ch      = _mm_stamp_data[_mm_data_base];
-                        var _mm_scr_col = _mm_gx * _mm_sw + _mm_cx;
-                        var _mm_scr_row = _mm_gy * _mm_sh + _mm_cy;
-                        var _mm_idx     = _mm_scr_row * _map_w + _mm_scr_col;
-                        _mm_char_plane[_mm_idx] = _mm_ch;
+                        if (_mm_mt >= _mm_tm.stamp_count) {
+                            continue;
+                        }
+                        for (var _mm_cy = 0; _mm_cy < _mm_sh; _mm_cy++) {
+                            for (var _mm_cx = 0; _mm_cx < _mm_sw; _mm_cx++) {
+                                var _mm_cell      = _mm_cy * _mm_sw + _mm_cx;
+                                var _mm_data_base = (_mm_mt * _mm_cells_per + _mm_cell);
+                                if (_mm_data_base >= array_length(_mm_stamp_data)) {
+                                    continue;
+                                }
+                                var _mm_scr_col = _mm_gx * _mm_sw + _mm_cx;
+                                var _mm_scr_row = _mm_gy * _mm_sh + _mm_cy;
+                                if (_mm_scr_col >= _mm_w_v) {
+                                    continue;
+                                }
+                                var _mm_idx_v = _mm_scr_row * _mm_w_v + _mm_scr_col;
+                                _mm_plane_v[_mm_idx_v] = _mm_stamp_data[_mm_data_base];
+                            }
+                        }
+                    }
+                }
+
+                array_push(_mm_map_bases,  _mm_run_addr);
+                array_push(_mm_map_widths, _mm_w_v);
+
+                array_push(_list, ["org", -2]);
+                array_push(_list, ["org", _mm_run_addr]);
+                var _mm_id_save_v = _id;
+                var _id = noone;
+                for (var _mm_bi = 0; _mm_bi < array_length(_mm_plane_v); _mm_bi++) {
+                    array_push(_list, ["byte", _mm_plane_v[_mm_bi] & 0xFF]);
+                }
+                array_push(_list, ["org", -3]);
+                var _id = _mm_id_save_v;
+
+                _mm_run_addr += array_length(_mm_plane_v);
+
+                // Boot-time geometry comes from whichever map the LIT index
+                // (MAP IDX's own literal fallback value) currently points
+                // at — that's what the program shows before any setmap call.
+                if (_mm_mi == _mm_map_index) {
+                    _map_w    = _mm_w_v;
+                    _map_h    = _mm_h_v;
+                    _map_base = _mm_map_bases[_mm_mi];
+                }
+            }
+            _mm_var_switch = true;
+
+        } else {
+            // ── LIT MODE — bake only the one selected map (unchanged) ──
+            var _mm_grid = noone;
+            if (_mm_map_index >= 0 && _mm_map_index < _mm_tm.map_count) {
+                _mm_grid = _mm_tm.maps[_mm_map_index];
+            }
+            if (_mm_grid == noone) {
+                show_debug_message("MACRO_SCROLL(META): map index " + string(_mm_map_index) + " out of range — skipping");
+                break;
+            }
+
+            var _mm_w_ch = 40;
+            if (_mm_map_index >= 0 && _mm_map_index < array_length(_mm_tm.map_w)) {
+                _mm_w_ch = _mm_tm.map_w[_mm_map_index];
+            }
+            var _mm_cols = floor(_mm_w_ch / _mm_sw);
+            if (_mm_cols < 1) {
+                _mm_cols = 1;
+            }
+            var _mm_rows_mt = floor(array_length(_mm_grid) / _mm_cols);
+
+            _map_w = _mm_w_ch;
+            _map_h = _mm_rows_mt * _mm_sh;
+
+            // Flatten the metatile grid to a full char plane — no 40x25 clamp
+            var _mm_char_plane = array_create(_map_w * _map_h, 0);
+            for (var _mm_gy = 0; _mm_gy < _mm_rows_mt; _mm_gy++) {
+                for (var _mm_gx = 0; _mm_gx < _mm_cols; _mm_gx++) {
+                    var _mm_mt = _mm_grid[_mm_gy * _mm_cols + _mm_gx];
+                    if (_mm_mt < 0) {
+                        continue;
+                    }
+                    if (_mm_mt >= _mm_tm.stamp_count) {
+                        continue;
+                    }
+                    for (var _mm_cy = 0; _mm_cy < _mm_sh; _mm_cy++) {
+                        for (var _mm_cx = 0; _mm_cx < _mm_sw; _mm_cx++) {
+                            var _mm_cell      = _mm_cy * _mm_sw + _mm_cx;
+                            var _mm_data_base = (_mm_mt * _mm_cells_per + _mm_cell);
+                            if (_mm_data_base >= array_length(_mm_stamp_data)) {
+                                continue;
+                            }
+                            var _mm_ch      = _mm_stamp_data[_mm_data_base];
+                            var _mm_scr_col = _mm_gx * _mm_sw + _mm_cx;
+                            var _mm_scr_row = _mm_gy * _mm_sh + _mm_cy;
+                            var _mm_idx     = _mm_scr_row * _map_w + _mm_scr_col;
+                            _mm_char_plane[_mm_idx] = _mm_ch;
+                        }
                     }
                 }
             }
-        }
 
-        // Emit the flattened char plane at _mm_base_addr, org-bracketed —
-        // no colour plane emitted.
-        _map_base = _mm_base_addr;
-        array_push(_list, ["org", -2]);
-        array_push(_list, ["org", _map_base]);
-        var _mm_id_save = _id;
-        var _id = noone;
-        for (var _mm_bi = 0; _mm_bi < array_length(_mm_char_plane); _mm_bi++) {
-            array_push(_list, ["byte", _mm_char_plane[_mm_bi] & 0xFF]);
+            // Emit the flattened char plane at _mm_base_addr, org-bracketed —
+            // no colour plane emitted.
+            _map_base = _mm_base_addr;
+            array_push(_list, ["org", -2]);
+            array_push(_list, ["org", _map_base]);
+            var _mm_id_save = _id;
+            var _id = noone;
+            for (var _mm_bi = 0; _mm_bi < array_length(_mm_char_plane); _mm_bi++) {
+                array_push(_list, ["byte", _mm_char_plane[_mm_bi] & 0xFF]);
+            }
+            array_push(_list, ["org", -3]);
+            var _id = _mm_id_save;
         }
-        array_push(_list, ["org", -3]);
-        var _id = _mm_id_save;
 
         // Emit the 256-byte char->colour LUT (nibble only, 0-15). Global
         // mixed-mode masking already happens once via _ctrl_bits/$D016 for
         // the whole scroller, matching how MAP_HSCROLL handles MC vs HR.
+        // Shared across every map regardless of LIT/VAR — colour is purely
+        // a function of character, not of which map is active.
         _mm_lut_label = _p + "lut";
         array_push(_list, ["jmp_abs", _p + "lutskip", _id]);
         array_push(_list, ["label",   _mm_lut_label]);
@@ -2994,6 +3114,27 @@ case "MACRO_SCROLL": {
         }
         array_push(_list, ["label", _p + "lutskip"]);
         _mm_use_lut = true;
+
+        // Emit the per-map base/width switch tables (VAR mode only)
+        if (_mm_var_switch) {
+            _mm_tbl_baselo = _p + "mapbaselo";
+            _mm_tbl_basehi = _p + "mapbasehi";
+            _mm_tbl_width  = _p + "mapwidth";
+            array_push(_list, ["jmp_abs", _p + "maptblskip", _id]);
+            array_push(_list, ["label", _mm_tbl_baselo]);
+            for (var _mm_ti = 0; _mm_ti < array_length(_mm_map_bases); _mm_ti++) {
+                array_push(_list, ["byte", _mm_map_bases[_mm_ti] & 0xFF, _id]);
+            }
+            array_push(_list, ["label", _mm_tbl_basehi]);
+            for (var _mm_ti = 0; _mm_ti < array_length(_mm_map_bases); _mm_ti++) {
+                array_push(_list, ["byte", (_mm_map_bases[_mm_ti] >> 8) & 0xFF, _id]);
+            }
+            array_push(_list, ["label", _mm_tbl_width]);
+            for (var _mm_ti = 0; _mm_ti < array_length(_mm_map_widths); _mm_ti++) {
+                array_push(_list, ["byte", _mm_map_widths[_mm_ti] & 0xFF, _id]);
+            }
+            array_push(_list, ["label", _p + "maptblskip"]);
+        }
 
     } else {
         // ── MAP_DATA source (existing behaviour) ──
@@ -3374,9 +3515,32 @@ case "MACRO_SCROLL": {
     // separate MAP_SWITCH/MAP_OFFSET map_redraw subroutine, so the two
     // don't collide even if both are on the spine.
     // ════════════════════════════════════════════════════════
+    var _emit_blank_rows = function(_lst, _lbl_prefix, _dest_base, _p_srow, _p_rows, _p_id) {
+        var _excluded = [];
+        for (var _er = 0; _er < 25; _er++) {
+            if (_er < _p_srow || _er >= _p_srow + _p_rows) {
+                array_push(_excluded, _er);
+            }
+        }
+        if (array_length(_excluded) == 0) {
+            return;
+        }
+        array_push(_lst, ["lda_imm", 0x00, _p_id]);
+        for (var _ei = 0; _ei < array_length(_excluded); _ei++) {
+            var _row     = _excluded[_ei];
+            var _lbl_row = _lbl_prefix + "blk" + string(_row);
+            array_push(_lst, ["ldx_imm", 0x00, _p_id]);
+            array_push(_lst, ["label",   _lbl_row]);
+            array_push(_lst, ["sta_abx", _dest_base + (_row * 40), _p_id]);
+            array_push(_lst, ["inx",     0,        _p_id]);
+            array_push(_lst, ["cpx_imm", 40,       _p_id]);
+            array_push(_lst, ["bne",     _lbl_row, _p_id]);
+        }
+    };
+
     var _emit_scroll_loader = function(_lst, _lbl_entry, _dest_base, _colour_extra,
                                         _p_word, _p_rows, _p_base, _p_srow, _p_mapw,
-                                        _p_id, _p_sx, _p_sxhi, _p_camw) {
+                                        _p_id, _p_sx, _p_sxhi, _p_camw, _p_blankfn, _p_row_lbl) {
         var _lbl_cols   = _lbl_entry + "cols";
         var _lbl_nowrap = _lbl_entry + "nowrap";
         var _lbl_dowrap = _lbl_entry + "dowrap";
@@ -3405,6 +3569,16 @@ case "MACRO_SCROLL": {
                 array_push(_lst, ["sta_zp",  0xF4,                   _p_id]);
                 array_push(_lst, ["ldy_imm", 0x00,                   _p_id]);
                 array_push(_lst, ["lda_izy", 0xF3,                   _p_id]);
+            } else if (_p_row_lbl != "") {
+                // Runtime-patchable form: labels sit exactly on the operand
+                // bytes (not the opcode), so a map-switch routine can STA
+                // straight into them — same trick MACRO_IRQ_HANDLER already
+                // uses on its own JSR target bytes.
+                array_push(_lst, ["byte", 0xB9, _p_id]);
+                array_push(_lst, ["label", _p_row_lbl + "rlo" + string(_r)]);
+                array_push(_lst, ["byte", _row_src & 0xFF, _p_id]);
+                array_push(_lst, ["label", _p_row_lbl + "rhi" + string(_r)]);
+                array_push(_lst, ["byte", (_row_src >> 8) & 0xFF, _p_id]);
             } else {
                 array_push(_lst, ["lda_aby", _row_src, _p_id]);
             }
@@ -3433,7 +3607,13 @@ case "MACRO_SCROLL": {
             array_push(_lst, ["label",   _lbl_nowrap]);
         } else {
             array_push(_lst, ["iny",     0,              _p_id]);
-            array_push(_lst, ["cpy_imm", _p_mapw & 0xFF,  _p_id]);
+            if (_p_row_lbl != "") {
+                array_push(_lst, ["byte", 0xC0, _p_id]);
+                array_push(_lst, ["label", _p_row_lbl + "wcmp"]);
+                array_push(_lst, ["byte", _p_mapw & 0xFF, _p_id]);
+            } else {
+                array_push(_lst, ["cpy_imm", _p_mapw & 0xFF,  _p_id]);
+            }
             array_push(_lst, ["bcc",     _lbl_nowrap,     _p_id]);
             array_push(_lst, ["ldy_imm", 0x00,            _p_id]);
             array_push(_lst, ["label",   _lbl_nowrap]);
@@ -3443,15 +3623,25 @@ case "MACRO_SCROLL": {
         array_push(_lst, ["beq",     _lbl_done,   _p_id]);
         array_push(_lst, ["jmp_abs", _lbl_cols,   _p_id]);
         array_push(_lst, ["label",   _lbl_done]);
+        if (_p_blankfn != noone) {
+            _p_blankfn(_lst, _lbl_entry, _dest_base, _p_srow, _p_rows, _p_id);
+        }
         array_push(_lst, ["rts",     0,           _p_id]);
     };
+
+    // Only hand the loaders a real function reference once CLR UNUSED is on
+    // — noone tells them to skip the blank pass entirely.
+    var _mm_blank_fn = noone;
+    if (_mm_clamp_blank != 0) {
+        _mm_blank_fn = _emit_blank_rows;
+    }
 
     // LUT variant — reads the SAME char plane as the char loaders (no
     // separate colour block) and derives the colour byte via a 256-entry
     // char->colour table instead of a second memory read.
     var _emit_scroll_loader_lut = function(_lst, _lbl_entry, _dest_base, _lut_lbl,
                                             _p_word, _p_rows, _p_base, _p_srow, _p_mapw,
-                                            _p_id, _p_sx, _p_sxhi, _p_camw) {
+                                            _p_id, _p_sx, _p_sxhi, _p_camw, _p_blankfn, _p_row_lbl) {
         var _lbl_cols   = _lbl_entry + "cols";
         var _lbl_nowrap = _lbl_entry + "nowrap";
         var _lbl_dowrap = _lbl_entry + "dowrap";
@@ -3480,6 +3670,12 @@ case "MACRO_SCROLL": {
                 array_push(_lst, ["sta_zp",  0xF4,                   _p_id]);
                 array_push(_lst, ["ldy_imm", 0x00,                   _p_id]);
                 array_push(_lst, ["lda_izy", 0xF3,                   _p_id]);
+            } else if (_p_row_lbl != "") {
+                array_push(_lst, ["byte", 0xB9, _p_id]);
+                array_push(_lst, ["label", _p_row_lbl + "rlo" + string(_r)]);
+                array_push(_lst, ["byte", _row_src & 0xFF, _p_id]);
+                array_push(_lst, ["label", _p_row_lbl + "rhi" + string(_r)]);
+                array_push(_lst, ["byte", (_row_src >> 8) & 0xFF, _p_id]);
             } else {
                 array_push(_lst, ["lda_aby", _row_src, _p_id]);
             }
@@ -3517,7 +3713,13 @@ case "MACRO_SCROLL": {
             array_push(_lst, ["label",   _lbl_nowrap]);
         } else {
             array_push(_lst, ["iny",     0,              _p_id]);
-            array_push(_lst, ["cpy_imm", _p_mapw & 0xFF,  _p_id]);
+            if (_p_row_lbl != "") {
+                array_push(_lst, ["byte", 0xC0, _p_id]);
+                array_push(_lst, ["label", _p_row_lbl + "wcmp"]);
+                array_push(_lst, ["byte", _p_mapw & 0xFF, _p_id]);
+            } else {
+                array_push(_lst, ["cpy_imm", _p_mapw & 0xFF,  _p_id]);
+            }
             array_push(_lst, ["bcc",     _lbl_nowrap,     _p_id]);
             array_push(_lst, ["ldy_imm", 0x00,            _p_id]);
             array_push(_lst, ["label",   _lbl_nowrap]);
@@ -3527,30 +3729,100 @@ case "MACRO_SCROLL": {
         array_push(_lst, ["beq",     _lbl_done,   _p_id]);
         array_push(_lst, ["jmp_abs", _lbl_cols,   _p_id]);
         array_push(_lst, ["label",   _lbl_done]);
+        if (_p_blankfn != noone) {
+            _p_blankfn(_lst, _lbl_entry, _dest_base, _p_srow, _p_rows, _p_id);
+        }
         array_push(_lst, ["rts",     0,           _p_id]);
     };
+
+    // Row-label prefixes for the runtime map-switch patcher — only set
+    // (and only costs anything) when MAP IDX is in VAR mode.
+    var _mm_row_lbl_scr1  = "";
+    var _mm_row_lbl_scr2  = "";
+    var _mm_row_lbl_color = "";
+    if (_mm_var_switch) {
+        _mm_row_lbl_scr1  = _p + "scr1";
+        _mm_row_lbl_scr2  = _p + "scr2";
+        _mm_row_lbl_color = _p + "col";
+    }
 
     // loadMap_screen_1 — _row_count rows from _start_row into $0400
     _emit_scroll_loader(_list, _lbl_scr1, _scr1, 0,
         _map_w_is_word, _row_count, _map_base, _start_row, _map_w,
-        _id, _lbl_scrollx, _lbl_scrollx_hi, _cam_w);
+        _id, _lbl_scrollx, _lbl_scrollx_hi, _cam_w, _mm_blank_fn, _mm_row_lbl_scr1);
 
     // loadMap_screen_2 — _row_count rows from _start_row into $0C00
     _emit_scroll_loader(_list, _lbl_scr2, _scr2, 0,
         _map_w_is_word, _row_count, _map_base, _start_row, _map_w,
-        _id, _lbl_scrollx, _lbl_scrollx_hi, _cam_w);
+        _id, _lbl_scrollx, _lbl_scrollx_hi, _cam_w, _mm_blank_fn, _mm_row_lbl_scr2);
 
     // colorMap — _row_count rows of colour into $D800
     if (_col_mode != 0) {
         if (_mm_use_lut) {
             _emit_scroll_loader_lut(_list, _lbl_color, 0xD800, _mm_lut_label,
                 _map_w_is_word, _row_count, _map_base, _start_row, _map_w,
-                _id, _lbl_scrollx, _lbl_scrollx_hi, _cam_w);
+                _id, _lbl_scrollx, _lbl_scrollx_hi, _cam_w, _mm_blank_fn, _mm_row_lbl_color);
         } else {
             _emit_scroll_loader(_list, _lbl_color, 0xD800, _msz,
                 _map_w_is_word, _row_count, _map_base, _start_row, _map_w,
-                _id, _lbl_scrollx, _lbl_scrollx_hi, _cam_w);
+                _id, _lbl_scrollx, _lbl_scrollx_hi, _cam_w, _mm_blank_fn, _mm_row_lbl_color);
         }
+    }
+
+    // ════════════════════════════════════════════════════════
+    // Runtime map switch (MAP IDX in VAR mode only) — reads the UV_ var,
+    // patches scr1/scr2/color's baked row-source addresses and their
+    // shared width-compare byte to point at the newly selected map (self-
+    // modifying code — the same trick MACRO_IRQ_HANDLER already uses on
+    // its own JSR target bytes), then falls into the existing init/reload
+    // sequence. One-off cost paid only when actually called — normal
+    // scrolling in between switches is completely untouched.
+    //
+    // Row addresses are rebuilt incrementally (base, then +width per row)
+    // rather than looked up per-row, matching how MACRO_METAMAP's own VAR
+    // mode avoids runtime multiplication.
+    // ════════════════════════════════════════════════════════
+    if (_mm_var_switch) {
+        var _lbl_setmap = "Scroller_MapSet";
+        array_push(_list, ["label", _lbl_setmap]);
+        array_push(_list, ["lda_abs", _mm_var_addr, _id]);
+        array_push(_list, ["tax",     0,            _id]);
+
+        var _mm_loader_pfxs = [_mm_row_lbl_scr1, _mm_row_lbl_scr2, _mm_row_lbl_color];
+        for (var _mm_lo = 0; _mm_lo < array_length(_mm_loader_pfxs); _mm_lo++) {
+            var _mm_lbl_pfx = _mm_loader_pfxs[_mm_lo];
+
+            array_push(_list, ["lda_abx", _mm_tbl_baselo, _id]);
+            array_push(_list, ["sta_zp",  0xF8,           _id]);
+            array_push(_list, ["lda_abx", _mm_tbl_basehi, _id]);
+            array_push(_list, ["sta_zp",  0xF9,           _id]);
+            array_push(_list, ["lda_abx", _mm_tbl_width,  _id]);
+            array_push(_list, ["sta_zp",  0xFA,           _id]);
+
+            // Row 0
+            array_push(_list, ["lda_zp",  0xF8,                 _id]);
+            array_push(_list, ["sta_lab", _mm_lbl_pfx + "rlo0", _id]);
+            array_push(_list, ["lda_zp",  0xF9,                 _id]);
+            array_push(_list, ["sta_lab", _mm_lbl_pfx + "rhi0", _id]);
+            array_push(_list, ["lda_zp",  0xFA,                 _id]);
+            array_push(_list, ["sta_lab", _mm_lbl_pfx + "wcmp", _id]);
+
+            // Rows 1..row_count-1 — incremental 16-bit add, no runtime multiply
+            for (var _mm_rr = 1; _mm_rr < _row_count; _mm_rr++) {
+                array_push(_list, ["clc",     0,    _id]);
+                array_push(_list, ["lda_zp",  0xF8, _id]);
+                array_push(_list, ["adc_zp",  0xFA, _id]);
+                array_push(_list, ["sta_zp",  0xF8, _id]);
+                array_push(_list, ["sta_lab", _mm_lbl_pfx + "rlo" + string(_mm_rr), _id]);
+                array_push(_list, ["lda_zp",  0xF9, _id]);
+                array_push(_list, ["adc_imm", 0x00, _id]);
+                array_push(_list, ["sta_zp",  0xF9, _id]);
+                array_push(_list, ["sta_lab", _mm_lbl_pfx + "rhi" + string(_mm_rr), _id]);
+            }
+        }
+
+        array_push(_list, ["jsr", _lbl_init, _id]);
+        array_push(_list, ["rts", 0,         _id]);
     }
 
     // ── Spine resumes here after init ────────────────────────
@@ -3562,6 +3834,7 @@ case "MACRO_SCROLL": {
         + " col_mode=" + string(_col_mode)
         + " start_row=" + string(_start_row)
         + " row_count=" + string(_row_count)
+        + " map_var_switch=" + string(_mm_var_switch)
         + " [unified delta core]");
 
 } break;

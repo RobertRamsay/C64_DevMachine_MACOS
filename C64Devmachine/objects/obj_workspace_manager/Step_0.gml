@@ -893,6 +893,7 @@ if (is_entering_text) {
         else if (_ntype == "MACRO_PRINT"        && _nidx == 6) { _is_address_field = true; }
         else if (_ntype == "MACRO_TEXT_SCROLL"  && _nidx == 5) { _is_address_field = true; }
         else if (_ntype == "MACRO_SID"          && _nidx == 1) { _is_address_field = true; }
+        else if (_ntype == "MACRO_SCROLL"       && _nidx == 9) { _is_address_field = true; }
         else if (_ntype == "MACRO_BMP")                        { _is_address_field = true; }
         else if (_ntype == "MACRO_VWAIT"        && _nidx == 1 && (array_length(input_target_node.instructions[0]) <= 2 || real(input_target_node.instructions[0][2]) == 0)) { _is_address_field = true; }
         

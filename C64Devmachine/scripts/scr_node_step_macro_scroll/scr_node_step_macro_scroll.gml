@@ -79,7 +79,43 @@ var _ry = [
     if (array_length(instructions[0]) < 8)  { array_push(instructions[0], ""); }
     if (array_length(instructions[0]) < 9)  { array_push(instructions[0], 0); }
     if (array_length(instructions[0]) < 10) { array_push(instructions[0], 0xA000); }
+    if (array_length(instructions[0]) < 11) { array_push(instructions[0], 1); }
+    if (array_length(instructions[0]) < 12) { array_push(instructions[0], 0); }
+    if (array_length(instructions[0]) < 13) { array_push(instructions[0], ""); }
     var _mm_src_mode = is_real(instructions[0][6]) ? real(instructions[0][6]) : 0;
+
+    // CLR UNUSED sits right after whatever the draw function drew last —
+    // row 7 is one past SOURCE's own row (6), +3 when META_TILESET is
+    // active (TILESET/MAP IDX/BASE ADDR), +1 more if MAP IDX is in VAR
+    // mode (SETMAP info row), +1 more if that tileset carries a stamp
+    // override. Must mirror draw exactly.
+    var _mm_clamp_row_offset = 7;
+    if (_mm_src_mode == 1) {
+        _mm_clamp_row_offset += 3;
+        var _mm_map_idx_mode_chk = is_real(instructions[0][11]) ? real(instructions[0][11]) : 0;
+        if (_mm_map_idx_mode_chk == 1) {
+            _mm_clamp_row_offset += 1;
+        }
+        var _mm_tileset_name_chk = is_string(instructions[0][7]) ? string(instructions[0][7]) : "";
+        if (_mm_tileset_name_chk != "" && instance_exists(obj_asset_manager)) {
+            var _mm_am_chk = obj_asset_manager;
+            for (var _mm_ai_chk = 0; _mm_ai_chk < ds_list_size(_mm_am_chk.asset_list); _mm_ai_chk++) {
+                var _mm_a_chk = ds_list_find_value(_mm_am_chk.asset_list, _mm_ai_chk);
+                if (_mm_a_chk.type == "META_TILESET" && _mm_a_chk.name == _mm_tileset_name_chk) {
+                    if (variable_struct_exists(_mm_a_chk.meta, "stamp_override")) {
+                        for (var _mm_oi_chk = 0; _mm_oi_chk < array_length(_mm_a_chk.meta.stamp_override); _mm_oi_chk++) {
+                            if (_mm_a_chk.meta.stamp_override[_mm_oi_chk] != 0x80) {
+                                _mm_clamp_row_offset += 1;
+                                break;
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+    }
+    var _ly_clamp = (_ly0 + _lh * _mm_clamp_row_offset - _cam_y) / _cam_zoom;
 
     // SOURCE row — toggle MAP_DATA <-> META_TILESET, index [6]
     if (_in_col && _mgy >= _ly_source && _mgy < _ly_source + _lh_g) {
@@ -107,45 +143,74 @@ var _ry = [
             return;
         }
 
-        // MAP IDX row — spinner clamped to the tileset's map_count
+        // MAP IDX row — left part toggles LIT/VAR (index [11]); right part
+        // opens a text-entry modal in LIT mode or the UV var picker in VAR
+        // mode, matching the toggle/value split MACRO_METAMAP's own MAP
+        // row already uses.
         if (_in_col && _mgy >= _ly_mapidx && _mgy < _ly_mapidx + _lh_g) {
-            var _mm_tileset_name = is_string(instructions[0][7]) ? string(instructions[0][7]) : "";
-            var _mm_map_count    = 0;
-            if (_mm_tileset_name != "" && instance_exists(obj_asset_manager)) {
-                var _mm_am = obj_asset_manager;
-                for (var _mm_ai = 0; _mm_ai < ds_list_size(_mm_am.asset_list); _mm_ai++) {
-                    var _mm_a = ds_list_find_value(_mm_am.asset_list, _mm_ai);
-                    if (_mm_a.type == "META_TILESET" && _mm_a.name == _mm_tileset_name) {
-                        if (variable_struct_exists(_mm_a.meta, "map_count")) {
-                            _mm_map_count = _mm_a.meta.map_count;
-                        }
-                        break;
-                    }
+            var _mm_map_idx_mode = is_real(instructions[0][11]) ? real(instructions[0][11]) : 0;
+            var _mm_mi_toggle_x2 = (_px + 104 - _cam_x) / _cam_zoom;
+            if (_mgx < _mm_mi_toggle_x2) {
+                if (_mm_map_idx_mode == 0) {
+                    instructions[0][11] = 1;
+                } else {
+                    instructions[0][11] = 0;
                 }
+                height_dirty = true;
+                scr_c64_update_addresses();
+                return;
             }
-            var _mm_max_idx = max(0, _mm_map_count - 1);
-            var _mm_cur_idx = is_real(instructions[0][8]) ? real(instructions[0][8]) : 0;
-            var _mm_mid_x   = (_px + width - 44 - _cam_x) / _cam_zoom;
-            if (_mgx < _mm_mid_x) {
-                instructions[0][8] = max(0, _mm_cur_idx - 1);
+            if (_mm_map_idx_mode == 0) {
+                obj_workspace_manager.input_target_node    = id;
+                obj_workspace_manager.input_target_index   = 8;
+                obj_workspace_manager.current_input_string = string(is_real(instructions[0][8]) ? real(instructions[0][8]) : 0);
+                obj_workspace_manager.cursor_pos           = string_length(obj_workspace_manager.current_input_string);
+                obj_workspace_manager.is_entering_text     = true;
             } else {
-                instructions[0][8] = min(_mm_max_idx, _mm_cur_idx + 1);
+                label_picker_open       = true;
+                global.any_picker_open  = true;
+                label_picker_prev_depth = depth;
+                depth                   = -9999;
+                label_picker_mode       = "VAR";
+                label_picker_word_only  = false;
+                label_picker_byte_only  = true;
+                label_picker_tab        = "UV";
+                label_picker_scroll     = 0;
+                label_picker_list       = [];
+                label_picker_target     = id;
+                label_picker_index      = 12;
             }
-            scr_c64_update_addresses();
             return;
         }
 
-        // BASE ADDR row — spinner in $1000 steps, floor $0400
+        // BASE ADDR row — open text entry for index [9] (plain 4-digit hex,
+        // zero-padded, no $ — matches the convention other hex-address
+        // fields in this codebase use for their modal pre-fill)
         if (_in_col && _mgy >= _ly_baseaddr && _mgy < _ly_baseaddr + _lh_g) {
             var _mm_cur_addr = is_real(instructions[0][9]) ? real(instructions[0][9]) : 0xA000;
-            var _mm_mid_x    = (_px + width - 44 - _cam_x) / _cam_zoom;
-            if (_mgx < _mm_mid_x) {
-                instructions[0][9] = max(0x0400, _mm_cur_addr - 0x1000);
-            } else {
-                instructions[0][9] = min(0xFFFF, _mm_cur_addr + 0x1000);
+            var _mm_hex      = string_upper(decimal_to_hex(_mm_cur_addr));
+            while (string_length(_mm_hex) < 4) {
+                _mm_hex = "0" + _mm_hex;
             }
-            scr_c64_update_addresses();
+            obj_workspace_manager.input_target_node    = id;
+            obj_workspace_manager.input_target_index   = 9;
+            obj_workspace_manager.current_input_string = _mm_hex;
+            obj_workspace_manager.cursor_pos           = string_length(obj_workspace_manager.current_input_string);
+            obj_workspace_manager.is_entering_text     = true;
             return;
         }
+    }
+
+    // CLR UNUSED row — toggle blank-excluded-rows pass, index [10].
+    // Always shown regardless of source mode.
+    if (_in_col && _mgy >= _ly_clamp && _mgy < _ly_clamp + _lh_g) {
+        var _mm_cur_clamp = is_real(instructions[0][10]) ? real(instructions[0][10]) : 1;
+        if (_mm_cur_clamp == 0) {
+            instructions[0][10] = 1;
+        } else {
+            instructions[0][10] = 0;
+        }
+        scr_c64_update_addresses();
+        return;
     }
 }
