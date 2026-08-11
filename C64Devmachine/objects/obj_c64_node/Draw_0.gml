@@ -181,6 +181,7 @@ if (height_dirty) {
     case "MACRO_REU":        height = _G * 9; break;
     case "MACRO_COLLISION":  height = _G * 10;  break;
 	case "MACRO_COLL_ADV":   height = _G * 19;  break;    
+	case "MACRO_COLL_LINE":  height = _G * 7;   break;
     case "MACRO_ANIM":       height = _G * 18;  break;
     case "MACRO_SFX":        height = _G * 6;   break;
 	case "MACRO_CODE":       height = _G * 5;   break;
@@ -1758,6 +1759,18 @@ draw_set_alpha(1.0);
 // =============================================================
 // L2. GROUP DRAG HANDLE HIGHLIGHT
 // =============================================================
+// Memory-bar ownership highlight. This is deliberately an outline only: it
+// identifies the node without changing selection or interfering with dragging.
+if (variable_global_exists("memory_bar_hover_node") &&
+    global.memory_bar_hover_node == id) {
+    var _mb_pulse = 0.65 + abs(sin(current_time * 0.006)) * 0.35;
+    draw_set_color(c_aqua);
+    draw_set_alpha(_mb_pulse);
+    draw_rectangle(draw_x - 3, y - 3, draw_x + width + 3, y + height + 3, true);
+    draw_rectangle(draw_x - 5, y - 5, draw_x + width + 5, y + height + 5, true);
+    draw_set_alpha(1.0);
+}
+
 if (array_length(global.selected_nodes) > 1 && instance_exists(global.group_drag_handle)) {
     var _ctrl_held = keyboard_check(vk_control) || scr_cmd_held();
     var _is_clone  = _ctrl_held || global.group_drag_is_clone;

@@ -80,7 +80,11 @@ function scr_build_flow_graph() {
     // _owner_ranges directly crashes at runtime as an unset instance var
     // read on whichever object happened to call this script.
     var _addr_to_node = function(_addr, _ranges) {
-        for (var _ri = 0; _ri < array_length(_ranges); _ri++) {
+        // Search newest-to-oldest. ORG restore blocks and long conditional
+        // springboards can cause a later instruction to reuse an address that
+        // appeared in an earlier ownership range. The later emitted byte is
+        // what survives in the assembled program and therefore owns the edge.
+        for (var _ri = array_length(_ranges) - 1; _ri >= 0; _ri--) {
             var _r = _ranges[_ri];
             if (_addr >= _r.start && _addr < _r.stop) return _r.node;
         }
@@ -114,6 +118,22 @@ function scr_build_flow_graph() {
         return _found;
     };
 
+    // Address ranges can overlap at zero-sized labels and at the boundary
+    // between adjacent nodes. Before assigning an assembled JSR to a visible
+    // node, verify that the node really contains that explicit call.
+    var _node_has_jsr_to = function(_node, _label_name) {
+        if (!instance_exists(_node) ||
+            !variable_instance_exists(_node, "instructions")) return false;
+        for (var _nji = 0; _nji < array_length(_node.instructions); _nji++) {
+            var _nin = _node.instructions[_nji];
+            if (array_length(_nin) < 2) continue;
+            var _nmn = string_lower(string(_nin[0]));
+            if ((_nmn == "jsr" || _nmn == "jsr_abs" || _nmn == "jsr_lab") &&
+                string(_nin[1]) == _label_name) return true;
+        }
+        return false;
+    };
+
     for (var fi = 0; fi < array_length(p.fixups); fi++) {
         var f = p.fixups[fi];
         if (!ds_map_exists(p.labels, f.label)) continue;
@@ -140,6 +160,37 @@ function scr_build_flow_graph() {
 
         if (_kind != "") {
             var _src_node = _addr_to_node(_src_addr, _owner_ranges);
+            var _src_has_explicit_jsr = (_kind == "jsr") &&
+                                        _node_has_jsr_to(_src_node, f.label);
+
+            // A plain visible node may only own a JSR that is actually in its
+            // instruction list. If range overlap assigned the opcode to the
+            // node immediately above the real JSR, discard that attribution;
+            // the explicit-JSR verification pass below recreates the edge
+            // from the correct node. Macro nodes are allowed to own generated
+            // internal JSRs that are not represented in their instruction UI.
+            if (_kind == "jsr" && !_src_has_explicit_jsr &&
+                (_src_node == noone ||
+                 string_pos("MACRO_", string_upper(string(_src_node.node_type))) != 1)) {
+                continue;
+            }
+
+            // COND_IF / COND_IF_WORD deliberately use an absolute JMP as a
+            // long-range springboard. It is still a conditional branch in the
+            // user's graph, not a normal JMP node. Classify by the node that
+            // emitted it so the overlay cannot confuse it with ordinary JMP
+            // flow or disturb the JSR/RTS call-line set.
+            if (_src_node != noone &&
+                (_src_node.node_type == "COND_IF" ||
+                 _src_node.node_type == "COND_IF_WORD")) {
+                // Neither conditional compiler emits a JSR. If address-range
+                // ownership assigned one here, it belongs to the following
+                // explicit JSR node and the verification pass below will add
+                // that edge with the correct source.
+                if (_kind == "jsr") continue;
+                _kind = "branch";
+            }
+
             var _tgt_node = _find_label_node(f.label);
             // JMP/BRANCH still fall back to address-range guessing when
             // there's no matching LABEL node — that's fine, those mostly
@@ -154,8 +205,14 @@ function scr_build_flow_graph() {
             // connection. Requiring a real LABEL node match keeps JSR
             // edges limited to calls that are genuinely visible and
             // callable in the node graph.
-            if (_tgt_node == noone && _kind != "jsr") _tgt_node = _addr_to_node(_target_addr, _owner_ranges);
-            if (_src_node != noone && _tgt_node != noone) {
+            if (_tgt_node == noone &&
+                (_kind != "jsr" || _src_has_explicit_jsr)) {
+                _tgt_node = _addr_to_node(_target_addr, _owner_ranges);
+            }
+            // Internal IF springboard labels resolve back into the IF node
+            // itself. They are compiler plumbing, not useful user flow edges.
+            if (_src_node != noone && _tgt_node != noone &&
+                !(_kind == "branch" && _src_node == _tgt_node)) {
                 array_push(_edges, {kind: _kind, src: _src_node, tgt: _tgt_node});
                 // JSR: also show the return trip. The label a JSR jumps to
                 // is very often NOT where the RTS actually lives — a JSR
@@ -258,6 +315,100 @@ function scr_build_flow_graph() {
                     if (!_dup) array_push(_edges, {kind: "jsr", src: _disp_src, tgt: _disp_tgt});
                 }
             }
+        }
+    }
+
+    // Verification pass for explicit, user-placed JSR nodes. The assembled
+    // fixup scan above is still the authority for macros and generated code,
+    // but overlapping/reused ownership addresses can make one of two adjacent
+    // JSR nodes calling the same label disappear. A visible JSR node must
+    // always have its own call edge and its own return edge.
+    var _placed_jsrs = [];
+    var _pjn_count = instance_number(obj_c64_node);
+    for (var _pjni = 0; _pjni < _pjn_count; _pjni++) {
+        var _pjn = instance_find(obj_c64_node, _pjni);
+        if (!instance_exists(_pjn) || !_pjn.is_connected ||
+            !variable_instance_exists(_pjn, "instructions")) continue;
+        for (var _pjii = 0; _pjii < array_length(_pjn.instructions); _pjii++) {
+            if (array_length(_pjn.instructions[_pjii]) < 2) continue;
+            var _pjm = string_lower(string(_pjn.instructions[_pjii][0]));
+            if (_pjm != "jsr" && _pjm != "jsr_abs" && _pjm != "jsr_lab") continue;
+            var _pjl = string(_pjn.instructions[_pjii][1]);
+            if (_pjl != "") array_push(_placed_jsrs, {src:_pjn, label:_pjl});
+        }
+    }
+
+    for (var _pji = 0; _pji < array_length(_placed_jsrs); _pji++) {
+        var _pj = _placed_jsrs[_pji];
+        var _pj_tgt = _find_label_node(_pj.label);
+        // Some public entry points (Scroller_R/Scroller_L, for example) are
+        // labels emitted inside a macro rather than separate LABEL nodes.
+        // Explicit user JSRs should still point to the macro that owns that
+        // compiled entry address.
+        if (_pj_tgt == noone && ds_map_exists(p.labels, _pj.label)) {
+            _pj_tgt = _addr_to_node(p.labels[? _pj.label], _owner_ranges);
+        }
+        if (_pj_tgt == noone) continue;
+
+        var _pj_has_call = false;
+        var _pj_has_ret  = false;
+        for (var _pje = 0; _pje < array_length(_edges); _pje++) {
+            var _pjed = _edges[_pje];
+            if (_pjed.kind == "jsr" && _pjed.src == _pj.src && _pjed.tgt == _pj_tgt) {
+                _pj_has_call = true;
+            }
+            if (_pjed.kind == "jsr_ret" && _pjed.tgt == _pj.src) _pj_has_ret = true;
+        }
+        if (_pj_has_call && _pj_has_ret) continue;
+
+        // Reuse the return node already discovered for another call to this
+        // same label. This is the exact duplicate-call case shown in the UI.
+        var _pj_rts = noone;
+        // A macro-owned entry point returns from inside that macro. Represent
+        // the return trip at macro level instead of borrowing an unrelated
+        // standalone RTS node that merely happens to be lower on screen.
+        if (string_pos("MACRO_", string_upper(string(_pj_tgt.node_type))) == 1) {
+            _pj_rts = _pj_tgt;
+        }
+        for (var _pje = 0; _pje < array_length(_edges); _pje++) {
+            var _pj_call = _edges[_pje];
+            if (_pj_call.kind != "jsr" || _pj_call.tgt != _pj_tgt) continue;
+            for (var _pjr = 0; _pjr < array_length(_edges); _pjr++) {
+                var _pj_ret = _edges[_pjr];
+                if (_pj_ret.kind == "jsr_ret" && _pj_ret.tgt == _pj_call.src) {
+                    _pj_rts = _pj_ret.src;
+                    break;
+                }
+            }
+            if (_pj_rts != noone) break;
+        }
+
+        // Fallback for the first/only explicit call: locate the nearest visible
+        // standalone RTS below the target label in the same spine/ORG context.
+        if (_pj_rts == noone) {
+            var _pj_best_y = 1000000000;
+            var _pj_org    = _pj_tgt.org_parent;
+            var _pj_y      = _pj_tgt.y;
+            var _pjrn_count = instance_number(obj_c64_node);
+            for (var _pjrni = 0; _pjrni < _pjrn_count; _pjrni++) {
+                var _pjrn = instance_find(obj_c64_node, _pjrni);
+                if (!instance_exists(_pjrn) || !_pjrn.is_connected ||
+                    _pjrn.org_parent != _pj_org ||
+                    _pjrn.y <= _pj_y || _pjrn.y >= _pj_best_y) continue;
+                if (_pjrn.total_node_size != 1 ||
+                    array_length(_pjrn.instructions) < 1 ||
+                    array_length(_pjrn.instructions[0]) < 1) continue;
+                if (string_lower(string(_pjrn.instructions[0][0])) != "rts") continue;
+                _pj_rts    = _pjrn;
+                _pj_best_y = _pjrn.y;
+            }
+        }
+
+        if (!_pj_has_call) {
+            array_push(_edges, {kind:"jsr", src:_pj.src, tgt:_pj_tgt});
+        }
+        if (!_pj_has_ret && _pj_rts != noone) {
+            array_push(_edges, {kind:"jsr_ret", src:_pj_rts, tgt:_pj.src});
         }
     }
 
