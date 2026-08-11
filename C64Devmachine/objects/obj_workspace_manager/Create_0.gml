@@ -1,6 +1,6 @@
 /// @desc Setup Workspace, Palette & C64 Environment
-global.lite=0;
-global.build_date = "August 8th, 2026"; // edit this string for each release
+global.lite=1;
+global.build_date = "August 11th, 2026"; // edit this string for each release
 
 // --- GLOBAL CRASH HANDLER ---
 exception_unhandled_handler(function(_ex) {
@@ -74,11 +74,12 @@ welcome_open           = false;
 welcome_hide_checked   = false;
 welcome_credits_y      = 0;
 welcome_whats_new = [
-    "FIXED - LOADER MACROS - Were Unable to Pick the LOAD ORG Asset",
-    "ADDED - Flow view now has 2 modes DIRECT and ANGLED (via options menu)",
-    "EASTER EGG - No-one found it yet? post on social media #c64devmachine"
+    "ADDED - LINE COLLISION - For use with bitmaps only",
+    "ADDED - METAMAPS now scroll and can be >255 tiles long",
+	"ADDED - Custom Gradients to Bitmap Editor",
+	"",
+    "SOMEONE FOUND THE EASTER EGG... CAN YOU?"
     ];
-    
 
 welcome_credits_lines = [
     "CODE and DESIGN",
@@ -90,11 +91,12 @@ welcome_credits_lines = [
     "Arlasoft",
     "Balfourd",
     "CptGreenwood",
-	"Deano",
+    "Deano",
     "funkygallo",
     "keefnayls",
     "markc.sherman",
     "Sch31Btyp",
+    "SirWizAlot",
     "SLAXX",
     "SPEE-DEC",
     "sTERN",

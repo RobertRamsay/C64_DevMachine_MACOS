@@ -120,7 +120,7 @@ if (!is_entering_text && !global.is_any_text_active && keyboard_check_pressed(vk
 // changes is instant instead of re-running a full compile+assemble pass.
 // Deliberately excludes any modifier so it doesn't clash with existing
 // Ctrl/Shift/Cmd+F bindings.
-if (!is_entering_text && !global.is_any_text_active && keyboard_check_pressed(ord("F"))
+if (!is_entering_text && !global.is_any_text_active && keyboard_check_pressed(ord("F")) && !box_popup_open && !code_editor_open
 && !keyboard_check(vk_control) && !keyboard_check(vk_shift) && !keyboard_check(vk_alt) && !scr_cmd_held()) {
     flow_overlay_mode = (flow_overlay_mode + 1) mod 3; // Cycles 0 -> 1 -> 2 -> 0
 
