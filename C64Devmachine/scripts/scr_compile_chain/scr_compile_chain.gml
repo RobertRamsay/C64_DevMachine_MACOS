@@ -2076,6 +2076,10 @@ case "MACRO_METAMAP": {
                     _sch = _stamp_data[_sdb];
                     // Colour from char_lut[char] (bits 0-3), override wins.
                     // Mode is per-char via char_lut bit 4 (0 = HR, 1 = MC), not per-stamp.
+                    var _raw_col = (_sch < array_length(_tm.char_lut)) ? (_tm.char_lut[_sch] & 0x0F) : 0;
+                    if (_sd_ov >= 0) {
+                        _raw_col = _sd_ov;
+                    }
                     var _cell_is_mc = (_mm_mode == 1
                                     && _sch < array_length(_tm.char_lut)
                                     && ((_tm.char_lut[_sch] >> 4) & 0x01) == 1);
@@ -2846,17 +2850,23 @@ case "MACRO_SCROLL": {
     if (array_length(_id.instructions[0]) > 8 && is_real(_id.instructions[0][8])) {
         _mm_map_index = real(_id.instructions[0][8]);
     }
-    var _mm_base_addr = 0xA000;
+    var _mm_base_addr = 0x4000;
     if (array_length(_id.instructions[0]) > 9 && is_real(_id.instructions[0][9])) {
         _mm_base_addr = real(_id.instructions[0][9]);
     }
     if (_mm_base_addr < 0x0400) {
-        show_debug_message("MACRO_SCROLL(META): base_addr $" + string_upper(decimal_to_hex(_mm_base_addr)) + " is invalid — falling back to $A000. Set BASE ADDR on the node to a free region clear of your code and other assets.");
-        _mm_base_addr = 0xA000;
+        show_debug_message("MACRO_SCROLL(META): base_addr $" + string_upper(decimal_to_hex(_mm_base_addr)) + " is invalid — falling back to $4000. Set BASE ADDR on the node to a free region clear of your code and other assets.");
+        _mm_base_addr = 0x4000;
     }
     var _mm_use_lut   = false;
     var _mm_lut_label = "";
 
+    // [10] clamp_blank: 1 (default) = blank rows outside start_row..row_count
+    // every column-load, 0 = leave them alone. Turn OFF once something else
+    // (an IRQ-driven HUD, say) repaints those rows unconditionally every
+    // frame on its own — the auto-blank becomes redundant protection at
+    // that point, and it isn't free: it can be the single most expensive
+    // part of a column-load when many rows are excluded.
     var _mm_clamp_blank = 1;
     if (array_length(_id.instructions[0]) > 10 && is_real(_id.instructions[0][10])) {
         _mm_clamp_blank = real(_id.instructions[0][10]);
@@ -3115,6 +3125,55 @@ case "MACRO_SCROLL": {
         }
         array_push(_list, ["label", _p + "lutskip"]);
         _mm_use_lut = true;
+
+        // COLL_ADV SCAN support for METAMAP_HSCROLL. Unlike MACRO_METAMAP,
+        // the scrolling path previously emitted no <tileset>_TILE_TYPES
+        // table at all, so SCAN had no valid lookup data. DIRECT appeared to
+        // react, but only because it interpreted the screen code itself as a
+        // collision type (char $01 = T1, char $02 = T2, and so on).
+        //
+        // Tags belong to the CHAR_SET linked by this META_TILESET. Emit the
+        // same sparse [char,type] pairs COLL_ADV already expects.
+        var _mm_tag_types = undefined;
+        if (variable_struct_exists(_mm_tm, "chr_asset")
+        &&  _mm_tm.chr_asset != ""
+        &&  instance_exists(obj_asset_manager)) {
+            var _mm_tag_am = obj_asset_manager;
+            for (var _mm_tag_i = 0; _mm_tag_i < ds_list_size(_mm_tag_am.asset_list); _mm_tag_i++) {
+                var _mm_tag_chr = ds_list_find_value(_mm_tag_am.asset_list, _mm_tag_i);
+                if (_mm_tag_chr.type == "CHAR_SET" && _mm_tag_chr.name == _mm_tm.chr_asset) {
+                    if (variable_struct_exists(_mm_tag_chr.meta, "tile_types")
+                    &&  is_array(_mm_tag_chr.meta.tile_types)) {
+                        _mm_tag_types = _mm_tag_chr.meta.tile_types;
+                    }
+                    break;
+                }
+            }
+        }
+
+        var _mm_has_tag_types = false;
+        if (is_array(_mm_tag_types)) {
+            for (var _mm_tag_i = 0; _mm_tag_i < array_length(_mm_tag_types); _mm_tag_i++) {
+                if (_mm_tag_types[_mm_tag_i] != 0) {
+                    _mm_has_tag_types = true;
+                    break;
+                }
+            }
+        }
+
+        if (_mm_has_tag_types) {
+            var _mm_tag_skip = _p + "ttskip";
+            array_push(_list, ["jmp_abs", _mm_tag_skip, _id]);
+            array_push(_list, ["label", string(_mm_tileset_name) + "_TILE_TYPES"]);
+            for (var _mm_tag_i = 0; _mm_tag_i < array_length(_mm_tag_types); _mm_tag_i++) {
+                if (_mm_tag_types[_mm_tag_i] != 0) {
+                    array_push(_list, ["byte", _mm_tag_i & 0xFF,                       _id]);
+                    array_push(_list, ["byte", real(_mm_tag_types[_mm_tag_i]) & 0xFF, _id]);
+                }
+            }
+            array_push(_list, ["byte", 0xFF, _id]);
+            array_push(_list, ["label", _mm_tag_skip]);
+        }
 
         // Emit the per-map base/width switch tables (VAR mode only). Width
         // is always emitted as a lo/hi pair — even for an all-byte-mode
@@ -3523,19 +3582,12 @@ case "MACRO_SCROLL": {
     array_push(_list, ["rts",     0,                _id]);
 
     // ════════════════════════════════════════════════════════
-    // Column loaders — loadMap_screen_1 ($0400), loadMap_screen_2 ($0C00),
-    // colorMap ($D800). Identical shape three times over, so generated by
-    // one shared emitter rather than tripling the logic by hand.
-    //
-    // BYTE mode (map_w <= 255): Y register IS the column index — cheap,
-    // single LDA base,Y per row.
-    // WORD mode (map_w > 255): Y can't represent a >255 column, so a local
-    // 16-bit working copy of scrollx ($FD/$FE) walks the columns instead,
-    // and each row's byte is fetched via a computed pointer ($F3/$F4) +
-    // zero-page indirect load. These four ZP bytes are dedicated scratch
-    // for this macro only — distinct from $F7-$F9/$FB-$FC used by the
-    // separate MAP_SWITCH/MAP_OFFSET map_redraw subroutine, so the two
-    // don't collide even if both are on the spine.
+    // Row clamp — after any column reload, blank every screen row OUTSIDE
+    // start_row..start_row+row_count with $00 across the full 40-column
+    // width. Runs unconditionally at the end of scr1/scr2/color so it
+    // self-heals every scroll tick regardless of what else (METAMAP's
+    // static bake, a HUD, etc.) wrote into those rows in between — no-op
+    // (nothing emitted) when the full 25 rows are already in use.
     // ════════════════════════════════════════════════════════
     var _emit_blank_rows = function(_lst, _lbl_prefix, _dest_base, _p_srow, _p_rows, _p_id) {
         var _excluded = [];
@@ -3560,6 +3612,28 @@ case "MACRO_SCROLL": {
         }
     };
 
+    // Only hand the loaders a real function reference once CLR UNUSED is on
+    // — noone tells them to skip the blank pass entirely.
+    var _mm_blank_fn = noone;
+    if (_mm_clamp_blank != 0) {
+        _mm_blank_fn = _emit_blank_rows;
+    }
+
+    // ════════════════════════════════════════════════════════
+    // Column loaders — loadMap_screen_1 ($0400), loadMap_screen_2 ($0C00),
+    // colorMap ($D800). Identical shape three times over, so generated by
+    // one shared emitter rather than tripling the logic by hand.
+    //
+    // BYTE mode (map_w <= 255): Y register IS the column index — cheap,
+    // single LDA base,Y per row.
+    // WORD mode (map_w > 255): Y can't represent a >255 column, so a local
+    // 16-bit working copy of scrollx ($FD/$FE) walks the columns instead,
+    // and each row's byte is fetched via a computed pointer ($F3/$F4) +
+    // zero-page indirect load. These four ZP bytes are dedicated scratch
+    // for this macro only — distinct from $F7-$F9/$FB-$FC used by the
+    // separate MAP_SWITCH/MAP_OFFSET map_redraw subroutine, so the two
+    // don't collide even if both are on the spine.
+    // ════════════════════════════════════════════════════════
     var _emit_scroll_loader = function(_lst, _lbl_entry, _dest_base, _colour_extra,
                                         _p_word, _p_rows, _p_base, _p_srow, _p_mapw,
                                         _p_id, _p_sx, _p_sxhi, _p_camw, _p_blankfn, _p_row_lbl) {
@@ -3674,13 +3748,6 @@ case "MACRO_SCROLL": {
         }
         array_push(_lst, ["rts",     0,           _p_id]);
     };
-
-    // Only hand the loaders a real function reference once CLR UNUSED is on
-    // — noone tells them to skip the blank pass entirely.
-    var _mm_blank_fn = noone;
-    if (_mm_clamp_blank != 0) {
-        _mm_blank_fn = _emit_blank_rows;
-    }
 
     // LUT variant — reads the SAME char plane as the char loaders (no
     // separate colour block) and derives the colour byte via a 256-entry
@@ -3845,8 +3912,9 @@ case "MACRO_SCROLL": {
     // shared width-compare byte to point at the newly selected map (self-
     // modifying code — the same trick MACRO_IRQ_HANDLER already uses on
     // its own JSR target bytes), then falls into the existing init/reload
-    // sequence. One-off cost paid only when actually called — normal
-    // scrolling in between switches is completely untouched.
+    // sequence. This is a one-off cost paid only when you actually call
+    // it — normal scrolling in between switches is completely untouched,
+    // still the same fast baked-immediate reads as LIT mode.
     //
     // Row addresses are rebuilt incrementally (base, then +width per row)
     // rather than looked up per-row, matching how MACRO_METAMAP's own VAR
@@ -17350,14 +17418,21 @@ if (_a.type == "BITMAP" || _a.type == "BITMAP_KLA") {
 		    }
 
 		    // ── COLL_ADV support: tile-type table + global row LUTs ──
-		    // Source tile_types from first CHAR_SET asset (same source as legacy MACRO_COLLISION).
-		    // Emitted only if the charset actually has non-zero tile_types.
+		    // Source tile_types from THIS map's linked CHAR_SET. The editor writes
+		    // tags onto that linked charset, so taking the first CHAR_SET here can
+		    // compile a different table from the one shown in the editor. Keep the
+		    // first-charset lookup only as a legacy fallback for maps with no link.
 		    var _ca_tile_types = undefined;
+		    var _ca_wanted_name = "";
+		    if (variable_struct_exists(_a.meta, "chr_asset")) {
+		        _ca_wanted_name = string(_a.meta.chr_asset);
+		    }
 		    if (instance_exists(obj_asset_manager)) {
 		        var _am_ca = obj_asset_manager;
 		        for (var _cai = 0; _cai < ds_list_size(_am_ca.asset_list); _cai++) {
 		            var _ca = ds_list_find_value(_am_ca.asset_list, _cai);
-		            if (_ca.type == "CHAR_SET") {
+		            if (_ca.type == "CHAR_SET"
+		            && (_ca_wanted_name == "" || _ca.name == _ca_wanted_name)) {
 		                if (variable_struct_exists(_ca.meta, "tile_types") && is_array(_ca.meta.tile_types)) {
 		                    _ca_tile_types = _ca.meta.tile_types;
 		                }
@@ -17401,7 +17476,7 @@ if (_a.type == "BITMAP" || _a.type == "BITMAP_KLA") {
 		            show_debug_message("MAP_DATA: emitted COLL_ROW_LO + COLL_ROW_HI (global, first map)");
 		        }
 		    } else {
-		        show_debug_message("MAP_DATA: skipping " + string(_a.name) + "_TILE_TYPES (no tile_types in first CHAR_SET)");
+		        show_debug_message("MAP_DATA: skipping " + string(_a.name) + "_TILE_TYPES (linked CHAR_SET has no tile_types)");
 			    }
 			}
 		}
