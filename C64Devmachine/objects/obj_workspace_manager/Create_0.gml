@@ -74,6 +74,7 @@ welcome_open           = false;
 welcome_hide_checked   = false;
 welcome_credits_y      = 0;
 welcome_whats_new = [
+    "FIXED (CODE NODE) - Inline Byte tables now contributing to the program counter.",
     "ADDED - LINE COLLISION - For use with bitmaps only.",
     "ADDED - METAMAPS now scroll and can be >255 tiles long.",
     "ADDED - Custom Gradients to Bitmap Editor.",
