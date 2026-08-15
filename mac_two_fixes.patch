@@ -1,0 +1,26 @@
+diff --git a/C64Devmachine/objects/obj_workspace_manager/Step_0.gml b/C64Devmachine/objects/obj_workspace_manager/Step_0.gml
+index 130d963..5bb8ade 100644
+--- a/C64Devmachine/objects/obj_workspace_manager/Step_0.gml
++++ b/C64Devmachine/objects/obj_workspace_manager/Step_0.gml
+@@ -3186,7 +3186,7 @@ show_debug_message(_pbuf_dbg2);
+                 _cb_flat_pc = _org_pc_a;
+                 continue;
+             }
+-            var _fv = _fe_raw[1];
++            var _fv = (array_length(_fe_raw) > 1) ? _fe_raw[1] : 0; // bare instruction (e.g. plain RTS) — same guard as the pass 2 assembler above
+             var _flabel = "";
+             // If [1] is itself a string label (e.g. COND_IF branch targets), capture it
+             if (is_string(_fv) && _fv != "" && _fv != "0") {
+diff --git a/C64Devmachine/scripts/scr_compile_chain/scr_compile_chain.gml b/C64Devmachine/scripts/scr_compile_chain/scr_compile_chain.gml
+index 2a1ca88..c2790fe 100644
+--- a/C64Devmachine/scripts/scr_compile_chain/scr_compile_chain.gml
++++ b/C64Devmachine/scripts/scr_compile_chain/scr_compile_chain.gml
+@@ -4980,7 +4980,7 @@ if (_jsr_mode == 0) {
+ array_push(_list, ["label",   _SINIT]);
+     // Clear scroll row in screen RAM to spaces
+     var _clr = _p + "clr";
+-    array_push(_list, ["lda_imm", 0x00,         _id]);
++    array_push(_list, ["lda_imm", 0x20,         _id]); // $20 = space screen code — $00 is "@", not blank
+     array_push(_list, ["ldx_imm", 0x27,         _id]);
+     array_push(_list, ["label",   _clr              ]);
+     array_push(_list, ["sta_abx", _scr_row,     _id]);
