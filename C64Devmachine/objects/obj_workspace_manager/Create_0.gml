@@ -116,7 +116,9 @@ showGrid=1;
 badgeStyle=1
 buttonStyle=1
 niceSliceFrm = 1;
-vicedelay=200 // >3 seconds
+ini_open("c64devmachine.ini");
+vicedelay = ini_read_real("vice", "delay", 120); // shutdown settle delay in steps. Override via [vice] delay= in c64devmachine.ini if VICE teardown is slower on your machine.
+ini_close();
 global.asset_reload_in_progress = false;
 
 trigger_build = false;
