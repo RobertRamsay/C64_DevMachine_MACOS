@@ -1,6 +1,6 @@
 /// @desc Setup Workspace, Palette & C64 Environment
 global.lite=0;
-global.build_date = "August 15th, 2026"; // edit this string for each release
+global.build_date = "August 25th, 2026"; // edit this string for each release
 
 // --- GLOBAL CRASH HANDLER ---
 exception_unhandled_handler(function(_ex) {
@@ -74,9 +74,9 @@ welcome_open           = false;
 welcome_hide_checked   = false;
 welcome_credits_y      = 0;
 welcome_whats_new = [
-    "FIXES - Text Scroller Colour fix when in TXT modes (use VIC Macro where required)",
-    "FIXED - @'s were showing instead of spaces for Text Scroller",
-    "FIXED - VICE Launch issue",
+    "FIXED - REU packet size and timing fix for Bitmap data",
+    "NEW - Low / Hi LDA entries on OPCODE panel",
+    "NEW - NOP repeat macro - for NOP padding in one node",
     ];
 
 welcome_credits_lines = [
@@ -398,6 +398,14 @@ palette_page[0] = [
     { title: "LDA_ABY", type: "NORMAL", instructions: [["lda_aby", 0]] },
     { title: "LDA_IZX", type: "NORMAL", instructions: [["lda_izx", 0]] },
     { title: "LDA_IZY", type: "NORMAL", instructions: [["lda_izy", 0]] },
+
+    { title: " LABEL LO/HI BYTE ", type: "HEADER" },
+    { title: "LDA #<LAB", type: "NORMAL", instructions: [["lda_lab_lo", "label"]] },
+    { title: "LDA #>LAB", type: "NORMAL", instructions: [["lda_lab_hi", "label"]] },
+    { title: "LDX #<LAB", type: "NORMAL", instructions: [["ldx_lab_lo", "label"]] },
+    { title: "LDX #>LAB", type: "NORMAL", instructions: [["ldx_lab_hi", "label"]] },
+    { title: "LDY #<LAB", type: "NORMAL", instructions: [["ldy_lab_lo", "label"]] },
+    { title: "LDY #>LAB", type: "NORMAL", instructions: [["ldy_lab_hi", "label"]] },
 
     { title: " STORE GROUP (A-X-Y) ", type: "HEADER" },
     { title: "STA_ZP",  type: "NORMAL", instructions: [["sta_zp",  0]] },
