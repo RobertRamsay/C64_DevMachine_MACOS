@@ -1423,22 +1423,18 @@ if (!is_entering_text && !global.is_any_text_active && !global.c64u_overlay_acti
 	if keyboard_check_pressed(ord("6"))  showGrid =!showGrid
 	
 	
-	if keyboard_check_pressed(ord("7")) 
-	{paletteStyle++;
-		if paletteStyle>sprite_get_number(spr_bkg)-1 paletteStyle=0
-		badgeStyle=0
-		if paletteStyle>1 badgeStyle=1 
-		buttonStyle=0
-		if paletteStyle>1 buttonStyle=2 
+	// UI appearance is selected from OPTIONS; 7/8/9 are intentionally free.
+	if keyboard_check_pressed(ord("0"))
+	{
+		uiChromeStyle = 0;
+		niceSliceFrm  = 0;
+		bkgImg        = 0;
+		paletteStyle  = 0;
+		badgeStyle    = 0;
+		buttonStyle   = 0;
+		nodeStyle     = 0;
+		macroStyle    = 0;
 	}
-	
-	if keyboard_check_pressed(ord("8")) 
-	{bkgImg++;
-		if bkgImg>sprite_get_number(spr_bkg)-1 bkgImg=0
-	}
-	
-	if keyboard_check_pressed(ord("9")) niceSliceFrm ++;
-	if keyboard_check_pressed(ord("0")) {niceSliceFrm=0;bkgImg=0;paletteStyle=0;buttonStyle=0}
 	
 }
 

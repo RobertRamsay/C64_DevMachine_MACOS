@@ -298,7 +298,12 @@ if point_in_rectangle(gui_mouse_x,gui_mouse_y,12,10,36,32)
             }
     }
 
-draw_sprite(spr_menu_bar, paletteStyle, _sw_plus ,0)
+var _mbar_frame = paletteStyle;
+if (uiChromeStyle != 0)
+{
+    _mbar_frame = sprite_get_number(spr_menu_bar) - 1;
+}
+draw_sprite(spr_menu_bar, _mbar_frame, _sw_plus ,0)
 
 if (!expert_mode) {
 
@@ -356,8 +361,15 @@ for (var i = 0; i < array_length(active_palette); i++) {
         }
     }
 
-    // Button background sprite
-    if (is_hover) {
+    // Button background sprite. Cyber keeps its base and layers the highlight frame over it.
+    var _cyber_btn_style = max(0, sprite_get_number(spr_opcode_button) - 2);
+    var _is_cyber_button = (buttonStyle == _cyber_btn_style);
+    if (_is_cyber_button) {
+        draw_sprite_ext(spr_opcode_button, buttonStyle, btn_x, btn_y, 1, 1, 0, c_white, 1);
+        if (is_hover || _is_finder_match) {
+            draw_sprite_ext(spr_opcode_button, buttonStyle+1, btn_x, btn_y, 1, 1, 0, c_white, 0.55);
+        }
+    } else if (is_hover) {
         draw_sprite_ext(spr_opcode_button, buttonStyle+1, btn_x, btn_y, 1, 1, 0, c_white, 1);
     } else {
         draw_sprite_ext(spr_opcode_button, buttonStyle, btn_x, btn_y, 1, 1, 0, c_white, 1);
@@ -370,25 +382,37 @@ for (var i = 0; i < array_length(active_palette); i++) {
     draw_text(btn_x + btn_w * 0.5, btn_y + (btn_h * 0.5) - 6, item.title);
     draw_set_halign(fa_left);
 
-    // Additive hover glow
+    // Opcode hover/finder glow. Cyber overlays use normal blending only.
     if (is_hover || _is_finder_match) {
-        gpu_set_blendmode(bm_add);
-        draw_sprite(spr_hover_glow, 0, btn_x + btn_w * 0.5, btn_y + btn_h * 0.5);
-        gpu_set_blendmode(bm_normal);
+        if (_is_cyber_button) {
+            draw_set_alpha(0.22);
+            draw_sprite(spr_hover_glow, 0, btn_x + btn_w * 0.5, btn_y + btn_h * 0.5);
+            draw_set_alpha(1.0);
+        } else {
+            gpu_set_blendmode(bm_add);
+            draw_sprite(spr_hover_glow, 0, btn_x + btn_w * 0.5, btn_y + btn_h * 0.5);
+            gpu_set_blendmode(bm_normal);
+        }
     }
 
-    // Finder pulse glow
+    // Finder pulse. Cyber remains normal-blend here as well.
     if (_is_finder_match && !is_hover) {
         var _pulse_scale = 1.0 + 0.2 * sin(degtorad(current_time * 0.4));
         var _pulse_alpha = 0.5 + 0.4 * sin(degtorad(current_time * 0.4));
-        gpu_set_blendmode(bm_add);
-        draw_set_alpha(_pulse_alpha);
+        if (_is_cyber_button) {
+            draw_set_alpha(_pulse_alpha * 0.20);
+        } else {
+            gpu_set_blendmode(bm_add);
+            draw_set_alpha(_pulse_alpha);
+        }
         draw_sprite_ext(spr_hover_glow, 0,
             btn_x + btn_w * 0.5, btn_y + btn_h * 0.5,
             _pulse_scale, _pulse_scale,
             0, c_aqua, 1.0);
         draw_set_alpha(1.0);
-        gpu_set_blendmode(bm_normal);
+        if (!_is_cyber_button) {
+            gpu_set_blendmode(bm_normal);
+        }
     }
     // Spawn on click
     //if (is_hover && mouse_check_button_pressed(mb_left)  && !obj_workspace_manager.code_editor_open ) {
@@ -524,6 +548,16 @@ var _menu_labels = [
     "MACROS", "EXTRA", "VARS", "PROJECT", "OPTIONS", "DOCUMENTS", "IMPORT", "TBA"
 ];
 
+// Panel Style owns menu-bar chrome.
+if (niceSliceFrm > 0)
+{
+    uiChromeStyle = 1;
+}
+else
+{
+    uiChromeStyle = 0;
+}
+
 // OPTIONS DROPDOWN (button 2)
 if (gui_menu_open == 4) {
     var _opt_list = [
@@ -536,8 +570,14 @@ if (gui_menu_open == 4) {
         { title: "FLOW VIEW",       action: "FLOW_OVERLAY"    },
         { title: "FLOW TYPE",       action: "FLOW_LINE_STYLE" },
         { title: "FULLSCREEN",      action: "FULLSCREEN"      },
-        { title: "ADVANCE THEME",   action: "THEME"           },
-        { title: "RESET CUSTOM UI",    action: "RESET_UI"           },
+        { title: "UI PRESET",          action: "CYBER_PRESET"     },
+        { title: "PALETTE STYLE",      action: "PALETTE_STYLE"    },
+        { title: "OPCODE BUTTONS",     action: "OPCODE_STYLE"     },
+        { title: "LOGO STYLE",         action: "BADGE_STYLE"      },
+        { title: "BACKGROUND STYLE",   action: "BACKGROUND_STYLE" },
+        { title: "PANEL STYLE",        action: "PANEL_STYLE"      },
+        { title: "NODE STYLE",         action: "NODE_STYLE"       },
+        { title: "RESET CUSTOM UI",    action: "RESET_UI"         },
         { title: "OPCODE HEADERS",     action: "OPCODE_HEADERS"     },
 		{ title: "OPCODE COMPACT",     action: "OPCODE_EXTRA_H"     },
 		
@@ -549,7 +589,7 @@ if (gui_menu_open == 4) {
     var _panel_y_o  = _mbar_btn_h;
     var _panel_h_o  = array_length(_opt_list) * _item_h_o + 28;
 
-    draw_sprite_stretched(spr_glassSlice, 0,
+    draw_sprite_stretched(spr_glassSlice, niceSliceFrm,
                           _panel_x_o, _panel_y_o,
                           _panel_w_o, _panel_h_o);
 
@@ -627,10 +667,46 @@ if (gui_menu_open == 4) {
 		
 		
 		
-        if (_op.action == "THEME") {
-            var _theme_labels = ["1", "2", "3", "4"];
-            _state_str = _theme_labels[paletteStyle mod 4];
+        if (_op.action == "CYBER_PRESET") {
+            var _preset_count = max(1, sprite_get_number(spr_palette_page));
+            _state_str = string(clamp(paletteStyle, 0, _preset_count - 1) + 1);
+            if (paletteStyle == _preset_count - 1) {
+                _state_col = c_yellow;
+            } else {
+                _state_col = make_color_rgb(160, 160, 220);
+            }
+        }
+        if (_op.action == "PALETTE_STYLE") {
+            _state_str = string(paletteStyle + 1);
             _state_col = make_color_rgb(160, 160, 220);
+        }
+        if (_op.action == "OPCODE_STYLE") {
+            _state_str = string(buttonStyle + 1);
+            _state_col = make_color_rgb(160, 160, 220);
+        }
+        if (_op.action == "BADGE_STYLE") {
+            _state_str = string(badgeStyle + 1);
+            _state_col = make_color_rgb(160, 160, 220);
+        }
+        if (_op.action == "BACKGROUND_STYLE") {
+            _state_str = string(bkgImg + 1);
+            _state_col = make_color_rgb(160, 160, 220);
+        }
+        if (_op.action == "PANEL_STYLE") {
+            _state_str = string(niceSliceFrm + 1);
+            if (niceSliceFrm > 0) {
+                _state_col = c_yellow;
+            } else {
+                _state_col = c_gray;
+            }
+        }
+        if (_op.action == "NODE_STYLE") {
+            _state_str = string(nodeStyle + 1);
+            if (nodeStyle >= sprite_get_number(spr_9s_tile1)) {
+                _state_col = c_yellow;
+            } else {
+                _state_col = make_color_rgb(160, 160, 220);
+            }
         }
         // Shortcut hint sits flush against the right edge; the state (if any)
         // is drawn just to its left so both can show at once (e.g. FLOW
@@ -653,7 +729,6 @@ if (gui_menu_open == 4) {
         
 
         if (_ihov && mouse_check_button_pressed(mb_left)) {
-            gui_menu_open = -1;
             if (_op.action == "EXPERT_MODE") {
                 expert_mode = !expert_mode;
                 opcode_finder_active     = false;
@@ -725,24 +800,62 @@ if (gui_menu_open == 4) {
             else if (_op.action == "FULLSCREEN") {
                 do_windowSizing();
             }
-            else if (_op.action == "THEME") {
-                paletteStyle++;
-                if (paletteStyle > sprite_get_number(spr_bkg) - 1) {
-                    paletteStyle = 0;
+            else if (_op.action == "CYBER_PRESET") {
+                var _preset_count = max(1, sprite_get_number(spr_palette_page));
+                var _preset = (clamp(paletteStyle, 0, _preset_count - 1) + 1) mod _preset_count;
+                var _is_cyber_preset = (_preset == _preset_count - 1);
+                paletteStyle = _preset;
+                bkgImg       = min(_preset, max(0, sprite_get_number(spr_bkg) - 1));
+                nodeStyle    = min(_preset, sprite_get_number(spr_9s_tile1));
+                if (_is_cyber_preset) {
+                    badgeStyle   = max(0, sprite_get_number(spr_logobadge) - 1);
+                    buttonStyle  = max(0, sprite_get_number(spr_opcode_button) - 2);
+                    niceSliceFrm = max(0, sprite_get_number(spr_glassSlice) - 1);
+                } else {
+                    var _legacy_badge_max = max(0, sprite_get_number(spr_logobadge) - 2);
+                    badgeStyle = min(_preset, _legacy_badge_max);
+                    var _legacy_opcode_pairs = max(1, floor((sprite_get_number(spr_opcode_button) - 2) / 2));
+                    var _legacy_opcode_style = min(_preset, _legacy_opcode_pairs - 1);
+                    buttonStyle  = _legacy_opcode_style * 2;
+                    niceSliceFrm = 0;
                 }
-                badgeStyle = 0;
-                if (paletteStyle > 1) {
-                    badgeStyle = 1;
+                if (niceSliceFrm > 0) {
+                    uiChromeStyle = 1;
+                } else {
+                    uiChromeStyle = 0;
                 }
-                buttonStyle = 0;
-                if (paletteStyle > 1) {
-                    buttonStyle = 2;
+            }
+            else if (_op.action == "PALETTE_STYLE") {
+                paletteStyle = (paletteStyle + 1) mod max(1, sprite_get_number(spr_palette_page));
+            }
+            else if (_op.action == "OPCODE_STYLE") {
+                var _cy_btn_cycle = max(0, sprite_get_number(spr_opcode_button) - 2);
+                if (buttonStyle == 0) {
+                    buttonStyle = min(1, _cy_btn_cycle);
+                } else if (buttonStyle == 1) {
+                    buttonStyle = min(2, _cy_btn_cycle);
+                } else if (buttonStyle == 2 && _cy_btn_cycle > 2) {
+                    buttonStyle = _cy_btn_cycle;
+                } else {
+                    buttonStyle = 0;
                 }
-                bkgImg++;
-                if (bkgImg > sprite_get_number(spr_bkg) - 1) {
-                    bkgImg = 0;
+            }
+            else if (_op.action == "BADGE_STYLE") {
+                badgeStyle = (badgeStyle + 1) mod max(1, sprite_get_number(spr_logobadge));
+            }
+            else if (_op.action == "BACKGROUND_STYLE") {
+                bkgImg = (bkgImg + 1) mod max(1, sprite_get_number(spr_bkg));
+            }
+            else if (_op.action == "PANEL_STYLE") {
+                niceSliceFrm = (niceSliceFrm + 1) mod max(1, sprite_get_number(spr_glassSlice));
+                if (niceSliceFrm > 0) {
+                    uiChromeStyle = 1;
+                } else {
+                    uiChromeStyle = 0;
                 }
-                niceSliceFrm++;
+            }
+            else if (_op.action == "NODE_STYLE") {
+                nodeStyle = (nodeStyle + 1) mod (sprite_get_number(spr_9s_tile1) + 1);
             }
             else if (_op.action == "OPCODE_HEADERS") {
                 opcode_headers_on = !opcode_headers_on;
@@ -755,10 +868,14 @@ if (gui_menu_open == 4) {
             }
 			
             else if (_op.action == "RESET_UI") {
-                niceSliceFrm = 0;
-                bkgImg       = 0;
-                paletteStyle = 0;
-                buttonStyle  = 0;
+                niceSliceFrm  = 0;
+                uiChromeStyle = 0;
+                bkgImg        = 0;
+                paletteStyle  = 0;
+                badgeStyle    = 0;
+                buttonStyle   = 0;
+                nodeStyle     = 0;
+                macroStyle    = 0;
                 showGrid               = false;
                 expert_mode            = false;
                 opcode_helper_on       = true;
@@ -777,6 +894,11 @@ if (gui_menu_open == 4) {
             ini_write_real("Settings", "bkgImg", bkgImg);
             ini_write_real("Settings", "paletteStyle", paletteStyle);
             ini_write_real("Settings", "niceSliceFrm", niceSliceFrm);
+            ini_write_real("Settings", "badgeStyle", badgeStyle);
+            ini_write_real("Settings", "buttonStyle", buttonStyle);
+            ini_write_real("Settings", "uiChromeStyle", uiChromeStyle);
+            ini_write_real("Settings", "nodeStyle", nodeStyle);
+            ini_write_real("Settings", "macroStyle", macroStyle);
             ini_write_real("Settings", "expert_mode", expert_mode ? 1 : 0);
             ini_write_real("Settings", "opcode_helper", opcode_helper_on ? 1 : 0);
             ini_write_real("Settings", "palette_helper", showPaletteHelper ? 1 : 0);
@@ -824,7 +946,7 @@ if (gui_menu_open == 1 && !global.lite) {
     var _panel_y_e    = _mbar_btn_h;
     var _panel_h_e    = array_length(_extra_list) * _item_h_e + _slice_top_e + _slice_bot_e;
 
-    draw_sprite_stretched(spr_glassSlice, 0,
+    draw_sprite_stretched(spr_glassSlice, niceSliceFrm,
                           _panel_x_e, _panel_y_e,
                           _panel_w_e, _panel_h_e);
 
@@ -896,7 +1018,7 @@ if (gui_menu_open == 2) {
     var _panel_y_v  = _mbar_btn_h;
     var _panel_h_v  = array_length(_vars_list) * _item_h_v + _slice_top_v + _slice_bot_v;
 
-    draw_sprite_stretched(spr_glassSlice, 0,
+    draw_sprite_stretched(spr_glassSlice, niceSliceFrm,
                           _panel_x_v, _panel_y_v,
                           _panel_w_v, _panel_h_v);
 
@@ -950,17 +1072,27 @@ for (var _bi = 0; _bi < _menuitems; _bi++) {
     var _bopen = (gui_menu_open == _bi);
     var _bdisabled = (_bi == 1 && global.lite);
 
-    draw_sprite_ext(spr_menu_button, paletteStyle,
+    var _mbtn_frame = paletteStyle;
+    if (uiChromeStyle != 0)
+    {
+        _mbtn_frame = sprite_get_number(spr_menu_button) - 1;
+    }
+    draw_sprite_ext(spr_menu_button, _mbtn_frame,
                     _bx, _by, 1, 1, 0, c_white, 1);
 
     var _bhover = (!_bdisabled &&
                    gui_mouse_x >= _bx && gui_mouse_x < _bx + _mbar_btn_w &&
                    gui_mouse_y >= _by && gui_mouse_y < _by + _mbar_btn_h);
     if (_bhover || _bopen) {
-        gpu_set_blendmode(bm_add);
-        draw_sprite_ext(spr_menu_button, paletteStyle,
+        var _menu_overlay_additive = (uiChromeStyle == 0);
+        if (_menu_overlay_additive) {
+            gpu_set_blendmode(bm_add);
+        }
+        draw_sprite_ext(spr_menu_button, _mbtn_frame,
                         _bx, _by, 1, 1, 0, c_white, 0.2);
-        gpu_set_blendmode(bm_normal);
+        if (_menu_overlay_additive) {
+            gpu_set_blendmode(bm_normal);
+        }
     }
 
     draw_set_font(fnt_C64_Angled);
@@ -1008,7 +1140,7 @@ if (gui_menu_open == 3) {
     var _panel_y_p  = _mbar_btn_h;
     var _panel_h_p  = array_length(_proj_list) * _item_h_p + 28;
 
-    draw_sprite_stretched(spr_glassSlice, 0,
+    draw_sprite_stretched(spr_glassSlice, niceSliceFrm,
                           _panel_x_p, _panel_y_p,
                           _panel_w_p, _panel_h_p);
 
@@ -1224,7 +1356,7 @@ if (gui_menu_open == 5) {
     var _panel_y_d  = _mbar_btn_h;
     var _panel_h_d  = array_length(_docs_list) * _item_h_d + 28;
 
-    draw_sprite_stretched(spr_glassSlice, 0,
+    draw_sprite_stretched(spr_glassSlice, niceSliceFrm,
                           _panel_x_d, _panel_y_d,
                           _panel_w_d, _panel_h_d);
 
@@ -1287,7 +1419,7 @@ if (gui_menu_open == 6) {
     var _panel_y_i  = _mbar_btn_h;
     var _panel_h_i  = array_length(_imp_list) * _item_h_i + 28;
 
-    draw_sprite_stretched(spr_glassSlice, 0,
+    draw_sprite_stretched(spr_glassSlice, niceSliceFrm,
                           _panel_x_i, _panel_y_i,
                           _panel_w_i, _panel_h_i);
 
@@ -1395,7 +1527,7 @@ if (gui_menu_open == 0) {
     var _panel_h    = array_length(_mac_list) * _item_h + _slice_top + _slice_bot;
 
     // Draw spr_glassSlice using nine-slice stretching
-    draw_sprite_stretched(spr_glassSlice, 0,
+    draw_sprite_stretched(spr_glassSlice, niceSliceFrm,
                           _panel_x, _panel_y,
                           _panel_w, _panel_h);
 
@@ -1418,7 +1550,7 @@ if (gui_menu_open == 0) {
             hover_macro_title = _mp.title;
         }
 
-        // Row background on hover
+        // Keep macro menu rows clean: no button sprite behind menu entries.
         if (_ihov) {
             draw_set_alpha(0.35);
             draw_set_color(c_white);
@@ -1954,12 +2086,12 @@ draw_set_halign(fa_right);
 
 draw_set_colour(c_black);
 draw_set_alpha(0.6);
-draw_text(room_width-5, 8, (global.lite ? "LITE " : "FULL ") + "VERSION: "+string(GM_version)+"\n (C) POLYTRICITY LTD 2026");
+draw_text(room_width-35, 11, (global.lite ? "LITE " : "FULL ") + "VERSION: "+string(GM_version)+"\n (C) POLYTRICITY LTD 2026");
 
 draw_set_colour(c_white);
 draw_set_alpha(1);
 if global.lite draw_set_colour(c_lime);
-draw_text(room_width-4, 7, (global.lite ? "LITE " : "FULL ") + "VERSION: "+string(GM_version)+"\n (C) POLYTRICITY LTD 2026");
+draw_text(room_width-34, 10, (global.lite ? "LITE " : "FULL ") + "VERSION: "+string(GM_version)+"\n (C) POLYTRICITY LTD 2026");
 
 // --- RESET PATHS BUTTON ---
 draw_set_halign(fa_left);
