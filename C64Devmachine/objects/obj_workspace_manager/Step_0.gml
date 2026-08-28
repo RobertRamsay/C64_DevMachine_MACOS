@@ -36,6 +36,12 @@ if (window_has_focus() && !had_focus)
     keyboard_clear(92);
     keyboard_clear(vk_alt);
     keyboard_clear(vk_shift);
+    // A native file dialog takes focus, so the key-up that ends the keypress is
+    // delivered to the dialog and not to the game. GameMaker is left thinking the
+    // key is still held, and keyboard_check_pressed() needs an up->down edge — so
+    // ESC silently stops working until the input state is reset. This is why ESC
+    // only failed after SOME asset operations: scr_asset_sid_import already did
+    // this, every other importer did not.
     io_clear();
 }
 
@@ -481,6 +487,7 @@ if (global.question_result == "reset_paths_confirm_yes") {
         _filter = "Executable|*.exe|All Files|*.*";
     }
     var _chosen_vice = get_open_filename(_filter, "");
+    io_clear();
     if (_chosen_vice != "") {
         global.vice_path_cache = _chosen_vice;
         ini_open("c64devmachine.ini");
@@ -3950,12 +3957,14 @@ if (export_trigger) {
     if (_exp_build_d64) {
         if (_chosen == "") {
             _chosen = get_save_filename("C64 Disk Image|*.d64", "program");
+            io_clear();
             if (_chosen == "") exit;
             if (string_lower(filename_ext(_chosen)) != ".d64") _chosen += ".d64";
         }
     } else {
         if (_chosen == "") {
             _chosen = get_save_filename("C64 Program|*.prg", "export");
+            io_clear();
             if (_chosen == "") exit;
             if (string_lower(filename_ext(_chosen)) != ".prg") _chosen += ".prg";
         }
@@ -4171,12 +4180,13 @@ var zoom_speed   = 0.1;
 
 
 
-if (!instance_exists(obj_asset_manager) || 
+if (!global.showcode_mouse_over &&
+   (!instance_exists(obj_asset_manager) || 
     (!obj_asset_manager.viewer_open && !obj_asset_manager.spred64_open &&
      !point_in_rectangle(global.gui_mouse_x, global.gui_mouse_y,
       obj_asset_manager.panel_x, obj_asset_manager.panel_y,
       obj_asset_manager.panel_x + obj_asset_manager.panel_w,
-      display_get_gui_height() - 100))) {
+      display_get_gui_height() - 100)))) {
 		// Check if any node has a picker open
 		var _any_picker = false;
 		var _picker_node = noone;
@@ -4450,6 +4460,7 @@ if (!keyboard_check(vk_alt) && keyboard_check_released(ord("M")) && global.show_
 /////////////////////////////////////////////////////////////////
 var _in_gui = ((global.gui_mouse_x <= shelf_width) && (!expert_mode || global.gui_mouse_y < 47))
            || (global.gui_mouse_x >= (global.gui_w - 20 - 280))
+           || global.showcode_mouse_over
            || is_entering_text
            || box_popup_open
            || global.show_info_window

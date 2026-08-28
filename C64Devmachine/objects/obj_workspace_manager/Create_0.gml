@@ -74,9 +74,12 @@ welcome_open           = false;
 welcome_hide_checked   = false;
 welcome_credits_y      = 0;
 welcome_whats_new = [
-    "FIXED - REU packet size and timing fix for Bitmap data",
-    "NEW - Low / Hi LDA entries on OPCODE panel",
-    "NEW - NOP repeat macro - for NOP padding in one node",
+    "NEW - SHOW CODE panel - live listing of the whole program",
+    "NEW - VICE monitor style, or readable assembly - your pick",
+    "NEW - Macros and byte tables fold away, click to expand",
+    "NEW - Hover a node to highlight and jump to its code",
+    "NEW - Panel drags, resizes and remembers where you left it",
+    "FIXED - ESC not registering after adding or viewing an asset",
     ];
 
 welcome_credits_lines = [
@@ -325,6 +328,11 @@ global.named_loc_repack_gen = 0; // bumped every scr_c64_do_update_addresses() c
 global.kernal_unlocked = false;
 global.basic_unlocked = false;
 global.breakdown_node = noone;
+
+// Normally created by obj_c64_node's Create, but the Begin Step label-highlight
+// clear reads them and must never run first against an undefined global.
+if (!variable_global_exists("ref_highlight_source")) global.ref_highlight_source = noone;
+if (!variable_global_exists("ref_highlight_name"))   global.ref_highlight_name   = "";
 global.show_info_window = false;
 global.info_node = noone;
 global.current_filename = "No File Loaded"
@@ -943,6 +951,19 @@ flow_line_style        = ini_read_real("Settings", "flow_line_style",     1);
 var _hide_welcome = ini_read_real("Settings", "hide_welcome", 0);
 welcome_hide_checked = (_hide_welcome != 0);
 welcome_open          = !welcome_hide_checked;
+
+// ---- SHOW CODE PANEL (floating live listing, left of the shortcuts column) ----
+// -1 on x is the "never positioned" marker; the draw script parks it beside the
+// shortcuts column the first time it runs, then this holds the dragged position.
+showcode_x    = ini_read_real("showcode", "x",    -1);
+showcode_y    = ini_read_real("showcode", "y",    50);
+showcode_w    = clamp(ini_read_real("showcode", "w",    420), 300, 900);
+showcode_rows = clamp(ini_read_real("showcode", "rows",  20),   5,  60);
+showcode_open = (ini_read_real("showcode", "open", 1) == 1);
+showcode_mode = clamp(ini_read_real("showcode", "mode", 0), 0, 1);
+// MISC: byte tables, <LABEL/>LABEL pointer bytes and macro scaffolding labels.
+// Off by default — the lean view is just the code.
+showcode_misc = (ini_read_real("showcode", "misc", 0) == 1);
 // --- VICE PATH CHECK & PROMPT ---
 global.vice_path_cache = ini_read_string("Settings", "vice_path", "");
 
@@ -963,6 +984,13 @@ if (!_vice_valid) {
     
     var _filter = (os_type == os_macosx) ? "Mac App|*.app|All Files|*.*" : "Executable|*.exe|All Files|*.*";
     var _chosen_vice = get_open_filename(_filter, "");
+    // A native file dialog takes focus, so the key-up that ends the keypress is
+    // delivered to the dialog and not to the game. GameMaker is left thinking the
+    // key is still held, and keyboard_check_pressed() needs an up->down edge — so
+    // ESC silently stops working until the input state is reset. This is why ESC
+    // only failed after SOME asset operations: scr_asset_sid_import already did
+    // this, every other importer did not.
+    io_clear();
     
     if (_chosen_vice != "") {
         global.vice_path_cache = _chosen_vice;
@@ -987,6 +1015,30 @@ if (global.project_name != "") {
 }
 
 ini_close();
+
+showcode_scroll    = 0;
+showcode_flat      = [];    // every emitted line, unfolded
+showcode_lines     = [];    // the visible rows, after macro folding
+showcode_expanded  = [];    // keys of the groups currently open
+showcode_total     = 0;     // total emitted bytes, shown in the header
+showcode_gen       = -1;    // named_loc_repack_gen the flat list was built from
+showcode_dirty     = true;
+showcode_dragging  = false;
+showcode_drag_dx   = 0;
+showcode_drag_dy   = 0;
+showcode_resize    = 0;     // 0 none, 1 left edge, 2 right edge, 3 bottom edge
+showcode_rs_edge   = 0;     // right edge pinned during a left-edge resize
+showcode_sb_drag   = false; // scrollbar thumb being dragged
+showcode_sb_off    = 0;     // grab offset inside the thumb
+showcode_last_hover = "";   // node the listing last auto-scrolled to
+
+// Read by obj_c64_node and the camera zoom guard so a click or a wheel over the
+// panel never reaches the workspace underneath. Recomputed every Begin Step by
+// scr_show_code_hit(), which also resolves showcode_hover_node.
+global.showcode_mouse_over = false;
+global.showcode_live       = false;  // panel actually on screen this frame
+global.showcode_hover_node = noone;  // workspace node under the pointer
+
 scr_uqmenu_load();
 
 // FLOW OVERLAY (F key) — toggleable visualization of JMP/JSR/BRANCH/IRQ-

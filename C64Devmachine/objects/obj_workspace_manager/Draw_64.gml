@@ -8,6 +8,11 @@ if (idle_snapshot_active && sprite_exists(idle_snapshot_spr)) {
     draw_sprite_stretched(idle_snapshot_spr, 0, 0, 0, global.gui_w, display_get_gui_height());
 }
 
+// SHOW CODE panel: cleared here so the workspace input guards never stay
+// latched when this event bails out early (hidden UI / asset viewer open).
+// scr_show_code_draw() sets it again further down when the panel is live.
+global.showcode_mouse_over = false;
+
 if hideui exit;
 // Block draw + interaction when asset viewer is open
 if (instance_exists(obj_asset_manager) && obj_asset_manager.viewer_open) {
@@ -1248,6 +1253,13 @@ if (gui_menu_open == 3) {
                     }
                     if (_menu_has_loader) {
                         var _d64_path_menu = get_save_filename("C64 Disk Image|*.d64", "program");
+                        // A native file dialog takes focus, so the key-up that ends the keypress is
+                        // delivered to the dialog and not to the game. GameMaker is left thinking the
+                        // key is still held, and keyboard_check_pressed() needs an up->down edge — so
+                        // ESC silently stops working until the input state is reset. This is why ESC
+                        // only failed after SOME asset operations: scr_asset_sid_import already did
+                        // this, every other importer did not.
+                        io_clear();
                         if (_d64_path_menu != "") {
                             if (string_lower(filename_ext(_d64_path_menu)) != ".d64") {
                                 _d64_path_menu += ".d64";
@@ -1257,6 +1269,7 @@ if (gui_menu_open == 3) {
                         }
                     } else {
                         var _export_path = get_save_filename("C64 Program|*.prg", "export");
+                        io_clear();
                         if (_export_path != "") {
                             if (string_lower(filename_ext(_export_path)) != ".prg") {
                                 _export_path += ".prg";
@@ -1772,6 +1785,13 @@ if (instance_exists(node_tooltip_node)) {
 }
 
 /////////////////////////////////////////////////////////////////
+///// 1.9 SHOW CODE PANEL (floating, left of the shortcuts column)
+/////////////////////////////////////////////////////////////////
+// Draws before the shortcuts so the shortcuts column always wins any
+// overlap, and hides itself whenever a dropdown menu is open.
+scr_show_code_draw();
+
+/////////////////////////////////////////////////////////////////
 ///// 2. GLOBAL SHORTCUTS (TOP RIGHT)
 /////////////////////////////////////////////////////////////////
 var sc_x_end   = gui_w - 2;
@@ -1906,6 +1926,7 @@ for (var j = 0; j < array_length(shortcuts); j++) {
 			break;
 			case "EXPORT .PRG": {
 			    var _export_path = get_save_filename("C64 Program|*.prg", "export");
+			    io_clear();
 			    if (_export_path != "") {
 			        // Ensure .prg extension
 			        if (string_lower(filename_ext(_export_path)) != ".prg") {

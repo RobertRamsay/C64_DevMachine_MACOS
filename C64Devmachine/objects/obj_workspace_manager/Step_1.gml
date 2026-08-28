@@ -18,6 +18,40 @@ var _keyed   = keyboard_check(vk_anykey);
 idle_last_mx = _mx;
 idle_last_my = _my;
 
+// SHOW CODE panel: decide here, not in Draw, whether the panel owns the pointer
+// — Draw runs after every Step, so a flag set there is a frame stale and the
+// nodes underneath would still act on the first click. Also resolves which node
+// the pointer is over, for the listing highlight.
+scr_show_code_hit();
+
+// ---- LABEL REFERENCE HIGHLIGHT: drop it once the pointer leaves the node ----
+// The highlight is switched ON by the LABEL node's own Step, but it has to be
+// switched OFF from here rather than from that node's else branch. That event
+// has several early exits above the hover block — asset viewer, info window,
+// label search, the SHOW CODE panel — so a pointer that leaves the label by
+// crossing onto one of those never reaches the node's own clear.
+//
+// Only re-tested when the pointer actually MOVES. Pressing Enter cycles the
+// camera through the references, which slides a different node under a
+// stationary cursor; re-testing on a camera move would kill the highlight
+// halfway through the cycle.
+if (_moved && global.ref_highlight_source != noone) {
+    var _ref_still_hovered = false;
+
+    if (instance_exists(global.ref_highlight_source)) {
+        with (global.ref_highlight_source) {
+            _ref_still_hovered = point_in_rectangle(mouse_x, mouse_y,
+                                                    x + x_indent, y,
+                                                    x + x_indent + width, y + height);
+        }
+    }
+
+    if (!_ref_still_hovered) {
+        global.ref_highlight_source = noone;
+        global.ref_highlight_name   = "";
+    }
+}
+
 var _idle_was = global.idle_active;
 
 if (_moved || _clicked || _keyed) {

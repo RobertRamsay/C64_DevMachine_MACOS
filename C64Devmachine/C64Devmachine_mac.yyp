@@ -1251,6 +1251,7 @@
     {"id":{"name":"scr_note_name_to_hz","path":"scripts/scr_note_name_to_hz/scr_note_name_to_hz.yy",},},
     {"id":{"name":"scr_opcode_helper","path":"scripts/scr_opcode_helper/scr_opcode_helper.yy",},},
     {"id":{"name":"scr_opcode_hex","path":"scripts/scr_opcode_hex/scr_opcode_hex.yy",},},
+    {"id":{"name":"scr_show_code_panel","path":"scripts/scr_show_code_panel/scr_show_code_panel.yy",},},
     {"id":{"name":"scr_opt_held","path":"scripts/scr_opt_held/scr_opt_held.yy",},},
     {"id":{"name":"scr_opt_pressed","path":"scripts/scr_opt_pressed/scr_opt_pressed.yy",},},
     {"id":{"name":"scr_opt_released","path":"scripts/scr_opt_released/scr_opt_released.yy",},},
