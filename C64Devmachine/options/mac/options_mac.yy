@@ -14,7 +14,7 @@
   "option_mac_copyright":"",
   "option_mac_disable_sandbox":true,
   "option_mac_display_cursor":true,
-  "option_mac_display_name":"C64Devmachine_V1_11",
+  "option_mac_display_name":"C64Devmachine_V1_12",
   "option_mac_enable_retina":false,
   "option_mac_enable_steam":false,
   "option_mac_icon_png":"${options_dir}/mac/icons/1024.png",
