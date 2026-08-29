@@ -24,6 +24,11 @@ idle_last_my = _my;
 // the pointer is over, for the listing highlight.
 scr_show_code_hit();
 
+// CONVERT TO CODE button: same reasoning — the workspace clears the selection
+// on any left click that is not over GUI, so the button has to be known hot
+// BEFORE the Step events run, or it would destroy the selection it acts on.
+scr_cbc_hit();
+
 // ---- LABEL REFERENCE HIGHLIGHT: drop it once the pointer leaves the node ----
 // The highlight is switched ON by the LABEL node's own Step, but it has to be
 // switched OFF from here rather than from that node's else branch. That event
