@@ -1615,7 +1615,7 @@ if (!is_entering_text && !global.is_any_text_active and !obj_asset_manager.viewe
     var _hover_node = noone;
     with (obj_c64_node) {
         if (node_type != "INIT" && is_connected &&
-            point_in_rectangle(mouse_x, mouse_y, x, y, x + width, y + height)) {
+            scr_node_mouse_over(id)) {
             _hover_node = id;
             break;
         }
@@ -1643,7 +1643,7 @@ if (keyboard_check_pressed(ord("O")) && !_hover_blocks_spawn) { scr_node_spawn("
         var _toggled = false;
         with (obj_c64_node) {
             if (!_toggled && node_type == "NORMAL" &&
-                point_in_rectangle(mouse_x, mouse_y, x, y, x + width, y + height)) {
+                scr_node_mouse_over(id)) {
                 var _mn = string_lower(string(instructions[0][0]));
                 if (_mn == "rts") {
                     instructions[0][0] = "rti";
@@ -1686,7 +1686,7 @@ if (keyboard_check_pressed(ord("J"))  && !keyboard_check(vk_alt) )   {
         var _toggled = false;
         with (obj_c64_node) {
             if (!_toggled && node_type == "NORMAL" &&
-                point_in_rectangle(mouse_x, mouse_y, x, y, x + width, y + height)) {
+                scr_node_mouse_over(id)) {
                 var _mn = string_lower(string(instructions[0][0]));
                 if (_mn == "jmp_abs" || _mn == "jmp_ind" || _mn == "jmp") {
                     instructions[0][0] = "jsr";
@@ -1743,7 +1743,7 @@ if (keyboard_check_pressed(ord("S")) && !scr_cmd_held() && !keyboard_check(vk_sh
     var _toggled = false;
     with (obj_c64_node) {
         if (!_toggled && node_type == "NORMAL" &&
-            point_in_rectangle(mouse_x, mouse_y, x, y, x + width, y + height)) {
+            scr_node_mouse_over(id)) {
             var _mn  = string_lower(string(instructions[0][0]));
             var _idx = -1;
             for (var _ci = 0; _ci < array_length(_sta_cycle); _ci++) {
@@ -1782,7 +1782,7 @@ if (keyboard_check_pressed(ord("S")) && keyboard_check(vk_shift) && !scr_cmd_hel
     var _toggled = false;
     with (obj_c64_node) {
         if (!_toggled && node_type == "NORMAL" &&
-            point_in_rectangle(mouse_x, mouse_y, x, y, x + width, y + height)) {
+            scr_node_mouse_over(id)) {
             var _mn  = string_lower(string(instructions[0][0]));
             var _idx = -1;
             for (var _ci = 0; _ci < array_length(_stx_cycle); _ci++) {
@@ -1821,7 +1821,7 @@ if (keyboard_check_pressed(ord("S")) && keyboard_check(vk_lalt) && !scr_cmd_held
     var _toggled = false;
     with (obj_c64_node) {
         if (!_toggled && node_type == "NORMAL" &&
-            point_in_rectangle(mouse_x, mouse_y, x, y, x + width, y + height)) {
+            scr_node_mouse_over(id)) {
             var _mn  = string_lower(string(instructions[0][0]));
             var _idx = -1;
             for (var _ci = 0; _ci < array_length(_sty_cycle); _ci++) {
@@ -1867,7 +1867,7 @@ if (keyboard_check_pressed(ord("C")) && keyboard_check(vk_shift) && !scr_cmd_hel
     var _toggled = false;
     with (obj_c64_node) {
         if (!_toggled && node_type == "NORMAL" &&
-            point_in_rectangle(mouse_x, mouse_y, x, y, x + width, y + height)) {
+            scr_node_mouse_over(id)) {
             var _mn  = string_lower(string(instructions[0][0]));
             var _idx = -1;
             for (var _ci = 0; _ci < array_length(_cmp_cycle); _ci++) {
@@ -1908,7 +1908,7 @@ if (keyboard_check_pressed(ord("D")) && keyboard_check(vk_shift) && !scr_cmd_hel
     var _toggled = false;
     with (obj_c64_node) {
         if (!_toggled && node_type == "NORMAL" &&
-            point_in_rectangle(mouse_x, mouse_y, x, y, x + width, y + height)) {
+            scr_node_mouse_over(id)) {
             var _mn  = string_lower(string(instructions[0][0]));
             var _idx = -1;
             for (var _ci = 0; _ci < array_length(_dec_cycle); _ci++) {
@@ -1952,7 +1952,7 @@ if (keyboard_check_pressed(ord("I")) && keyboard_check(vk_shift) && !scr_cmd_hel
     var _toggled = false;
     with (obj_c64_node) {
         if (!_toggled && node_type == "NORMAL" &&
-            point_in_rectangle(mouse_x, mouse_y, x, y, x + width, y + height)) {
+            scr_node_mouse_over(id)) {
             var _mn  = string_lower(string(instructions[0][0]));
             var _idx = -1;
             for (var _ci = 0; _ci < array_length(_inc_cycle); _ci++) {
@@ -1995,7 +1995,7 @@ if (keyboard_check_pressed(ord("T")) && !scr_cmd_held() && !keyboard_check(vk_sh
     var _toggled = false;
     with (obj_c64_node) {
         if (!_toggled && node_type == "NORMAL" &&
-            point_in_rectangle(mouse_x, mouse_y, x, y, x + width, y + height)) {
+            scr_node_mouse_over(id)) {
             var _mn  = string_lower(string(instructions[0][0]));
             var _idx = -1;
             for (var _ci = 0; _ci < array_length(_t_cycle); _ci++) {
@@ -2034,7 +2034,7 @@ if (keyboard_check_pressed(ord("L")) && !keyboard_check(vk_shift) && !keyboard_c
     var _toggled = false;
     with (obj_c64_node) {
         if (!_toggled && node_type == "NORMAL" &&
-            point_in_rectangle(mouse_x, mouse_y, x, y, x + width, y + height)) {
+            scr_node_mouse_over(id)) {
             var _mn  = string_lower(string(instructions[0][0]));
             var _idx = -1;
             for (var _ci = 0; _ci < array_length(_lda_cycle); _ci++) {
@@ -2073,7 +2073,7 @@ if (keyboard_check_pressed(ord("L")) && keyboard_check(vk_shift) && !obj_workspa
     var _toggled = false;
     with (obj_c64_node) {
         if (!_toggled && node_type == "NORMAL" &&
-            point_in_rectangle(mouse_x, mouse_y, x, y, x + width, y + height)) {
+            scr_node_mouse_over(id)) {
             var _mn  = string_lower(string(instructions[0][0]));
             var _idx = -1;
             for (var _ci = 0; _ci < array_length(_ldx_cycle); _ci++) {
@@ -2114,7 +2114,7 @@ if (keyboard_check_pressed(ord("L")) && keyboard_check(vk_lalt) && !obj_workspac
     var _toggled = false;
     with (obj_c64_node) {
         if (!_toggled && node_type == "NORMAL" &&
-            point_in_rectangle(mouse_x, mouse_y, x, y, x + width, y + height)) {
+            scr_node_mouse_over(id)) {
             var _mn  = string_lower(string(instructions[0][0]));
             var _idx = -1;
             for (var _ci = 0; _ci < array_length(_ldy_cycle); _ci++) {
@@ -4474,6 +4474,7 @@ if (scr_primary_pressed() && scr_cmd_held() && !_in_gui && !box_select_active)
     var _hit = false;
 with (obj_c64_node) {
         if (node_type == "INIT") continue;
+        if (scr_node_is_hidden(id)) continue;
         if (point_in_rectangle(mouse_x, mouse_y, x + x_indent, y, x + x_indent + width, y + height)) { _hit = true; break; }
     }
     if (!_hit) {
@@ -4499,6 +4500,10 @@ if (box_select_active) {
 	global.selected_nodes = [];
 	with (obj_c64_node) {
 	            if (node_type == "INIT") continue;
+	            // Folded children sit stacked under their header with their real
+	            // height intact, so without this a lasso across a collapsed block
+	            // would select every node in it while showing none of them.
+	            if (scr_node_is_hidden(id)) continue;
 	            var _passes = (x + x_indent < _rx2 && x + x_indent + width > _rx1 && y < _ry2 && y + height > _ry1);
 	            if (_passes) show_debug_message("SELECTED: " + node_type + " x=" + string(x) + " indent=" + string(x_indent) + " w=" + string(width) + " rx1=" + string(_rx1) + " rx2=" + string(_rx2));
 	            if (_passes) array_push(global.selected_nodes, id);
@@ -4532,7 +4537,7 @@ box_select_active = false;
 var _clicking_handle = false;
 if (instance_exists(global.group_drag_handle) && mouse_check_button_pressed(mb_left)) {
     var _hn = global.group_drag_handle;
-    if (point_in_rectangle(mouse_x, mouse_y, _hn.x, _hn.y, _hn.x + _hn.width, _hn.y + _hn.height)) {
+    if (scr_node_mouse_over(_hn)) {
         _clicking_handle = true;
     }
 }
@@ -4622,7 +4627,19 @@ if (keyboard_check_pressed(vk_tab) && array_length(global.selected_nodes) > 0 &&
 
 // 1. Handle Release Logic (Snapshots and Autosave)
 if (mouse_check_button_released(mb_any)) {
-    alarm[1] = 6;
+    // Alarm 1 does `global.addresses_dirty = true; scr_c64_do_update_addresses();`
+    // — a FULL recompile, unconditionally, six frames after ANY mouse release.
+    // A click on empty canvas therefore paid for the whole compile chain, and
+    // with the code panel open it also paid for the panel build, the address
+    // sort and the attribution walk on top. That is the click-in-space cost.
+    //
+    // Arming it only when something is actually dirty loses nothing: if nothing
+    // was dirty at release then nothing changed, and anything that becomes
+    // dirty later is already caught by the every-frame addresses_dirty test
+    // further down.
+    if (global.undo_dirty || global.addresses_dirty) {
+        alarm[1] = 6;
+    }
     with (obj_c64_node) { stats_cache_dirty = true; }
     
     // If we were dragging or changing things, finalize the addresses now

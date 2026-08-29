@@ -9,6 +9,10 @@ global.gui_mouse_x = device_mouse_x_to_gui(0);
 global.gui_mouse_y = device_mouse_y_to_gui(0);
 global.gui_w       = display_get_gui_width();
 
+// ORG fold tabs: same reasoning again — hover and the toggle itself both have
+// to be settled before any Step event runs.
+scr_org_collapse_hit();
+
 // ---- IDLE DETECTION ----
 var _mx = global.gui_mouse_x;
 var _my = global.gui_mouse_y;

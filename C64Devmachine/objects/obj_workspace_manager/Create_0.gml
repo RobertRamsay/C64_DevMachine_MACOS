@@ -1043,6 +1043,15 @@ global.showcode_hover_node = noone;  // workspace node under the pointer
 // not also treated as a click on empty workspace (which clears the selection).
 global.cbc_button_hot = false;
 
+// ORG fold tab under the pointer, or noone. Set in Begin Step so the click that
+// presses it is not also treated as a click on the ORG node (starting a drag)
+// or on empty canvas (clearing the selection).
+global.org_collapse_hot = noone;
+
+// Is the INIT header folded? Refreshed every Begin Step by scr_org_collapse_hit
+// so scr_node_is_hidden can answer in O(1) for every node it is asked about.
+global.init_collapsed = false;
+
 scr_uqmenu_load();
 
 // FLOW OVERLAY (F key) — toggleable visualization of JMP/JSR/BRANCH/IRQ-
