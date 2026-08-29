@@ -55,6 +55,7 @@ function scr_load_workspace_from_path(_path) {
         var _n = instance_create_layer(d.x, d.y, "Layer_Nodes", obj_c64_node);
         _n.is_dragging = true;
 
+        _n.load_idx     = i;
         _n.node_title   = d.title;
         _n.node_type    = d.type;
         _n.instructions = d.code;
@@ -188,34 +189,43 @@ function scr_load_workspace_from_path(_path) {
         }
     }
 ////
-with (obj_c64_node) {
+// Each node finds ITS OWN record by index. This used to scan the saved
+    // records for the first one within 4px and take that — which is ambiguous
+    // the moment two nodes share a position, and they do: park an unattached
+    // node on top of a child and both live nodes match whichever record comes
+    // first in the array. One of them then inherits the other's parenting.
+    //
+    // That is what produced the "node from the block decided to move over"
+    // artifact. A child that picked up an unattached node's record lost its
+    // org_parent while keeping is_connected, so PASS 3 of
+    // scr_c64_do_update_addresses treated it as a MAIN SPINE node and repacked
+    // its y — while leaving its x alone, stranding it between the columns.
+    //
+    // load_idx is stamped at creation, so the mapping is exact and one-to-one.
+    // The org_uid field in the save format would have done this too, but it is
+    // written as -1 for every node, so it carries nothing to match on.
+    with (obj_c64_node) {
         if (node_type == "ORG" || node_type == "INIT") continue;
         var _linked = false;
-        for (var _li = 0; _li < array_length(_nodes); _li++) {
-            var _ld = _nodes[_li];
-            if (abs(x - _ld.x) < 4 && abs(y - _ld.y) < 4) {
-                if (variable_struct_exists(_ld, "org_parent_x") && _ld.org_parent_x != -1) {
-                    _target_ox = _ld.org_parent_x;
-                    _target_oy = _ld.org_parent_y;
-                    with (obj_c64_node) {
-                        if (node_type == "ORG" && abs(x - other._target_ox) < 4 && abs(y - other._target_oy) < 4) {
-                            other.org_parent   = id;
-                            other.is_connected = true;
-                            other._linked      = true;
-                        }
+        if (load_idx >= 0 && load_idx < array_length(_nodes)) {
+            var _ld = _nodes[load_idx];
+            if (variable_struct_exists(_ld, "org_parent_x") && _ld.org_parent_x != -1) {
+                _target_ox = _ld.org_parent_x;
+                _target_oy = _ld.org_parent_y;
+                with (obj_c64_node) {
+                    if (node_type == "ORG" && abs(x - other._target_ox) < 4 && abs(y - other._target_oy) < 4) {
+                        other.org_parent   = id;
+                        other.is_connected = true;
+                        other._linked      = true;
                     }
                 }
-                break;
             }
         }
         if (!_linked && !is_connected) {
             var _had_org = false;
-            for (var _li2 = 0; _li2 < array_length(_nodes); _li2++) {
-                var _ld2 = _nodes[_li2];
-                if (abs(x - _ld.x) < 4 && abs(y - _ld.y) < 4) {
-                    _had_org = variable_struct_exists(_ld2, "has_org_parent") && _ld2.has_org_parent;
-                    break;
-                }
+            if (load_idx >= 0 && load_idx < array_length(_nodes)) {
+                var _ld2 = _nodes[load_idx];
+                _had_org = variable_struct_exists(_ld2, "has_org_parent") && _ld2.has_org_parent;
             }
             if (_had_org) {
                 var _best_dist = 999999;
@@ -950,6 +960,64 @@ global.kernal_unlocked = variable_struct_exists(load_data, "kernal_unlocked") ? 
             if (node_title == "KERNAL RAM UNLOCK") global.kernal_unlocked = true;
             if (node_title == "BASIC RAM UNLOCK")  global.basic_unlocked  = true;
         }
+    }
+
+    // ---- UNATTACHED NODES ------------------------------------------------
+    // is_connected false means the node sits in no spine and no ORG owns it: it
+    // emits nothing and the build never sees it. That is often deliberate — one
+    // dragged out and parked while you work looks exactly the same — so this
+    // reports and asks rather than deleting on its own.
+    //
+    // What made it worth surfacing: a node parked over a COLLAPSED block reads
+    // as the fold having left something behind. It has not. The fold only hides
+    // nodes an ORG actually owns, and an unowned one is correctly still drawn.
+    //
+    // ORG nodes are excluded because they are NEVER is_connected — nothing sets
+    // it true on them, which is why Draw_0 keeps writing
+    // `(is_connected || node_type == "ORG")`. Comments and free/palette nodes
+    // float by design, and a macro child belongs to its owner, not the spine.
+    var _loose = [];
+    with (obj_c64_node) {
+        if (node_type == "ORG")     { continue; }
+        if (node_type == "INIT")    { continue; }
+        if (node_type == "COMMENT") { continue; }
+        if (is_free_node)           { continue; }
+        if (macro_owner != noone)   { continue; }
+        if (is_connected)           { continue; }
+        array_push(_loose, id);
+    }
+
+    if (array_length(_loose) > 0) {
+        var _lcount = array_length(_loose);
+        var _lmsg   = string(_lcount) + " UNATTACHED NODE";
+        if (_lcount != 1) {
+            _lmsg += "S";
+        }
+        _lmsg += " IN THIS PROJECT\n\n";
+
+        var _lshow = min(_lcount, 6);
+        for (var _lq = 0; _lq < _lshow; _lq++) {
+            var _lnode = _loose[_lq];
+            _lmsg += "  " + string(_lnode.node_title)
+                  +  "  at " + string(_lnode.x) + "," + string(_lnode.y) + "\n";
+        }
+        if (_lcount > _lshow) {
+            _lmsg += "  ...and " + string(_lcount - _lshow) + " more\n";
+        }
+
+        _lmsg += "\nThese connect to nothing, so they build nothing.\n";
+        _lmsg += "One parked over a collapsed block looks like the fold\n";
+        _lmsg += "has left something behind.\n\nRemove them?";
+
+        if (show_question(_lmsg)) {
+            for (var _lr = 0; _lr < _lcount; _lr++) {
+                if (instance_exists(_loose[_lr])) {
+                    instance_destroy(_loose[_lr]);
+                }
+            }
+            global.addresses_dirty = true;
+        }
+        io_clear();
     }
 
     var _undo_dir      = working_directory + "temp/undo/";
