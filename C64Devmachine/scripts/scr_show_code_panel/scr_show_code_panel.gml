@@ -347,6 +347,12 @@ function scr_show_code_build(_compiled) {
     if (!instance_exists(obj_workspace_manager)) { exit; }
 
     with (obj_workspace_manager) {
+        // Shut means shut. This walks the whole compile stream, allocates a
+        // struct per row and now sorts the result into address order, and it
+        // was running on every address update whether or not anything was going
+        // to look at it. The toggle raises global.addresses_dirty so the very
+        // next frame after opening rebuilds it.
+        if (!showcode_open) { exit; }
         var _flat    = [];
         var _pc      = global.start_pc;
         var _pcstack = [];   // mirrors c64_new_program's org(-2)/org(-3) stack
@@ -455,7 +461,12 @@ function scr_show_code_build(_compiled) {
                     _oinst = _brkinst;
                 }
 
-                array_push(_flat, { kind:"org", key:_okey, name:_oname, owner:"", inst:_oinst, pc:_pc, raw:_m, mnem:_m, val:0, lbl:"", sz:0, res:0, hasres:false, count:0, vals:[], dkey:"", internal:false, used:false, used_code:false });
+                // `top` separates a real block boundary from a macro parking a table
+                // off-spine inside a save/restore bracket. Only the former may
+                // cut the listing into re-orderable segments — the bracketed
+                // ones are the "inline stuff" and must stay exactly where they
+                // are, inside the run that owns them.
+                array_push(_flat, { kind:"org", key:_okey, name:_oname, owner:"", inst:_oinst, pc:_pc, raw:_m, mnem:_m, val:0, lbl:"", sz:0, res:0, hasres:false, count:0, vals:[], dkey:"", internal:false, used:false, used_code:false, top:(array_length(_pcstack) == 0) });
                 continue;
             }
 
@@ -537,7 +548,7 @@ function scr_show_code_build(_compiled) {
                 if (ds_map_exists(_userlbl, _lbl)) {
                     _isint = false;
                 }
-                array_push(_flat, { kind:"label", key:_key, name:_name, owner:_owner, inst:_inst, pc:_pc, raw:_m, mnem:_m, val:0, lbl:_lbl, sz:0, res:0, hasres:false, count:0, vals:[], dkey:"", internal:_isint, used:false, used_code:false });
+                array_push(_flat, { kind:"label", key:_key, name:_name, owner:_owner, inst:_inst, pc:_pc, raw:_m, mnem:_m, val:0, lbl:_lbl, sz:0, res:0, hasres:false, count:0, vals:[], dkey:"", internal:_isint, used:false, used_code:false, top:false });
                 continue;
             }
 
@@ -547,7 +558,7 @@ function scr_show_code_build(_compiled) {
                 // pointer, not table filler, and it needs its own resolution.
                 if (_lbl != "") {
                     _run = -1;
-                    array_push(_flat, { kind:"byte", key:_key, name:_name, owner:_owner, inst:_inst, pc:_pc, raw:_m, mnem:"byte", val:_v, lbl:_lbl, sz:1, res:0, hasres:false, count:1, vals:[], dkey:"", internal:false, used:false, used_code:false });
+                    array_push(_flat, { kind:"byte", key:_key, name:_name, owner:_owner, inst:_inst, pc:_pc, raw:_m, mnem:"byte", val:_v, lbl:_lbl, sz:1, res:0, hasres:false, count:1, vals:[], dkey:"", internal:false, used:false, used_code:false, top:false });
                     _pc += 1;
                     continue;
                 }
@@ -574,7 +585,7 @@ function scr_show_code_build(_compiled) {
                     if (_owner != "") {
                         _dname = _owner;
                     }
-                    array_push(_flat, { kind:"data", key:_key, name:_dname, owner:_owner, inst:_inst, pc:_pc, raw:"byte", mnem:"byte", val:0, lbl:"", sz:1, res:0, hasres:false, count:1, vals:[_v], dkey:"D:" + _inst + "@" + scr_show_code_hex(_pc, 4), internal:false, used:false, used_code:false });
+                    array_push(_flat, { kind:"data", key:_key, name:_dname, owner:_owner, inst:_inst, pc:_pc, raw:"byte", mnem:"byte", val:0, lbl:"", sz:1, res:0, hasres:false, count:1, vals:[_v], dkey:"D:" + _inst + "@" + scr_show_code_hex(_pc, 4), internal:false, used:false, used_code:false, top:false });
                     _run = array_length(_flat) - 1;
                 }
 
@@ -596,7 +607,7 @@ function scr_show_code_build(_compiled) {
             }
 
             _run = -1;
-            array_push(_flat, { kind:"op", key:_key, name:_name, owner:_owner, inst:_inst, pc:_pc, raw:_m, mnem:_norm, val:_v, lbl:_lbl, sz:_sz, res:0, hasres:false, count:1, vals:[], dkey:"", internal:false, used:false, used_code:false });
+            array_push(_flat, { kind:"op", key:_key, name:_name, owner:_owner, inst:_inst, pc:_pc, raw:_m, mnem:_norm, val:_v, lbl:_lbl, sz:_sz, res:0, hasres:false, count:1, vals:[], dkey:"", internal:false, used:false, used_code:false, top:false });
             _pc += _sz;
         }
 
@@ -688,6 +699,61 @@ function scr_show_code_build(_compiled) {
             _tot += _flat[_t].sz;
         }
 
+        // ---- PASS 4: put the listing in ADDRESS order.
+        //
+        // scr_compile_chain emits ORG blocks sorted by their node's canvas y:
+        //
+        //     array_sort(_org_nodes, function(a, b) { return a.y - b.y; });
+        //
+        // so the stream follows where you happened to drag the blocks, not
+        // where the code actually lives, and reading down the panel jumped
+        // around the memory map. The asset export tail then arrives after every
+        // block regardless of address, jumping again.
+        //
+        // This reorders the VIEW only. The compile stream is untouched, so
+        // nothing about the built program changes — doing it in the compile
+        // chain would have altered real emission order, and with two ORG blocks
+        // overlapping that decides which one wins.
+        //
+        // Segments are cut at TOP-LEVEL org rows only, so a macro bracketed
+        // data table travels with its owner rather than being flung off to its
+        // own address. The sort carries the original index as a tie-breaker,
+        // because GML array_sort makes no stability promise and two blocks at
+        // one address must not swap places at random between frames.
+        var _segs    = [];
+        var _cur_seg = { pc: global.start_pc, idx: 0, rows: [] };
+
+        for (var _s4 = 0; _s4 < array_length(_flat); _s4++) {
+            var _r4 = _flat[_s4];
+            if (_r4.kind == "org" && _r4.top) {
+                if (array_length(_cur_seg.rows) > 0) {
+                    array_push(_segs, _cur_seg);
+                }
+                _cur_seg = { pc: _r4.pc, idx: array_length(_segs), rows: [] };
+            }
+            array_push(_cur_seg.rows, _r4);
+        }
+        if (array_length(_cur_seg.rows) > 0) {
+            array_push(_segs, _cur_seg);
+        }
+
+        array_sort(_segs, function(_a, _b) {
+            if (_a.pc  < _b.pc)  { return -1; }
+            if (_a.pc  > _b.pc)  { return  1; }
+            if (_a.idx < _b.idx) { return -1; }
+            if (_a.idx > _b.idx) { return  1; }
+            return 0;
+        });
+
+        var _ordered = [];
+        for (var _o4 = 0; _o4 < array_length(_segs); _o4++) {
+            var _rows4 = _segs[_o4].rows;
+            for (var _p4 = 0; _p4 < array_length(_rows4); _p4++) {
+                array_push(_ordered, _rows4[_p4]);
+            }
+        }
+        _flat = _ordered;
+
         showcode_flat   = _flat;
         showcode_total  = _tot;
         showcode_gen    = global.named_loc_repack_gen;
@@ -757,6 +823,7 @@ function scr_show_code_attribute() {
     if (!instance_exists(obj_workspace_manager)) { exit; }
 
     with (obj_workspace_manager) {
+        if (!showcode_open) { exit; }
         var _n = array_length(showcode_flat);
         if (_n == 0) { exit; }
 
@@ -1123,6 +1190,11 @@ function scr_show_code_draw() {
         if (scr_primary_pressed() && !showcode_sb_drag) {
             if (_on_min) {
                 showcode_open = !showcode_open;
+                // Nothing was built while it was shut, so ask for the pass that
+                // fills it back in.
+                if (showcode_open) {
+                    global.addresses_dirty = true;
+                }
                 scr_show_code_save_ini();
             } else if (_on_msc && showcode_open) {
                 showcode_misc  = !showcode_misc;
