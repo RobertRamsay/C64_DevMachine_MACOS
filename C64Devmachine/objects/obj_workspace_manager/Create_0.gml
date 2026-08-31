@@ -1,6 +1,6 @@
 /// @desc Setup Workspace, Palette & C64 Environment
-global.lite=1;
-global.build_date = "August 31st, 2026"; // edit this string for each release
+global.lite=0;
+global.build_date = "September 1st, 2026"; // edit this string for each release
 
 // --- GLOBAL CRASH HANDLER ---
 exception_unhandled_handler(function(_ex) {
