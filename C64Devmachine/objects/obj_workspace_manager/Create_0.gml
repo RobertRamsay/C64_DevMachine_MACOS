@@ -74,10 +74,10 @@ welcome_open           = false;
 welcome_hide_checked   = false;
 welcome_credits_y      = 0;
 welcome_whats_new = [
-    "NEW (PRO) - Code blocks IMPORT / EXPORT fully functional",
-    "NEW (PRO) - Import ASM added to import menu - creates a code block with custom code.",
+    "REFINED - INIT block and RTS auto injecting.",
+    "NEW - Mouse Macro for mouse based input.",
     "",
-    "SHARE your Custom Code blocks like a PRO!",
+    "SHARE your Custom Code blocks like a PRO in the Discord user-code-blocks channel.",
     ];
 
 welcome_credits_lines = [
