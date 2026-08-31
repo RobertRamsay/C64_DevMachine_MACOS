@@ -65,6 +65,10 @@ if (box_select_active) {
     // Highlight overlapping nodes
 with (obj_c64_node) {
         if (node_type == "INIT") continue;
+        // These boxes are drawn in GUI space from raw x/y/width/height, so
+        // they ignored the fold entirely — zooming out over a collapsed block
+        // painted its hidden children back onto the screen.
+        if (scr_node_is_hidden(id)) continue;
         var _nx1 = (x + x_indent - _vx) * _sx;
         var _ny1 = (y - _vy) * _sy;
         var _nx2 = (x + x_indent + width  - _vx) * _sx;
@@ -107,6 +111,9 @@ if (array_length(global.selected_nodes) > 0) {
     for (var _si = 0; _si < array_length(global.selected_nodes); _si++) {
         var _sn = global.selected_nodes[_si];
         if (!instance_exists(_sn)) continue;
+        // A node selected before the fold is still in the array. Keep it
+        // selected — unfolding should restore it — but do not paint it.
+        if (scr_node_is_hidden(_sn)) continue;
 		var _nx1 = (_sn.x + _sn.x_indent - _vx) * _sx;
         var _ny1 = (_sn.y - _vy) * _sy;
         var _nx2 = (_sn.x + _sn.x_indent + _sn.width  - _vx) * _sx;
@@ -577,6 +584,7 @@ if (gui_menu_open == 4) {
         { title: "GRID",            action: "GRID"            },
         { title: "EFFECTS",         action: "EFFECTS"         },
         { title: "COMMENTS",        action: "COMMENTS"        },
+        { title: "SHOW CODE",       action: "SHOW_CODE"       },
         { title: "FLOW VIEW",       action: "FLOW_OVERLAY"    },
         { title: "FLOW TYPE",       action: "FLOW_LINE_STYLE" },
         { title: "FULLSCREEN",      action: "FULLSCREEN"      },
@@ -651,6 +659,16 @@ if (gui_menu_open == 4) {
         if (_op.action == "COMMENTS") {
             _state_str = global.comments_visible ? "ON" : "OFF";
             _state_col = global.comments_visible ? c_lime : c_red;
+        }
+        if (_op.action == "SHOW_CODE") {
+            // showcode_enabled, not showcode_open. Open is the header's
+            // minimise; this is whether the panel is on screen at all.
+            _state_str = "OFF";
+            _state_col = c_red;
+            if (showcode_enabled) {
+                _state_str = "ON";
+                _state_col = c_lime;
+            }
         }
         if (_op.action == "FULLSCREEN") {
             _shortcut_str = "F10";
@@ -763,6 +781,10 @@ if (gui_menu_open == 4) {
             }
             else if (_op.action == "COMMENTS") {
                 global.comments_visible = !global.comments_visible;
+            }
+            else if (_op.action == "SHOW_CODE") {
+                showcode_enabled = !showcode_enabled;
+                scr_show_code_save_ini();
             }
             else if (_op.action == "FLOW_OVERLAY") {
                 // Mirrors the F-key handler in obj_workspace_manager Step so

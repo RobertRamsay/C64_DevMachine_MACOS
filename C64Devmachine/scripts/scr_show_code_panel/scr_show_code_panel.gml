@@ -1048,6 +1048,7 @@ function scr_show_code_hit() {
     with (obj_workspace_manager) {
 
         // Mirror every condition that stops Draw putting the panel on screen.
+        if (!showcode_enabled)       { exit; }
         if (hideui)                  { exit; }
         if (gui_menu_open != -1)     { exit; }
         if (instance_exists(obj_asset_manager) && obj_asset_manager.viewer_open) { exit; }
@@ -1092,6 +1093,10 @@ function scr_show_code_hit() {
 
         with (obj_c64_node) {
             if (node_type == "INIT") { continue; }
+            // Folding does not move a node, it only stops it drawing, so its
+            // rectangle is still live under the empty space a fold leaves.
+            // The listing was jumping to code for a node that is not on screen.
+            if (scr_node_is_hidden(id)) { continue; }
             if (point_in_rectangle(mouse_x, mouse_y, x + x_indent, y, x + x_indent + width, y + height)) {
                 global.showcode_hover_node = id;
                 break;
@@ -1110,6 +1115,15 @@ function scr_show_code_draw() {
     with (obj_workspace_manager) {
 
         global.showcode_mouse_over = false;
+
+        // Master switch off: draw nothing, and make sure nothing is left
+        // mid-drag from before it was switched off.
+        if (!showcode_enabled) {
+            showcode_dragging = false;
+            showcode_resize   = 0;
+            showcode_sb_drag  = false;
+            exit;
+        }
 
         // A dropdown menu owns the screen while it is open — stand down so the
         // two panels never fight, and come straight back once it closes.
@@ -1726,6 +1740,11 @@ function scr_show_code_save_ini() {
         ini_write_real("showcode", "w",    floor(showcode_w));
         ini_write_real("showcode", "rows", showcode_rows);
         ini_write_real("showcode", "open", _open_flag);
+        var _enabled_flag = 0;
+        if (showcode_enabled) {
+            _enabled_flag = 1;
+        }
+        ini_write_real("showcode", "enabled", _enabled_flag);
         ini_write_real("showcode", "mode", showcode_mode);
         var _misc_flag = 0;
         if (showcode_misc) {

@@ -1,0 +1,717 @@
+diff --git a/C64Devmachine/objects/obj_c64_node/Other_10.gml b/C64Devmachine/objects/obj_c64_node/Other_10.gml
+index d5fbf61..086e918 100644
+--- a/C64Devmachine/objects/obj_c64_node/Other_10.gml
++++ b/C64Devmachine/objects/obj_c64_node/Other_10.gml
+@@ -42,7 +42,7 @@ if (node_type == "MACRO_CODE" && array_length(instructions) > 0 && array_length(
+             var _pt = string_lower(_parsed[_pi][0]);
+             if (_pt == "pc") {
+                 if (_data_pc >= 0 && _data_sz > 0)
+-                    array_push(code_seg_cache, { addr: _data_pc, size: _data_sz });
++                    array_push(code_seg_cache, { addr: _data_pc, size: _data_sz, no_conflict: false });
+                 _data_pc = _parsed[_pi][1];
+                 _data_sz = 0;
+             } else if (_pt == "byte") {
+@@ -50,7 +50,7 @@ if (node_type == "MACRO_CODE" && array_length(instructions) > 0 && array_length(
+             }
+         }
+         if (_data_pc >= 0 && _data_sz > 0)
+-            array_push(code_seg_cache, { addr: _data_pc, size: _data_sz });
++            array_push(code_seg_cache, { addr: _data_pc, size: _data_sz, no_conflict: false });
+         code_cache_dirty = false;
+     }
+ }
+diff --git a/C64Devmachine/objects/obj_c64_node/Step_0.gml b/C64Devmachine/objects/obj_c64_node/Step_0.gml
+index 5638c8e..e8c7746 100644
+--- a/C64Devmachine/objects/obj_c64_node/Step_0.gml
++++ b/C64Devmachine/objects/obj_c64_node/Step_0.gml
+@@ -1935,6 +1935,10 @@ if (global.group_drag_handle == id) {
+             with (obj_c64_node) {
+                 if (id == _self_ref) continue;
+                 if (is_dragging) continue;
++                // A folded node still has its header rectangle sitting in the
++                // gap the fold leaves, so it kept claiming drags in empty space
++                // and the node you were actually holding refused to move.
++                if (scr_node_is_hidden(id)) continue;
+                 if (depth < _self_ref.depth) {
+                     var _hdr_x = x + x_indent;
+                     if (point_in_rectangle(mouse_x, mouse_y, _hdr_x, y, _hdr_x + width, y + 24)) {
+diff --git a/C64Devmachine/objects/obj_workspace_manager/Create_0.gml b/C64Devmachine/objects/obj_workspace_manager/Create_0.gml
+index 2b3ca1b..f1bea18 100644
+--- a/C64Devmachine/objects/obj_workspace_manager/Create_0.gml
++++ b/C64Devmachine/objects/obj_workspace_manager/Create_0.gml
+@@ -876,8 +876,7 @@ global.hw_picker_categories = [
+             "HW_JOY1", "HW_JOY2",
+             "HW_CIA2_PRA", "HW_CIA2_PRB",
+             "HW_CIA1_ICR", "HW_CIA2_ICR",
+-            "HW_IRQ_STATUS", "HW_IRQ_MASK", "HW_IRQ_VEC_LO", "HW_IRQ_VEC_HI",
+-			"HW_C64U_SPEED"
++            "HW_IRQ_STATUS", "HW_IRQ_MASK", "HW_IRQ_VEC_LO", "HW_IRQ_VEC_HI"
+         ]
+     },
+     {
+@@ -886,6 +885,27 @@ global.hw_picker_categories = [
+             "HW_CHROUT", "HW_GETIN",
+             "HW_JIFFIES_LO", "HW_JIFFIES_MID", "HW_JIFFIES_HI"
+         ]
++    },
++    {
++        // Ultimate-64 only. Everything here reads $FF on a stock C64, and
++        // the turbo group additionally needs Turbo Mode enabled in the
++        // Ultimate's own config menu.
++        name: "C64U: SPEED",
++        items: [
++            "HW_C64U_TURBO", "HW_C64U_SPEED",
++            "HW_SCPU_NORMAL", "HW_SCPU_TURBO", "HW_SCPU_DETECT"
++        ]
++    },
++    {
++        name: "C64U: REU & UCI",
++        items: [
++            "HW_REU_STATUS", "HW_REU_CMD",
++            "HW_REU_C64_LO", "HW_REU_C64_HI",
++            "HW_REU_ADDR_LO", "HW_REU_ADDR_HI", "HW_REU_BANK",
++            "HW_REU_LEN_LO", "HW_REU_LEN_HI",
++            "HW_REU_IRQMASK", "HW_REU_CTRL",
++            "HW_UCI_CTRL", "HW_UCI_CMD", "HW_UCI_RESP", "HW_UCI_STAT"
++        ]
+     }
+ ];
+ 
+@@ -960,10 +980,19 @@ welcome_open          = !welcome_hide_checked;
+ // -1 on x is the "never positioned" marker; the draw script parks it beside the
+ // shortcuts column the first time it runs, then this holds the dragged position.
+ showcode_x    = ini_read_real("showcode", "x",    -1);
+-showcode_y    = ini_read_real("showcode", "y",    50);
+-showcode_w    = clamp(ini_read_real("showcode", "w",    420), 300, 900);
+-showcode_rows = clamp(ini_read_real("showcode", "rows",  20),   5,  60);
++showcode_y    = ini_read_real("showcode", "y",    53);
++// SHOWCODE_W_MIN/MAX rather than the literals this used to carry. The panel's
++// floor moved to 225 when it was allowed to narrow further, but this clamp kept
++// its own 300 — so a saved width below 300 was quietly widened on every load
++// and the narrow panel never survived a restart.
++showcode_w    = clamp(ini_read_real("showcode", "w",   248), SHOWCODE_W_MIN, SHOWCODE_W_MAX);
++showcode_rows = clamp(ini_read_real("showcode", "rows",  22),   5,  SHOWCODE_MAX_ROWS);
+ showcode_open = (ini_read_real("showcode", "open", 1) == 1);
++// Two separate things, deliberately. showcode_open is the header's minimise
++// chevron: the panel is still there, rolled up to its title bar. This one is
++// the master switch from OPTIONS -> SHOW CODE: off means the panel does not
++// exist on screen at all, header included, and claims no mouse.
++showcode_enabled = (ini_read_real("showcode", "enabled", 1) == 1);
+ showcode_mode = clamp(ini_read_real("showcode", "mode", 0), 0, 1);
+ // MISC: byte tables, <LABEL/>LABEL pointer bytes and macro scaffolding labels.
+ // Off by default — the lean view is just the code.
+diff --git a/C64Devmachine/objects/obj_workspace_manager/Draw_64.gml b/C64Devmachine/objects/obj_workspace_manager/Draw_64.gml
+index a2a8b96..a38dbe1 100644
+--- a/C64Devmachine/objects/obj_workspace_manager/Draw_64.gml
++++ b/C64Devmachine/objects/obj_workspace_manager/Draw_64.gml
+@@ -65,6 +65,10 @@ if (box_select_active) {
+     // Highlight overlapping nodes
+ with (obj_c64_node) {
+         if (node_type == "INIT") continue;
++        // These boxes are drawn in GUI space from raw x/y/width/height, so
++        // they ignored the fold entirely — zooming out over a collapsed block
++        // painted its hidden children back onto the screen.
++        if (scr_node_is_hidden(id)) continue;
+         var _nx1 = (x + x_indent - _vx) * _sx;
+         var _ny1 = (y - _vy) * _sy;
+         var _nx2 = (x + x_indent + width  - _vx) * _sx;
+@@ -107,6 +111,9 @@ if (array_length(global.selected_nodes) > 0) {
+     for (var _si = 0; _si < array_length(global.selected_nodes); _si++) {
+         var _sn = global.selected_nodes[_si];
+         if (!instance_exists(_sn)) continue;
++        // A node selected before the fold is still in the array. Keep it
++        // selected — unfolding should restore it — but do not paint it.
++        if (scr_node_is_hidden(_sn)) continue;
+ 		var _nx1 = (_sn.x + _sn.x_indent - _vx) * _sx;
+         var _ny1 = (_sn.y - _vy) * _sy;
+         var _nx2 = (_sn.x + _sn.x_indent + _sn.width  - _vx) * _sx;
+@@ -577,6 +584,7 @@ if (gui_menu_open == 4) {
+         { title: "GRID",            action: "GRID"            },
+         { title: "EFFECTS",         action: "EFFECTS"         },
+         { title: "COMMENTS",        action: "COMMENTS"        },
++        { title: "SHOW CODE",       action: "SHOW_CODE"       },
+         { title: "FLOW VIEW",       action: "FLOW_OVERLAY"    },
+         { title: "FLOW TYPE",       action: "FLOW_LINE_STYLE" },
+         { title: "FULLSCREEN",      action: "FULLSCREEN"      },
+@@ -652,6 +660,16 @@ if (gui_menu_open == 4) {
+             _state_str = global.comments_visible ? "ON" : "OFF";
+             _state_col = global.comments_visible ? c_lime : c_red;
+         }
++        if (_op.action == "SHOW_CODE") {
++            // showcode_enabled, not showcode_open. Open is the header's
++            // minimise; this is whether the panel is on screen at all.
++            _state_str = "OFF";
++            _state_col = c_red;
++            if (showcode_enabled) {
++                _state_str = "ON";
++                _state_col = c_lime;
++            }
++        }
+         if (_op.action == "FULLSCREEN") {
+             _shortcut_str = "F10";
+         }
+@@ -764,6 +782,10 @@ if (gui_menu_open == 4) {
+             else if (_op.action == "COMMENTS") {
+                 global.comments_visible = !global.comments_visible;
+             }
++            else if (_op.action == "SHOW_CODE") {
++                showcode_enabled = !showcode_enabled;
++                scr_show_code_save_ini();
++            }
+             else if (_op.action == "FLOW_OVERLAY") {
+                 // Mirrors the F-key handler in obj_workspace_manager Step so
+                 // both entry points stay in sync.
+diff --git a/C64Devmachine/objects/obj_workspace_manager/Step_0.gml b/C64Devmachine/objects/obj_workspace_manager/Step_0.gml
+index 7faad4c..cb4f79a 100644
+--- a/C64Devmachine/objects/obj_workspace_manager/Step_0.gml
++++ b/C64Devmachine/objects/obj_workspace_manager/Step_0.gml
+@@ -2518,7 +2518,11 @@ if (build_trigger && !global.asset_reload_in_progress) {
+                     var _rts_n = instance_create_depth(_rts_x, _rts_y, -500, obj_c64_node);
+                     _rts_n.node_title   = "RTS";
+                     _rts_n.node_type    = "NORMAL";
+-                    _rts_n.instructions = [["rts"]];
++                    // ["rts", 0], not ["rts"]. Every other RTS in the project
++                    // carries the operand slot — the palette entry, the R key
++                    // spawn, the starter template — and code that walks nodes
++                    // reasonably expects instructions[0][1] to be there.
++                    _rts_n.instructions = [["rts", 0]];
+                     with (_rts_n) { event_user(0); }
+                     _rts_n.pc_address         = 0;
+                     _rts_n.is_connected       = true;
+diff --git a/C64Devmachine/scripts/scr_asset_kla_save/scr_asset_kla_save.gml b/C64Devmachine/scripts/scr_asset_kla_save/scr_asset_kla_save.gml
+index 75af77b..338fd66 100644
+--- a/C64Devmachine/scripts/scr_asset_kla_save/scr_asset_kla_save.gml
++++ b/C64Devmachine/scripts/scr_asset_kla_save/scr_asset_kla_save.gml
+@@ -328,7 +328,14 @@ _asset.buffer = _buf;
+     // Broadcast the update...
+     with (all) {
+         if (variable_instance_exists(id, "instructions")) {
+-            if (is_array(instructions) && array_length(instructions) > 0 && is_array(instructions[0])) {
++            // array_length(instructions[0]) > 1 matters: this runs `with (all)`,
++            // so it inspects EVERY instance in the room, and an inner array of
++            // length 1 is legal — the RTS node the build-time "no core loop or
++            // RTS found" prompt spawns was exactly that. Reading [1] off it is
++            // an index-out-of-range, which is why saving a KLA crashed after
++            // accepting that prompt.
++            if (is_array(instructions) && array_length(instructions) > 0 && is_array(instructions[0])
++             && array_length(instructions[0]) > 1) {
+                 // If the Node's label matches the asset name, force the update!
+                 if (string(instructions[0][1]) == _asset.name) {
+                     
+diff --git a/C64Devmachine/scripts/scr_c64_do_update_addresses/scr_c64_do_update_addresses.gml b/C64Devmachine/scripts/scr_c64_do_update_addresses/scr_c64_do_update_addresses.gml
+index 21455ce..63e3236 100644
+--- a/C64Devmachine/scripts/scr_c64_do_update_addresses/scr_c64_do_update_addresses.gml
++++ b/C64Devmachine/scripts/scr_c64_do_update_addresses/scr_c64_do_update_addresses.gml
+@@ -1032,6 +1032,16 @@ for (var _oi = 0; _oi < array_length(_org_proxy_list); _oi++) {
+ 	    if (!variable_instance_exists(id, "code_seg_cache")) continue;
+ 	    for (var _sci = 0; _sci < array_length(code_seg_cache); _sci++) {
+ 	        var _cs = code_seg_cache[_sci];
++	        // no_conflict marks a segment that is a REFERENCE to an address
++	        // rather than a claim on it. "sta UV_SCORE" records where the block
++	        // writes; it does not mean the block owns those two bytes. Pushing
++	        // those into the pool meant two code blocks both writing the same
++	        // workspace variable produced two owned-looking segments at the
++	        // same address, overlapped, and flashed each other red — a false
++	        // positive, since the variable is shared storage by design.
++	        // scr_build_memory_bar_cache has set this flag all along and the
++	        // memory bar honours it; this pass was the one place that did not.
++	        if (_cs.no_conflict) { continue; }
+ 	        if (_cs.size > 0) {
+ 	            array_push(_segs, { start: _cs.addr, finish: _cs.addr + _cs.size, owner: id, node_id: id });
+ 	        }
+diff --git a/C64Devmachine/scripts/scr_compile_chain/scr_compile_chain.gml b/C64Devmachine/scripts/scr_compile_chain/scr_compile_chain.gml
+index cf8ae9b..ed22104 100644
+--- a/C64Devmachine/scripts/scr_compile_chain/scr_compile_chain.gml
++++ b/C64Devmachine/scripts/scr_compile_chain/scr_compile_chain.gml
+@@ -16,6 +16,32 @@
+ ///      offset), shifts to recover the actual address, adds $03F8+slot, and stores there.
+ ///      Zero-page $FB/$FC are used as scratch (clobbered, documented below).
+ 
++/// $01 BANK GUARD  [BANKGUARD]
++/// ---------------------------------------------------------------------
++/// Several macros need RAM under ROM for the duration of their work, and
++/// used to put $01 back with a flat "lda #$37 / sta $01". That is not a
++/// restore, it is an assumption. A project that had already banked BASIC
++/// out with a BANK SWITCH node (say $36) got $37 written over the top of
++/// it the first time one of these macros ran, and BASIC ROM reappeared
++/// underneath its own data.
++///
++/// The sites below now save and restore for real. The save reads $01 as
++/// it actually is and stores it into the immediate byte of the restore's
++/// LDA; the restore therefore puts back whatever was there on entry. The
++/// $37 those LDAs assemble with is a placeholder that is overwritten
++/// before it can ever execute.
++///
++/// Self-modifying rather than PHA/PLA on purpose: some of these brackets
++/// span hundreds of emitted bytes and carry their own JSR/RTS inside, so
++/// a value pushed at the top would have to survive all of it.
++///
++/// Deliberately NOT guarded:
++///   BANK_SWITCH  - the user's own explicit write to $01. That node IS
++///                  the banking state; guarding it would undo the point.
++///   MACRO_IRQ_HANDLER hardware-vector path - $01 stays at $35 on purpose
++///                  so the CPU fetches $FFFE/$FFFF from RAM.
++///   MACRO_SID_SONG init - documented as banking BASIC out permanently.
++///   sid_irq - already saves and restores $01 through the stack.
+ function scr_compile_chain() {
+     var instruction_list = [];
+     global.inject_null_sid = false;
+@@ -5827,12 +5853,21 @@ if (!_found_valid_sid) {
+ 	    array_push(_list, ["bpl",      "sid_clear", _id]);
+ 
+ // --- Init default track ---
++    // [BANKGUARD] The SID init routine wants standard banking, but this used
++    // to force $37 and then simply walk away, leaving the project banked
++    // however the player wanted rather than however the project wanted.
++    array_push(_list, ["lda_zp",   0x01,            _id]);
++    array_push(_list, ["sta_lab",  "sidinit_bgval", _id]);
+     array_push(_list, ["lda_imm",  0x37,            _id]);
+     array_push(_list, ["sta_zp",   0x01,            _id]);
+     array_push(_list, ["lda_imm",  _track,          _id]);
+     array_push(_list, ["ldx_imm",  0,               _id]);
+     array_push(_list, ["ldy_imm",  0,               _id]);
+ 	array_push(_list, ["jsr",      real(_init_addr), _id]);
++    array_push(_list, ["byte",     0xA9,            _id]);   // LDA #imm
++    array_push(_list, ["label",    "sidinit_bgval"      ]);
++    array_push(_list, ["byte",     0x37,            _id]);   // <- patched
++    array_push(_list, ["sta_zp",   0x01,            _id]);
+     // Raw INS2SND2 SFX needs no init — sfx_play subroutine emitted by MACRO_SFX
+     var _sfx_init_addr = 0; // kept for IRQ tick check below
+ 
+@@ -5985,6 +6020,9 @@ if (_has_irq_nodes) {
+ 	    array_push(_list, ["label",   "sid_init_entry"           ]);
+ 	    array_push(_list, ["sta_zp",  0xFE,              _id]);   // stash track number
+ 	    array_push(_list, ["sei",     0,                 _id]);
++	    // [BANKGUARD] save entry banking; restored just before the CLI below.
++	    array_push(_list, ["lda_zp",  0x01,              _id]);
++	    array_push(_list, ["sta_lab", "sidie_bgval",     _id]);
+ 	    array_push(_list, ["lda_imm", 0x37,              _id]);
+ 	    array_push(_list, ["sta_zp",  0x01,              _id]);
+ 	    array_push(_list, ["lda_imm", 0xFF,              _id]);
+@@ -5993,7 +6031,10 @@ if (_has_irq_nodes) {
+ 	    array_push(_list, ["ldx_imm", 0,                 _id]);
+ 	    array_push(_list, ["ldy_imm", 0,                 _id]);
+ 	    array_push(_list, ["jsr",     real(_init_addr),  _id]);
+-	    array_push(_list, ["lda_imm", 0x37,              _id]);
++	    // [BANKGUARD] restore, operand patched by the save above.
++	    array_push(_list, ["byte",    0xA9,              _id]);   // LDA #imm
++	    array_push(_list, ["label",   "sidie_bgval"          ]);
++	    array_push(_list, ["byte",    0x37,              _id]);   // <- patched
+ 	    array_push(_list, ["sta_zp",  0x01,              _id]);
+ 	    array_push(_list, ["cli",     0,                 _id]);
+ 	    array_push(_list, ["rts",     0,                 _id]);
+@@ -7091,6 +7132,11 @@ case "MACRO_BMP": {
+ 
+ 	array_push(_list, ["sei", 0, _id]);
+ 
++	// [BANKGUARD] Save the $01 we were handed before taking it over.
++	var _bmp_bg = "bmpbank_" + string(real(_id)) + "_";
++	array_push(_list, ["lda_zp",  0x01,            _id]);
++	array_push(_list, ["sta_lab", _bmp_bg + "val", _id]);
++
+ 	// 1. BANKING: Switch to RAM + I/O ($35) 
+ 	// This allows us to read RAM under ROM ($E000-$FFFF) and write to Color RAM ($D800)
+ 	array_push(_list, ["lda_imm", 0x35, _id]);
+@@ -7204,8 +7250,12 @@ case "MACRO_BMP": {
+ 	array_push(_list, ["bpl",     _lbl_zclr_b, _id]);
+ 	*/
+ 
+-array_push(_list, ["lda_imm", 0x37, _id]);
+-	array_push(_list, ["sta_zp",  0x01, _id]);
++	// [BANKGUARD] Put back what was there, not what we assume was there.
++	// The operand byte below is patched at runtime by the save above.
++	array_push(_list, ["byte",   0xA9,            _id]);   // LDA #imm
++	array_push(_list, ["label",  _bmp_bg + "val"      ]);
++	array_push(_list, ["byte",   0x37,            _id]);   // <- patched
++	array_push(_list, ["sta_zp", 0x01,            _id]);
+ 
+ 	// Only emit CLI if no MACRO_IRQ nodes will handle it
+ 	var _bmp_has_irq = false;
+@@ -10834,14 +10884,21 @@ var _first_raster_var      = (array_length(_irq_nodes[0].instructions[0]) > 7) ?
+                 { _irq_has_sid2 = true; break; }
+         }
+         if (!_irq_has_sid2) {
++            // [BANKGUARD] $35 only long enough to write the hardware vector
++            // into RAM; then back to whatever the project was running under.
++            var _irq_bg = _p + "bg";
++            array_push(_list, ["lda_zp",  0x01,            _id]);
++            array_push(_list, ["sta_lab", _irq_bg + "val", _id]);
+             array_push(_list, ["lda_imm", 0x35,            _id]);
+             array_push(_list, ["sta_zp",  0x01,            _id]);
+             array_push(_list, ["lda_lab_lo", _lbl_handler, _id]);
+             array_push(_list, ["sta_abs",    0xFFFE,        _id]);
+             array_push(_list, ["lda_lab_hi", _lbl_handler, _id]);
+             array_push(_list, ["sta_abs",    0xFFFF,        _id]);
+-            array_push(_list, ["lda_imm", 0x37,            _id]);
+-            array_push(_list, ["sta_zp",  0x01,            _id]);
++            array_push(_list, ["byte",   0xA9,             _id]);   // LDA #imm
++            array_push(_list, ["label",  _irq_bg + "val"       ]);
++            array_push(_list, ["byte",   0x37,             _id]);   // <- patched
++            array_push(_list, ["sta_zp", 0x01,             _id]);
+         }
+     }
+     array_push(_list, ["rts",     0,           _id]);
+@@ -15883,7 +15940,11 @@ case "MACRO_CLEAR_BMP_RECT": {
+     // mid-wipe would corrupt the pointer and scatter zeroes across memory.
+     array_push(_list, ["sei", 0, _id]);
+ 
++    // [BANKGUARD] declared outside the if so the restore below can see it.
++    var _cbr_bg = _cbr_pfx + "bg";
+     if (_cbr_basic_off) {
++        array_push(_list, ["lda_zp",  0x01,           _id]);
++        array_push(_list, ["sta_lab", _cbr_bg + "val", _id]);
+         array_push(_list, ["lda_imm", 0x36, _id]); // RAM under BASIC, Kernal + I/O on
+         array_push(_list, ["sta_zp",  0x01, _id]);
+     }
+@@ -15943,8 +16004,11 @@ case "MACRO_CLEAR_BMP_RECT": {
+     array_push(_list, ["bne",     _cbr_pfx + "row",   _id]);
+ 
+     if (_cbr_basic_off) {
+-        array_push(_list, ["lda_imm", 0x37, _id]);
+-        array_push(_list, ["sta_zp",  0x01, _id]);
++        // [BANKGUARD] restore, operand patched by the save above.
++        array_push(_list, ["byte",   0xA9,            _id]);   // LDA #imm
++        array_push(_list, ["label",  _cbr_bg + "val"      ]);
++        array_push(_list, ["byte",   0x37,            _id]);   // <- patched
++        array_push(_list, ["sta_zp", 0x01,            _id]);
+     }
+ 
+     array_push(_list, ["cli", 0, _id]);
+@@ -16149,7 +16213,11 @@ case "MACRO_MOVE_BMP_BLOCK": {
+     // brackets its copy for the same reason.
+     array_push(_list, ["sei", 0, _id]);
+ 
++    // [BANKGUARD] declared outside the if so the restore below can see it.
++    var _mbb_bg = "mbb_" + string(real(_id)) + "_bg";
+     if (_needs_basic_off) {
++        array_push(_list, ["lda_zp",  0x01,            _id]);
++        array_push(_list, ["sta_lab", _mbb_bg + "val", _id]);
+         array_push(_list, ["lda_imm", 0x36, _id]); // RAM under BASIC, Kernal + I/O on
+         array_push(_list, ["sta_zp",  0x01, _id]);
+     }
+@@ -17258,10 +17326,13 @@ case "MACRO_MOVE_BMP_BLOCK": {
+        }
+     }
+ 
+-    // Restore default banking if we changed it
++    // [BANKGUARD] Restore the entry banking if we changed it. Not "default"
++    // banking - the operand byte is patched at runtime by the save above.
+     if (_needs_basic_off) {
+-        array_push(_list, ["lda_imm", 0x37, _id]);
+-        array_push(_list, ["sta_zp",  0x01, _id]);
++        array_push(_list, ["byte",   0xA9,            _id]);   // LDA #imm
++        array_push(_list, ["label",  _mbb_bg + "val"      ]);
++        array_push(_list, ["byte",   0x37,            _id]);   // <- patched
++        array_push(_list, ["sta_zp", 0x01,            _id]);
+     }
+ 
+     array_push(_list, ["cli", 0, _id]);
+diff --git a/C64Devmachine/scripts/scr_draw_flow_overlay/scr_draw_flow_overlay.gml b/C64Devmachine/scripts/scr_draw_flow_overlay/scr_draw_flow_overlay.gml
+index 64b5720..b9d3b04 100644
+--- a/C64Devmachine/scripts/scr_draw_flow_overlay/scr_draw_flow_overlay.gml
++++ b/C64Devmachine/scripts/scr_draw_flow_overlay/scr_draw_flow_overlay.gml
+@@ -81,7 +81,9 @@ function scr_draw_flow_overlay(_edges, _mode, _style = 1) {
+     // Mode 1: Local Hover Mode - find hovered node and abort if empty
+     if (_mode == 1) {
+         with (obj_c64_node) {
+-            if (mouse_x >= x && mouse_x <= x + width && mouse_y >= y && mouse_y <= y + height) {
++            // scr_node_mouse_over is the same rectangle test with the fold
++            // check in front of it — a folded node must not answer the hover.
++            if (scr_node_mouse_over(id)) {
+                 _hovered_node = id;
+                 break;
+             }
+@@ -98,6 +100,11 @@ function scr_draw_flow_overlay(_edges, _mode, _style = 1) {
+     for (var _vi = 0; _vi < array_length(_edges); _vi++) {
+         var _ve = _edges[_vi];
+         if (!instance_exists(_ve.src) || !instance_exists(_ve.tgt)) continue;
++        // An edge with either end inside a folded block drew a line off into
++        // empty canvas, since the node it pointed at is not rendered. Drop the
++        // whole edge rather than half of it. The flow GRAPH is untouched — a
++        // fold is visual only, and unfolding brings the line straight back.
++        if (scr_node_is_hidden(_ve.src) || scr_node_is_hidden(_ve.tgt)) continue;
+         if (_ve.kind == "flow") continue;
+         if (_mode == 1 && _ve.src != _hovered_node && _ve.tgt != _hovered_node) continue;
+         array_push(_visible, _ve);
+diff --git a/C64Devmachine/scripts/scr_init_named_locations/scr_init_named_locations.gml b/C64Devmachine/scripts/scr_init_named_locations/scr_init_named_locations.gml
+index 63d6bb6..adaaa98 100644
+--- a/C64Devmachine/scripts/scr_init_named_locations/scr_init_named_locations.gml
++++ b/C64Devmachine/scripts/scr_init_named_locations/scr_init_named_locations.gml
+@@ -140,7 +140,43 @@ function scr_init_named_locations() {
+     scr_nloc_hw("HW_IRQ_VEC_HI", 0x0315, "KERNAL", "IRQ vector high byte");
+     scr_nloc_hw("HW_NMI_VEC_LO", 0x0318, "KERNAL", "NMI vector low byte");
+     scr_nloc_hw("HW_NMI_VEC_HI", 0x0319, "KERNAL", "NMI vector high byte");
+-	scr_nloc_hw("HW_C64U_SPEED", 0xD031, "KERNAL", "C64U Speed byte 0-15");
++
++    // ---- C64 ULTIMATE ----
++    // Ultimate-64 only. On a stock C64 (and in VICE without a U64 core)
++    // these read back as $FF, so anything using them should either be
++    // guarded or accepted as U64-targeted code.
++    //
++    // The turbo registers additionally need Turbo Mode in the Ultimate's
++    // config menu set to "U64 Turbo Registers" or "Turbo Enable Bit" —
++    // with the selector off they are inert and also read $FF.
++    scr_nloc_hw("HW_C64U_TURBO",  0xD030, "C64U", "Turbo enable: 0=1MHz+badlines, 1=menu speed");
++    scr_nloc_hw("HW_C64U_SPEED",  0xD031, "C64U", "Speed index bits 0-3, bit 7 = badlines off");
++    scr_nloc_hw("HW_SCPU_NORMAL", 0xD07A, "C64U", "SuperCPU speed select - normal (write only)");
++    scr_nloc_hw("HW_SCPU_TURBO",  0xD07B, "C64U", "SuperCPU speed select - 20MHz (write only)");
++    scr_nloc_hw("HW_SCPU_DETECT", 0xD0BC, "C64U", "SuperCPU mode detect (read only)");
++
++    // Ultimate Command Interface — the same four registers the UII+ uses.
++    // Write a command to CMD, pulse bit 0 of CTRL to push it, then poll
++    // CTRL for DATA_AV / STAT_AV and read RESP / STAT.
++    scr_nloc_hw("HW_UCI_CTRL",    0xDF1C, "C64U", "UCI control (w) / status (r)");
++    scr_nloc_hw("HW_UCI_CMD",     0xDF1D, "C64U", "UCI command data (write)");
++    scr_nloc_hw("HW_UCI_RESP",    0xDF1E, "C64U", "UCI response data (read)");
++    scr_nloc_hw("HW_UCI_STAT",    0xDF1F, "C64U", "UCI status data (read)");
++
++    // REU. Not U64-invented — it is the 1750/1764 register set — but the
++    // Ultimate has one built in, which is the only way most projects will
++    // ever meet it. MACRO_REU already writes $DF02-$DF08 directly.
++    scr_nloc_hw("HW_REU_STATUS",  0xDF00, "C64U", "REU status (read clears IRQ flags)");
++    scr_nloc_hw("HW_REU_CMD",     0xDF01, "C64U", "REU command: $90 stash, $91 fetch, $92 swap");
++    scr_nloc_hw("HW_REU_C64_LO",  0xDF02, "C64U", "REU C64 base address low");
++    scr_nloc_hw("HW_REU_C64_HI",  0xDF03, "C64U", "REU C64 base address high");
++    scr_nloc_hw("HW_REU_ADDR_LO", 0xDF04, "C64U", "REU expansion address low");
++    scr_nloc_hw("HW_REU_ADDR_HI", 0xDF05, "C64U", "REU expansion address high");
++    scr_nloc_hw("HW_REU_BANK",    0xDF06, "C64U", "REU expansion bank");
++    scr_nloc_hw("HW_REU_LEN_LO",  0xDF07, "C64U", "REU transfer length low");
++    scr_nloc_hw("HW_REU_LEN_HI",  0xDF08, "C64U", "REU transfer length high");
++    scr_nloc_hw("HW_REU_IRQMASK", 0xDF09, "C64U", "REU interrupt mask");
++    scr_nloc_hw("HW_REU_CTRL",    0xDF0A, "C64U", "REU address control (fix C64 / fix REU)");
+ 
+     // ---- KERNAL ----
+     scr_nloc_hw("HW_CHROUT",     0xFFD2, "KERNAL", "Output char in A to current device");
+diff --git a/C64Devmachine/scripts/scr_load_workspace_from_path/scr_load_workspace_from_path.gml b/C64Devmachine/scripts/scr_load_workspace_from_path/scr_load_workspace_from_path.gml
+index fd20042..ab414a0 100644
+--- a/C64Devmachine/scripts/scr_load_workspace_from_path/scr_load_workspace_from_path.gml
++++ b/C64Devmachine/scripts/scr_load_workspace_from_path/scr_load_workspace_from_path.gml
+@@ -860,7 +860,7 @@ with (obj_c64_node) {
+             var _pt = string_lower(_parsed[_pi][0]);
+             if (_pt == "pc") {
+                 if (_data_pc >= 0 && _data_sz > 0)
+-                    array_push(code_seg_cache, { addr: _data_pc, size: _data_sz });
++                    array_push(code_seg_cache, { addr: _data_pc, size: _data_sz, no_conflict: false });
+                 _data_pc = _parsed[_pi][1];
+                 _data_sz = 0;
+             } else if (_pt == "byte") {
+@@ -868,7 +868,7 @@ with (obj_c64_node) {
+             }
+         }
+         if (_data_pc >= 0 && _data_sz > 0)
+-            array_push(code_seg_cache, { addr: _data_pc, size: _data_sz });
++            array_push(code_seg_cache, { addr: _data_pc, size: _data_sz, no_conflict: false });
+         code_cache_dirty = false;
+     }
+ 
+diff --git a/C64Devmachine/scripts/scr_node_step_macro_text_scroll/scr_node_step_macro_text_scroll.gml b/C64Devmachine/scripts/scr_node_step_macro_text_scroll/scr_node_step_macro_text_scroll.gml
+index f31c416..f6f38fe 100644
+--- a/C64Devmachine/scripts/scr_node_step_macro_text_scroll/scr_node_step_macro_text_scroll.gml
++++ b/C64Devmachine/scripts/scr_node_step_macro_text_scroll/scr_node_step_macro_text_scroll.gml
+@@ -53,12 +53,23 @@ function scr_node_step_macro_text_scroll() {
+         return;
+     }
+ 
+-    // ROW 1 — COLOUR: cycle 0→15→0 (index [2])
++    // ROW 1 — COLOUR: open the 16-colour picker (index [2]).
++    // Was click-to-cycle 0→15→0, i.e. up to fifteen clicks to land on the
++    // colour you wanted. Same picker MACRO_PRINT and MACRO_CHR already use.
+     if (_in_col && _mgy >= _ry[1] && _mgy < _ry[1] + _lh_g) {
++        // The picker writes straight into instructions[0][2], so the slot
++        // has to exist before it is spawned.
+         while (array_length(instructions[0]) <= 2) array_push(instructions[0], 1);
+-        var _cur = is_real(instructions[0][2]) ? real(instructions[0][2]) : 1;
+-        instructions[0][2] = (_cur + 1) mod 16;
+-        scr_c64_update_addresses();
++
++        instance_destroy(obj_ui_color_picker);
++        var _picker_w      = 256;
++        var _swatch_center = _px + 100;                  // over the colour text
++        var _spawn_x       = _swatch_center - (_picker_w / 2);
++        var _picker        = instance_create_depth(_spawn_x, _ly0 + _lh * 2, -9999, obj_ui_color_picker);
++        _picker.target_node = id;
++        _picker.target_row  = 0;
++        _picker.target_col  = 2;
++        mouse_clear(mb_left);
+         return;
+     }
+ 
+diff --git a/C64Devmachine/scripts/scr_node_step_macro_vic/scr_node_step_macro_vic.gml b/C64Devmachine/scripts/scr_node_step_macro_vic/scr_node_step_macro_vic.gml
+index 044d7de..1892d3e 100644
+--- a/C64Devmachine/scripts/scr_node_step_macro_vic/scr_node_step_macro_vic.gml
++++ b/C64Devmachine/scripts/scr_node_step_macro_vic/scr_node_step_macro_vic.gml
+@@ -143,37 +143,58 @@ function scr_node_step_macro_vic(_draw_x) {
+     var _swy = _fy + 1;
+     var _gap = 40;
+     
+-    // BDR
+-    if (point_in_rectangle(mouse_x, mouse_y, _swx, _swy, _swx + _sw, _swy + _sw)) {
+-        instructions[0][5] = (real(instructions[0][5]) + 1) mod 16; exit;
+-    }
+-    _swx += _gap + 4;
++    // All four swatches open the 16-colour picker instead of advancing one
++    // step per click. _sw is the swatch width, so the 256px bar is centred
++    // over whichever swatch was hit and drops just under the swatch row.
++    // Same picker MACRO_PRINT and MACRO_CHR already use.
++    var _spawn_picker = function(_node, _sw_left, _sw_size, _sw_top, _col) {
++        instance_destroy(obj_ui_color_picker);
++        var _picker_w = 256;
++        var _spawn_x  = (_sw_left + (_sw_size / 2)) - (_picker_w / 2);
++        var _picker   = instance_create_depth(_spawn_x, _sw_top + _sw_size + 2, -9999, obj_ui_color_picker);
++        _picker.target_node = _node;
++        _picker.target_row  = 0;
++        _picker.target_col  = _col;
++        mouse_clear(mb_left);
++    };
+ 
+-    // BKG (was labeled BG in step, now BKG to match draw)
+-    if (point_in_rectangle(mouse_x, mouse_y, _swx, _swy, _swx + _sw, _swy + _sw)) {
+-        instructions[0][6] = (real(instructions[0][6]) + 1) mod 16; exit;
+-    }
+-    _swx += _gap + 4;
+-    
+-    if (_mode == "MCT" || _mode == "MCB") {
++    // BDR
++    if (point_in_rectangle(mouse_x, mouse_y, _swx, _swy, _swx + _sw, _swy + _sw)) {
++        _spawn_picker(id, _swx, _sw, _swy, 5);
++        exit;
++    }
++    _swx += _gap + 4;
++
++    // BKG (was labeled BG in step, now BKG to match draw)
++    if (point_in_rectangle(mouse_x, mouse_y, _swx, _swy, _swx + _sw, _swy + _sw)) {
++        _spawn_picker(id, _swx, _sw, _swy, 6);
++        exit;
++    }
++    _swx += _gap + 4;
++
++    if (_mode == "MCT" || _mode == "MCB") {
+         // MC1
+-        if (point_in_rectangle(mouse_x, mouse_y, _swx, _swy, _swx + _sw, _swy + _sw)) {
+-            instructions[0][7] = (real(instructions[0][7]) + 1) mod 16; exit;
+-        }
+-        _swx += _gap + 4;
++        if (point_in_rectangle(mouse_x, mouse_y, _swx, _swy, _swx + _sw, _swy + _sw)) {
++            _spawn_picker(id, _swx, _sw, _swy, 7);
++            exit;
++        }
++        _swx += _gap + 4;
+         // MC2
+-        if (point_in_rectangle(mouse_x, mouse_y, _swx, _swy, _swx + _sw, _swy + _sw)) {
+-            instructions[0][8] = (real(instructions[0][8]) + 1) mod 16; exit;
+-        }
+-    } else if (_mode == "ECM") {
++        if (point_in_rectangle(mouse_x, mouse_y, _swx, _swy, _swx + _sw, _swy + _sw)) {
++            _spawn_picker(id, _swx, _sw, _swy, 8);
++            exit;
++        }
++    } else if (_mode == "ECM") {
+         // BG1
+-        if (point_in_rectangle(mouse_x, mouse_y, _swx, _swy, _swx + _sw, _swy + _sw)) {
+-            instructions[0][7] = (real(instructions[0][7]) + 1) mod 16; exit;
+-        }
+-        _swx += _gap + 4;
++        if (point_in_rectangle(mouse_x, mouse_y, _swx, _swy, _swx + _sw, _swy + _sw)) {
++            _spawn_picker(id, _swx, _sw, _swy, 7);
++            exit;
++        }
++        _swx += _gap + 4;
+         // BG2
+-        if (point_in_rectangle(mouse_x, mouse_y, _swx, _swy, _swx + _sw, _swy + _sw)) {
+-            instructions[0][8] = (real(instructions[0][8]) + 1) mod 16; exit;
+-        }
+-    }
++        if (point_in_rectangle(mouse_x, mouse_y, _swx, _swy, _swx + _sw, _swy + _sw)) {
++            _spawn_picker(id, _swx, _sw, _swy, 8);
++            exit;
++        }
++    }
+ }
+\ No newline at end of file
+diff --git a/C64Devmachine/scripts/scr_show_code_panel/scr_show_code_panel.gml b/C64Devmachine/scripts/scr_show_code_panel/scr_show_code_panel.gml
+index af4374d..6a98e77 100644
+--- a/C64Devmachine/scripts/scr_show_code_panel/scr_show_code_panel.gml
++++ b/C64Devmachine/scripts/scr_show_code_panel/scr_show_code_panel.gml
+@@ -1048,6 +1048,7 @@ function scr_show_code_hit() {
+     with (obj_workspace_manager) {
+ 
+         // Mirror every condition that stops Draw putting the panel on screen.
++        if (!showcode_enabled)       { exit; }
+         if (hideui)                  { exit; }
+         if (gui_menu_open != -1)     { exit; }
+         if (instance_exists(obj_asset_manager) && obj_asset_manager.viewer_open) { exit; }
+@@ -1092,6 +1093,10 @@ function scr_show_code_hit() {
+ 
+         with (obj_c64_node) {
+             if (node_type == "INIT") { continue; }
++            // Folding does not move a node, it only stops it drawing, so its
++            // rectangle is still live under the empty space a fold leaves.
++            // The listing was jumping to code for a node that is not on screen.
++            if (scr_node_is_hidden(id)) { continue; }
+             if (point_in_rectangle(mouse_x, mouse_y, x + x_indent, y, x + x_indent + width, y + height)) {
+                 global.showcode_hover_node = id;
+                 break;
+@@ -1111,6 +1116,15 @@ function scr_show_code_draw() {
+ 
+         global.showcode_mouse_over = false;
+ 
++        // Master switch off: draw nothing, and make sure nothing is left
++        // mid-drag from before it was switched off.
++        if (!showcode_enabled) {
++            showcode_dragging = false;
++            showcode_resize   = 0;
++            showcode_sb_drag  = false;
++            exit;
++        }
++
+         // A dropdown menu owns the screen while it is open — stand down so the
+         // two panels never fight, and come straight back once it closes.
+         if (gui_menu_open != -1) {
+@@ -1726,6 +1740,11 @@ function scr_show_code_save_ini() {
+         ini_write_real("showcode", "w",    floor(showcode_w));
+         ini_write_real("showcode", "rows", showcode_rows);
+         ini_write_real("showcode", "open", _open_flag);
++        var _enabled_flag = 0;
++        if (showcode_enabled) {
++            _enabled_flag = 1;
++        }
++        ini_write_real("showcode", "enabled", _enabled_flag);
+         ini_write_real("showcode", "mode", showcode_mode);
+         var _misc_flag = 0;
+         if (showcode_misc) {
+diff --git a/C64Devmachine/scripts/scr_undo_restore/scr_undo_restore.gml b/C64Devmachine/scripts/scr_undo_restore/scr_undo_restore.gml
+index f63c3df..33c5db2 100644
+--- a/C64Devmachine/scripts/scr_undo_restore/scr_undo_restore.gml
++++ b/C64Devmachine/scripts/scr_undo_restore/scr_undo_restore.gml
+@@ -336,13 +336,13 @@ var _parsed = scr_parse_asm_text(_ct);
+                 _cur_line = _parsed[_pi][1];
+             } else if (_pt == "pc") {
+                 if (_data_pc >= 0 && _data_sz > 0)
+-                    array_push(code_seg_cache, { addr: _data_pc, size: _data_sz, lines: _data_lines });
++                    array_push(code_seg_cache, { addr: _data_pc, size: _data_sz, lines: _data_lines, no_conflict: false });
+                 _data_pc = _parsed[_pi][1];
+                 _data_sz = 0;
+                 _data_lines = [];
+             } else if (_pt == "const") {
+                 if (array_length(_parsed[_pi]) > 2 && is_real(_parsed[_pi][2]))
+-                    array_push(code_seg_cache, { addr: _parsed[_pi][2], size: 2, lines: [_cur_line] });
++                    array_push(code_seg_cache, { addr: _parsed[_pi][2], size: 2, lines: [_cur_line], no_conflict: false });
+             } else if (_pt == "byte") {
+                 _data_sz += array_length(_parsed[_pi]) - 1;
+             } else if (_pt != "label") {
+@@ -350,12 +350,13 @@ var _parsed = scr_parse_asm_text(_ct);
+                 else _data_sz += 3;
+                 if (array_length(_parsed[_pi]) > 1 && is_real(_parsed[_pi][1])) {
+                     if (string_pos("_abs", _pt) > 0 || string_pos("_ind", _pt) > 0 || string_pos("_zp", _pt) > 0)
+-                        array_push(code_seg_cache, { addr: _parsed[_pi][1], size: 2, lines: [_cur_line] });
++                        // Operand reference, not owned storage — see PASS 6.
++                        array_push(code_seg_cache, { addr: _parsed[_pi][1], size: 2, lines: [_cur_line], no_conflict: true });
+                 }
+             }
+         }
+         if (_data_pc >= 0 && _data_sz > 0)
+-            array_push(code_seg_cache, { addr: _data_pc, size: _data_sz, lines: _data_lines });
++            array_push(code_seg_cache, { addr: _data_pc, size: _data_sz, lines: _data_lines, no_conflict: false });
+         code_cache_dirty = false;
+     }
+ 

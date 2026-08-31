@@ -876,8 +876,7 @@ global.hw_picker_categories = [
             "HW_JOY1", "HW_JOY2",
             "HW_CIA2_PRA", "HW_CIA2_PRB",
             "HW_CIA1_ICR", "HW_CIA2_ICR",
-            "HW_IRQ_STATUS", "HW_IRQ_MASK", "HW_IRQ_VEC_LO", "HW_IRQ_VEC_HI",
-			"HW_C64U_SPEED"
+            "HW_IRQ_STATUS", "HW_IRQ_MASK", "HW_IRQ_VEC_LO", "HW_IRQ_VEC_HI"
         ]
     },
     {
@@ -885,6 +884,27 @@ global.hw_picker_categories = [
         items: [
             "HW_CHROUT", "HW_GETIN",
             "HW_JIFFIES_LO", "HW_JIFFIES_MID", "HW_JIFFIES_HI"
+        ]
+    },
+    {
+        // Ultimate-64 only. Everything here reads $FF on a stock C64, and
+        // the turbo group additionally needs Turbo Mode enabled in the
+        // Ultimate's own config menu.
+        name: "C64U: SPEED",
+        items: [
+            "HW_C64U_TURBO", "HW_C64U_SPEED",
+            "HW_SCPU_NORMAL", "HW_SCPU_TURBO", "HW_SCPU_DETECT"
+        ]
+    },
+    {
+        name: "C64U: REU & UCI",
+        items: [
+            "HW_REU_STATUS", "HW_REU_CMD",
+            "HW_REU_C64_LO", "HW_REU_C64_HI",
+            "HW_REU_ADDR_LO", "HW_REU_ADDR_HI", "HW_REU_BANK",
+            "HW_REU_LEN_LO", "HW_REU_LEN_HI",
+            "HW_REU_IRQMASK", "HW_REU_CTRL",
+            "HW_UCI_CTRL", "HW_UCI_CMD", "HW_UCI_RESP", "HW_UCI_STAT"
         ]
     }
 ];
@@ -960,10 +980,19 @@ welcome_open          = !welcome_hide_checked;
 // -1 on x is the "never positioned" marker; the draw script parks it beside the
 // shortcuts column the first time it runs, then this holds the dragged position.
 showcode_x    = ini_read_real("showcode", "x",    -1);
-showcode_y    = ini_read_real("showcode", "y",    50);
-showcode_w    = clamp(ini_read_real("showcode", "w",    420), 300, 900);
-showcode_rows = clamp(ini_read_real("showcode", "rows",  20),   5,  60);
+showcode_y    = ini_read_real("showcode", "y",    53);
+// SHOWCODE_W_MIN/MAX rather than the literals this used to carry. The panel's
+// floor moved to 225 when it was allowed to narrow further, but this clamp kept
+// its own 300 — so a saved width below 300 was quietly widened on every load
+// and the narrow panel never survived a restart.
+showcode_w    = clamp(ini_read_real("showcode", "w",   248), SHOWCODE_W_MIN, SHOWCODE_W_MAX);
+showcode_rows = clamp(ini_read_real("showcode", "rows",  22),   5,  SHOWCODE_MAX_ROWS);
 showcode_open = (ini_read_real("showcode", "open", 1) == 1);
+// Two separate things, deliberately. showcode_open is the header's minimise
+// chevron: the panel is still there, rolled up to its title bar. This one is
+// the master switch from OPTIONS -> SHOW CODE: off means the panel does not
+// exist on screen at all, header included, and claims no mouse.
+showcode_enabled = (ini_read_real("showcode", "enabled", 1) == 1);
 showcode_mode = clamp(ini_read_real("showcode", "mode", 0), 0, 1);
 // MISC: byte tables, <LABEL/>LABEL pointer bytes and macro scaffolding labels.
 // Off by default — the lean view is just the code.
