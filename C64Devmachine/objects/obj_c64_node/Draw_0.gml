@@ -86,7 +86,14 @@ if (height_dirty) {
         height = ceil(_raw_h / _G) * _G;
         break;
     case "EXECUTE":     height = _G * 2; break;          // 40
-	case "INIT":        height = _G * 4; break;          // 80
+	case "INIT":
+	    // One extra row when the auto RTS row is showing, or it draws on top of
+	    // the last instruction instead of below it.
+	    height = _G * 4;
+	    if (init_rts_marker) {
+	        height = _G * 5;
+	    }
+	    break;
     case "ORG":         height = _G * 4; break;          // 80
     case "LABEL":       height = _G * 2; break;          // 60
   
@@ -2211,6 +2218,61 @@ if (node_type == "INIT" && array_length(instructions) == 0) {
     draw_set_alpha(1.0);
     draw_set_halign(fa_left);
     draw_set_valign(fa_top);
+}
+
+// =============================================================
+// INIT NODE AUTO-RTS MARKER
+// =============================================================
+// With nothing connected below it, the compile chain appends a bare RTS
+// so the program returns rather than running into whatever follows it in
+// memory. That instruction has no node on the canvas, so until now the
+// only place you met it was the code panel — where it reads as having
+// come from nowhere.
+//
+// Say it here instead, on the block it belongs to. It disappears the
+// moment a node is connected below (the compile chain stops emitting it),
+// and CLEAR takes it away with the rest of INIT's body.
+if (node_type == "INIT") {
+    var _spine_empty = (array_length(instructions) > 0);
+    if (_spine_empty) {
+        with (obj_c64_node) {
+            if (is_connected && org_parent == noone && node_type != "INIT") {
+                _spine_empty = false;
+                break;
+            }
+        }
+    }
+
+    // The height switch at the top of this event has already run for this
+    // frame, so a change here shows up on the next one.
+    if (init_rts_marker != _spine_empty) {
+        init_rts_marker = _spine_empty;
+        height_dirty    = true;
+    }
+
+    if (_spine_empty) {
+        // Drawn as the next instruction row, in the same font and on the same
+        // 12px pitch as the real ones, because that is what it is — the compile
+        // chain emits it immediately after these.
+        var _rts_y       = y + header_h + (array_length(instructions) * 12) + 8;
+        var _font_before = draw_get_font();
+
+        draw_set_font(fnt_C64_Angled_tiny);
+        draw_set_halign(fa_left);
+        draw_set_valign(fa_top);
+
+        // draw_x + 10 and c_ltgray are what the real mnemonic rows above use
+        // (see the prefix draw in the instruction loop), so this sits in the
+        // same column and reads as the same kind of thing. Only the "(AUTO)"
+        // note is dimmed, to mark where it came from.
+        draw_set_color(c_ltgray);
+        draw_text(draw_x + 10, _rts_y, "RTS");
+        draw_set_color(make_color_rgb(90, 120, 80));
+        draw_text(draw_x + 54, _rts_y, "(AUTO)");
+
+        draw_set_color(c_white);
+        draw_set_font(_font_before);
+    }
 }
 
 // =============================================================
