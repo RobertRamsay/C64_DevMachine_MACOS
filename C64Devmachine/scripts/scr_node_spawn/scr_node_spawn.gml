@@ -739,6 +739,43 @@ case "LABEL": {
         // [6] dst_mode  (0 = A, 1 = VAR)
         // [7] dst_var   [8] zp_base
         // -------------------------------------------------------
+        // -------------------------------------------------------
+        // VOI64 SPEECH
+        // MASTER [1] pitch [2] speed [3] throat [4] mouth [5] zp_base
+        // SAY    [3] mode(0=TEXT,1=PHONEME) [4] src(0=INLINE,1=TEXT_DATA)
+        //        [5] inline text [6] asset name
+        //        [7..10] pitch/speed/throat/mouth, -1 = inherit master
+        // -------------------------------------------------------
+        // -------------------------------------------------------
+        // MACRO_SID_PAUSE  [1] state: 0 = PAUSE, 1 = RESUME
+        // -------------------------------------------------------
+        case "MACRO_SID_PAUSE":
+            _n.node_title   = "SID PAUSE";
+            _n.instructions = [["macro_sid_pause", 0]];
+            _n.pc_address   = global.start_pc;
+            with (_n) { event_user(0); }
+            break;
+
+        case "MACRO_VOI64_MASTER":
+            _n.node_title   = "VOI64 MASTER";
+            // $F5, not $FB: the ZP block is nine bytes and $FB would run
+            // off the end of page zero into $00/$01.
+            _n.instructions = [["macro_voi64_master", 120, 128, 128, 128, 0xF5]];
+            _n.pc_address   = global.start_pc;
+            with (_n) { event_user(0); }
+            break;
+
+        case "MACRO_VOI64_SAY":
+            _n.node_title   = "VOI64 SAY";
+            // [11] first line, [12] last line — 0/0 means the whole asset.
+            // [11][12] literal line range, [13][14] FROM mode + var,
+            // [15][16] TO mode + var. Modes 0 = literal, 1 = byte var.
+            _n.instructions = [["macro_voi64_say", 0, 0, 0, 0, "HELLO WORLD", "",
+                                -1, -1, -1, -1, 0, 0, 0, "", 0, ""]];
+            _n.pc_address   = global.start_pc;
+            with (_n) { event_user(0); }
+            break;
+
         case "MACRO_RANDOM":
             _n.node_title   = "RANDOM";
             _n.instructions = [["macro_random", 1, 0xFFFF, 0, 0, 255, 0, "", 0xFB]];

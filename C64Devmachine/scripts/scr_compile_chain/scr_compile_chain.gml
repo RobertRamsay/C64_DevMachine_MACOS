@@ -54,9 +54,22 @@ function scr_compile_chain() {
     global.bmpblk_lut_emitted        = false; // reset per compile so MBB multiply LUTs emit once
     global.math_helpers_emitted      = false; // reset per compile so MATH mul16/div16 emit once
     global.sidsong_notetab_emitted   = false; // reset per compile so the SID song note table emits once
+    global.voi64_player_emitted      = false; // reset per compile so the Voi64 player emits once
     // Pre-scan: only emit the mul16/div16 helpers if some MATH node actually
     // uses MUL (op 2) or DIV (op 3). Pure ADD/SUB/ONEMINUS/INVSIGN projects
     // then carry zero multiply/divide code.
+    // Pre-scan for MACRO_SID_PAUSE. The three play-call guards below are
+    // three bytes and four cycles each per IRQ, so a project that never
+    // pauses its music should not carry them at all.
+    global.sid_pause_present = false;
+    global.sid_pause_flag_emitted = false;
+    with (obj_c64_node) {
+        if (node_type == "MACRO_SID_PAUSE" && is_connected) {
+            global.sid_pause_present = true;
+            break;
+        }
+    }
+
     global.math_needs_muldiv = false;
     with (obj_c64_node) {
         if (node_type == "MACRO_MATH" && array_length(instructions[0]) > 1) {
@@ -5957,7 +5970,17 @@ if (!_found_valid_sid) {
 		}
 		array_push(_list, ["lda_abs",  0xD019,   _id]);
 		array_push(_list, ["sta_abs",  0xD019,   _id]);
+		// [SIDPAUSE] skip the tick while paused. The IRQ still fires, so
+		// raster splits and anything else in the handler keep running —
+		// only the music stops advancing.
+		if (global.sid_pause_present) {
+			array_push(_list, ["lda_abs", "sid_pause_flag", _id]);
+			array_push(_list, ["bne",     "sid_irq_nomusic", _id]);
+		}
 		array_push(_list, ["jsr",      real(_play_addr), _id]);
+		if (global.sid_pause_present) {
+			array_push(_list, ["label",   "sid_irq_nomusic"]);
+		}
 
 
 			with (obj_c64_node) {
@@ -7627,6 +7650,522 @@ case "BANK_SWITCH": {
 // (used by some cartridges/carts detection code) can retrigger the last
 // queued transfer, which is a classic REU footgun.
 // --------------------------------------------------------
+// ════════════════════════════════════════════════════════════════════
+// VOI64 — SPEECH
+//
+// MACRO_VOI64_MASTER sets the SID up for speech and emits the player
+// once. MACRO_VOI64_SAY emits a frame stream and calls it.
+//
+// The player does NO arithmetic. Every frame is eight bytes that go
+// straight to eight SID registers, because the letter-to-sound pass, the
+// formant model, the coarticulation and the Hz-to-SID conversion all
+// happen in GML at compile time. That is the whole design: a
+// cross-development tool can put the hard part on the PC, which is the
+// one thing a 1982 speech synth could never do.
+//
+// See scr_voi64_sid for the frame format and the voice topology,
+// including the one honest compromise in it (only F1 can be pitched).
+// ════════════════════════════════════════════════════════════════════
+case "MACRO_VOI64_MASTER": {
+    var _id = _curr;
+    var _i0 = _curr.instructions[0];
+
+    // [5] zp_base — two bytes for the frame pointer, one for flags.
+    // Nine bytes, clamped: above $F7 the block wraps and ctl3 lands on $00
+    // (the CPU port DDR) with the range cursor on $01 (the BANKING
+    // register). Clamped in the helper rather than only in the node's
+    // commit, because a workspace saved before the block grew still has
+    // $FB stored in it.
+    var _zp  = scr_voi64_zp_base();
+    var _zpf = (_zp + 2) & 0xFF;
+    // Three control-register shadows. The player writes each voice's
+    // control byte twice a frame - once with the gate cleared, once with
+    // it set - and needs somewhere to keep the value between the two.
+    var _c1  = (_zp + 3) & 0xFF;
+    var _c2  = (_zp + 4) & 0xFF;
+    var _c3  = (_zp + 5) & 0xFF;
+    // +6/+7/+8 are the range loop's cursor, end and pointer temp. They
+    // belong to the SAY case, which works them out for itself.
+
+    // ── SID setup. Runs in the spine, once. ──────────────────────────
+    // AD = 0 on all three voices: instant attack, no decay, so the level
+    // is whatever SUSTAIN says and a frame's amplitude change takes
+    // effect immediately. That is what lets the player set loudness by
+    // writing one nibble per voice with the gate left alone — retriggering
+    // the gate every frame would click at 50Hz.
+    array_push(_list, ["lda_imm", 0x00,   _id]);
+    array_push(_list, ["sta_abs", 0xD405, _id]);   // V1 AD
+    array_push(_list, ["sta_abs", 0xD40C, _id]);   // V2 AD
+    array_push(_list, ["sta_abs", 0xD413, _id]);   // V3 AD
+    array_push(_list, ["sta_abs", 0xD406, _id]);   // V1 SR — silent to start
+    array_push(_list, ["sta_abs", 0xD40D, _id]);   // V2 SR
+    array_push(_list, ["sta_abs", 0xD414, _id]);   // V3 SR
+    array_push(_list, ["sta_abs", 0xD402, _id]);   // V1 PW lo
+    array_push(_list, ["sta_abs", 0xD409, _id]);   // V2 PW lo
+    array_push(_list, ["lda_imm", 0x08,   _id]);
+    array_push(_list, ["sta_abs", 0xD403, _id]);   // V1 PW hi -> 50% duty
+    array_push(_list, ["sta_abs", 0xD40A, _id]);   // V2 PW hi
+    // Volume 15, filter off, voice 3 NOT muted — V3 carries the frication
+    // on unvoiced frames, so bit 7 must stay clear.
+    array_push(_list, ["lda_imm", 0x0F,   _id]);
+    array_push(_list, ["sta_abs", 0xD418, _id]);
+
+    // CIA2 Timer A is the frame clock, and the frame rate is the glottal
+    // pitch. Mask every CIA2 interrupt source first: the player POLLS the
+    // underflow flag, and an unmasked timer here would fire an NMI.
+    array_push(_list, ["lda_imm", 0x7F,   _id]);
+    array_push(_list, ["sta_abs", 0xDD0D, _id]);
+
+    // ── The player, emitted once and jumped over ─────────────────────
+    if (!global.voi64_player_emitted) {
+        global.voi64_player_emitted = true;
+
+        array_push(_list, ["jmp_abs", "voi64_skip", _id]);
+
+        // voi64_play — A = frame data lo, X = hi. Blocking: it owns the
+        // CPU until the utterance ends. v1 is deliberately blocking so it
+        // cannot fight a MACRO_IRQ setup; an IRQ-driven mode is a later
+        // MODE on this same node, not a rewrite.
+        // ── voi64_play ───────────────────────────────────────────────
+        // A = frame data lo, X = hi. Blocking.
+        //
+        // ZP map from the node's base: +0/+1 frame pointer, +2 flags,
+        // +3/+4/+5 the three control-register shadows.
+        //
+        // WHY THE GATE IS RETRIGGERED EVERY FRAME
+        // The first build set the gate once and varied SUSTAIN per frame.
+        // That does not work: a SID envelope in the sustain phase follows
+        // the sustain register DOWNWARD only. Raising sustain after the
+        // decay has finished does nothing without a new attack. The
+        // leading silence of the first phoneme drove the envelope to zero
+        // and it stayed there — one click on the opening attack, then
+        // nothing, for the whole utterance.
+        //
+        // Retriggering also buys the thing the first version was missing.
+        // Frames now run at the GLOTTAL PITCH off a CIA timer rather than
+        // at 50Hz off the raster, so the attack-decay burst at the start
+        // of every frame IS the glottal pulse. Pitch and the parameter
+        // clock are the same clock, which is what a formant synthesiser
+        // actually wants.
+        array_push(_list, ["label",   "voi64_play"]);
+        // The node has always said NO IRQ; now it is true. Without this an
+        // IRQ landing mid-utterance would run whatever handler is installed,
+        // and the usual suspects scratch the same $FB-$FE region the frame
+        // pointer lives in. php/plp rather than sei/cli so a caller that
+        // already had interrupts off gets them back off.
+        array_push(_list, ["php",     0, _id]);
+        array_push(_list, ["sei",     0, _id]);
+        array_push(_list, ["sta_zp",  _zp,              _id]);
+        array_push(_list, ["stx_zp",  (_zp + 1) & 0xFF, _id]);
+
+        // CLAIM THE CHIP, every utterance.
+        //
+        // These eight registers used to be written once, in the master's
+        // init. That is fine for a program with no music - but a SID tune
+        // rewrites AD and the volume on its own schedule, so after even one
+        // bar of music the chip no longer looks the way the player assumes.
+        //
+        // AD is the one that actually breaks it. The whole amplitude scheme
+        // depends on attack 0 and decay 0, so the gate retrigger jumps
+        // straight to the sustain nibble. Inherit a tune's slower envelope
+        // and every frame ramps instead of stepping, which is the same
+        // silent-speech failure as the original sustain bug wearing a hat.
+        //
+        // Twenty-odd bytes, run once per phrase. The master keeps its copy
+        // for the case where Voi64 speaks before any tune has started.
+        array_push(_list, ["lda_imm", 0x00,   _id]);
+        array_push(_list, ["sta_abs", 0xD405, _id]);   // V1 AD - instant attack, no decay
+        array_push(_list, ["sta_abs", 0xD40C, _id]);   // V2 AD
+        array_push(_list, ["sta_abs", 0xD413, _id]);   // V3 AD
+        array_push(_list, ["sta_abs", 0xD402, _id]);   // V1 PW lo
+        array_push(_list, ["sta_abs", 0xD409, _id]);   // V2 PW lo
+        array_push(_list, ["lda_imm", 0x08,   _id]);
+        array_push(_list, ["sta_abs", 0xD403, _id]);   // V1 PW hi -> 50% duty
+        array_push(_list, ["sta_abs", 0xD40A, _id]);   // V2 PW hi
+        array_push(_list, ["lda_imm", 0x0F,   _id]);
+        array_push(_list, ["sta_abs", 0xD418, _id]);   // full volume, filter off, V3 audible
+        // Shadows start clear so the first frame's gate-off writes a
+        // harmless zero rather than whatever was in page zero.
+        array_push(_list, ["lda_imm", 0x00, _id]);
+        array_push(_list, ["sta_zp",  _c1,  _id]);
+        array_push(_list, ["sta_zp",  _c2,  _id]);
+        array_push(_list, ["sta_zp",  _c3,  _id]);
+
+        array_push(_list, ["label",   "voi64_frame"]);
+        array_push(_list, ["ldy_imm", 7,    _id]);
+        array_push(_list, ["lda_izy", _zp,  _id]);
+        array_push(_list, ["cmp_imm", 0xFF, _id]);
+        // bne over a jmp: the exit is far past a relative branch's reach.
+        array_push(_list, ["bne",     "voi64_go", _id]);
+        array_push(_list, ["jmp_abs", "voi64_done", _id]);
+        array_push(_list, ["label",   "voi64_go"]);
+
+        // Gate OFF first, from last frame's shadows, so the envelopes are
+        // in release for the whole parameter write below. Doing it here
+        // rather than immediately before the gate-on gives the ADSR a wide
+        // window to see the edge instead of a handful of cycles.
+        array_push(_list, ["lda_zp",  _c1,  _id]);
+        array_push(_list, ["and_imm", 0xFE, _id]);
+        array_push(_list, ["sta_abs", 0xD404, _id]);
+        array_push(_list, ["lda_zp",  _c2,  _id]);
+        array_push(_list, ["and_imm", 0xFE, _id]);
+        array_push(_list, ["sta_abs", 0xD40B, _id]);
+        array_push(_list, ["lda_zp",  _c3,  _id]);
+        array_push(_list, ["and_imm", 0xFE, _id]);
+        array_push(_list, ["sta_abs", 0xD412, _id]);
+
+        // Frequencies: F1 -> V1, F2 -> V2, pitch-or-noise -> V3.
+        array_push(_list, ["ldy_imm", 0,    _id]);
+        array_push(_list, ["lda_izy", _zp,  _id]);
+        array_push(_list, ["sta_abs", 0xD400, _id]);
+        array_push(_list, ["iny",     0,    _id]);
+        array_push(_list, ["lda_izy", _zp,  _id]);
+        array_push(_list, ["sta_abs", 0xD401, _id]);
+        array_push(_list, ["iny",     0,    _id]);
+        array_push(_list, ["lda_izy", _zp,  _id]);
+        array_push(_list, ["sta_abs", 0xD407, _id]);
+        array_push(_list, ["iny",     0,    _id]);
+        array_push(_list, ["lda_izy", _zp,  _id]);
+        array_push(_list, ["sta_abs", 0xD408, _id]);
+        array_push(_list, ["iny",     0,    _id]);
+        array_push(_list, ["lda_izy", _zp,  _id]);
+        array_push(_list, ["sta_abs", 0xD40E, _id]);
+        array_push(_list, ["iny",     0,    _id]);
+        array_push(_list, ["lda_izy", _zp,  _id]);
+        array_push(_list, ["sta_abs", 0xD40F, _id]);
+
+        // Byte 6 = (a1 << 4) | a2 -> the two sustain nibbles.
+        array_push(_list, ["iny",     0,    _id]);
+        array_push(_list, ["lda_izy", _zp,  _id]);
+        array_push(_list, ["pha",     0,    _id]);
+        array_push(_list, ["and_imm", 0xF0, _id]);
+        array_push(_list, ["sta_abs", 0xD406, _id]);
+        array_push(_list, ["pla",     0,    _id]);
+        array_push(_list, ["asl_a",   0,    _id]);
+        array_push(_list, ["asl_a",   0,    _id]);
+        array_push(_list, ["asl_a",   0,    _id]);
+        array_push(_list, ["asl_a",   0,    _id]);
+        array_push(_list, ["sta_abs", 0xD40D, _id]);
+
+        // Byte 7 = (a3 << 4) | flags.
+        array_push(_list, ["iny",     0,    _id]);
+        array_push(_list, ["lda_izy", _zp,  _id]);
+        array_push(_list, ["pha",     0,    _id]);
+        array_push(_list, ["and_imm", 0xF0, _id]);
+        array_push(_list, ["sta_abs", 0xD414, _id]);
+        array_push(_list, ["pla",     0,    _id]);
+        array_push(_list, ["and_imm", 0x0F, _id]);
+        array_push(_list, ["sta_zp",  _zpf, _id]);
+
+        // Build the three control bytes into the shadows.
+        array_push(_list, ["and_imm", 0x01, _id]);
+        array_push(_list, ["beq",     "voi64_nosync", _id]);
+        array_push(_list, ["lda_imm", 0x43, _id]);     // pulse + sync + gate
+        array_push(_list, ["jmp_abs", "voi64_v1", _id]);
+        array_push(_list, ["label",   "voi64_nosync"]);
+        array_push(_list, ["lda_imm", 0x41, _id]);     // pulse + gate
+        array_push(_list, ["label",   "voi64_v1"]);
+        array_push(_list, ["sta_zp",  _c1,  _id]);
+
+        array_push(_list, ["lda_imm", 0x41, _id]);
+        array_push(_list, ["sta_zp",  _c2,  _id]);
+
+        array_push(_list, ["lda_zp",  _zpf, _id]);
+        array_push(_list, ["and_imm", 0x02, _id]);
+        array_push(_list, ["beq",     "voi64_v3tri", _id]);
+        array_push(_list, ["lda_imm", 0x81, _id]);     // noise + gate
+        array_push(_list, ["jmp_abs", "voi64_v3", _id]);
+        array_push(_list, ["label",   "voi64_v3tri"]);
+        array_push(_list, ["lda_imm", 0x11, _id]);     // triangle + gate
+        array_push(_list, ["label",   "voi64_v3"]);
+        array_push(_list, ["sta_zp",  _c3,  _id]);
+
+        // Gate ON. Each voice takes a fresh attack, which is the glottal
+        // pulse for this frame.
+        array_push(_list, ["lda_zp",  _c1,  _id]);
+        array_push(_list, ["sta_abs", 0xD404, _id]);
+        array_push(_list, ["lda_zp",  _c2,  _id]);
+        array_push(_list, ["sta_abs", 0xD40B, _id]);
+        array_push(_list, ["lda_zp",  _c3,  _id]);
+        array_push(_list, ["sta_abs", 0xD412, _id]);
+
+        // Wait for CIA2 Timer A to underflow. The period was written by
+        // the SAY node and equals one glottal period. Reading $DD0D clears
+        // the flag; CIA2 interrupts are masked off in the master setup, so
+        // this never becomes an NMI.
+        array_push(_list, ["label",   "voi64_wait"]);
+        array_push(_list, ["lda_abs", 0xDD0D, _id]);
+        array_push(_list, ["and_imm", 0x01,   _id]);
+        array_push(_list, ["beq",     "voi64_wait", _id]);
+
+        // Next frame = pointer + 8.
+        array_push(_list, ["clc",     0,    _id]);
+        array_push(_list, ["lda_zp",  _zp,  _id]);
+        array_push(_list, ["adc_imm", 8,    _id]);
+        array_push(_list, ["sta_zp",  _zp,  _id]);
+        array_push(_list, ["bcc",     "voi64_nocarry", _id]);
+        array_push(_list, ["inc_zp",  (_zp + 1) & 0xFF, _id]);
+        array_push(_list, ["label",   "voi64_nocarry"]);
+        array_push(_list, ["jmp_abs", "voi64_frame", _id]);
+
+        // Silence on the way out, gate included — a gate left high leaves
+        // the last formant ringing under the rest of the program.
+        array_push(_list, ["label",   "voi64_done"]);
+        array_push(_list, ["lda_imm", 0x00,   _id]);
+        array_push(_list, ["sta_abs", 0xD406, _id]);
+        array_push(_list, ["sta_abs", 0xD40D, _id]);
+        array_push(_list, ["sta_abs", 0xD414, _id]);
+        array_push(_list, ["sta_abs", 0xD404, _id]);
+        array_push(_list, ["sta_abs", 0xD40B, _id]);
+        array_push(_list, ["sta_abs", 0xD412, _id]);
+        array_push(_list, ["plp",     0,      _id]);
+        array_push(_list, ["rts",     0,      _id]);
+
+        array_push(_list, ["label",   "voi64_skip"]);
+    }
+} break;
+
+case "MACRO_VOI64_SAY": {
+    var _id = _curr;
+
+    // No master means no player routine and no default voice, so there is
+    // nothing sensible to emit. Say so in the log and emit nothing rather
+    // than emitting a JSR to a label that will never exist.
+    var _vm = scr_voi64_find_master();
+    if (!instance_exists(_vm)) {
+        show_debug_message("VOI64 SAY#" + string(_id) + ": no connected MACRO_VOI64_MASTER - nothing emitted");
+        break;
+    }
+
+    var _v  = scr_voi64_effective_voice(_id);
+
+    // Read the ZP block here rather than inheriting the master case's
+    // locals — see scr_voi64_zp_base. A SAY inside an ORG block is walked
+    // as its own chain, where those locals were never assigned.
+    var _szp  = scr_voi64_zp_base();
+    var _rcur = (_szp + 6) & 0xFF;
+    var _rend = (_szp + 7) & 0xFF;
+    var _rtmp = (_szp + 8) & 0xFF;
+
+    // ── VAR-DRIVEN LINE RANGE ────────────────────────────────────────
+    // When either end of the range comes from a variable, the range is
+    // not known until runtime, so every line of the asset is compiled to
+    // its own frame block and indexed through a pointer table. That is
+    // the only shape that works: the letters cannot reach the C64, so the
+    // frames for a line have to exist before the machine asks for it.
+    //
+    // The cost is real and worth saying out loud - a var-driven SAY pays
+    // for the WHOLE asset, not one line. The node prints the byte count.
+    if (scr_voi64_say_is_var_range(_id)) {
+        var _vlines = scr_voi64_asset_lines(_id);
+        var _vn     = array_length(_vlines);
+        if (_vn == 0) {
+            show_debug_message("VOI64 SAY#" + string(_id) + ": asset empty - nothing emitted");
+            break;
+        }
+        if (_vn > 255) {
+            show_debug_message("VOI64 SAY#" + string(_id) + ": asset has " + string(_vn)
+                + " lines; only the first 255 are addressable by a byte var");
+            _vn = 255;
+        }
+
+        var _vp = "voi64v" + string(real(_id)) + "_";
+        array_push(_list, ["jmp_abs", _vp + "skip", _id]);
+
+        // One frame block per line, each with its own terminator so the
+        // player stops at the end of the line it was pointed at.
+        for (var _li = 0; _li < _vn; _li++) {
+            var _lph = scr_voi64_text_to_phonemes(_vlines[_li]);
+            var _lfr = scr_voi64_sid_frames(_lph, _v.pitch, _v.speed, _v.throat, _v.mouth);
+            array_push(_list, ["label", _vp + "l" + string(_li)]);
+            for (var _fi = 0; _fi < array_length(_lfr); _fi++) {
+                var _lf = _lfr[_fi];
+                for (var _bi = 0; _bi < 8; _bi++) {
+                    array_push(_list, ["byte", _lf[_bi], _id]);
+                }
+            }
+            for (var _ti = 0; _ti < 7; _ti++) { array_push(_list, ["byte", 0x00, _id]); }
+            array_push(_list, ["byte", 0xFF, _id]);
+        }
+
+        // Split lo/hi tables: one indexed load each, no multiply.
+        array_push(_list, ["label", _vp + "tlo"]);
+        for (var _li = 0; _li < _vn; _li++) {
+            array_push(_list, ["byte_lab_lo", _vp + "l" + string(_li), _id]);
+        }
+        array_push(_list, ["label", _vp + "thi"]);
+        for (var _li = 0; _li < _vn; _li++) {
+            array_push(_list, ["byte_lab_hi", _vp + "l" + string(_li), _id]);
+        }
+        array_push(_list, ["label", _vp + "skip"]);
+
+        // Timer period, same as the static path.
+        var _vper = scr_voi64_sid_timer_period(_v.pitch);
+        array_push(_list, ["lda_imm", _vper & 0xFF,        _id]);
+        array_push(_list, ["sta_abs", 0xDD04,              _id]);
+        array_push(_list, ["lda_imm", (_vper >> 8) & 0xFF, _id]);
+        array_push(_list, ["sta_abs", 0xDD05,              _id]);
+        array_push(_list, ["lda_imm", 0x11,                _id]);
+        array_push(_list, ["sta_abs", 0xDD0E,              _id]);
+
+        // FROM into the cursor, either an immediate or a byte var.
+        var _fm = scr_voi64_range_src(_id, 0);
+        if (_fm.is_var) {
+            array_push(_list, ["lda_abs", _fm.addr, _id]);
+        } else {
+            array_push(_list, ["lda_imm", _fm.lit & 0xFF, _id]);
+        }
+        array_push(_list, ["sta_zp", _rcur, _id]);
+
+        var _tm = scr_voi64_range_src(_id, 1);
+        if (_tm.is_var) {
+            array_push(_list, ["lda_abs", _tm.addr, _id]);
+        } else {
+            array_push(_list, ["lda_imm", _tm.lit & 0xFF, _id]);
+        }
+        array_push(_list, ["sta_zp", _rend, _id]);
+
+        // Clamp. 0 keeps meaning "the end you did not specify", and an
+        // out-of-range var must not index past the table into whatever
+        // follows it in memory.
+        array_push(_list, ["lda_zp",  _rcur, _id]);
+        array_push(_list, ["bne",     _vp + "cok", _id]);
+        array_push(_list, ["lda_imm", 1, _id]);
+        array_push(_list, ["sta_zp",  _rcur, _id]);
+        array_push(_list, ["label",   _vp + "cok"]);
+        array_push(_list, ["lda_zp",  _rend, _id]);
+        array_push(_list, ["bne",     _vp + "eok", _id]);
+        array_push(_list, ["lda_imm", _vn, _id]);
+        array_push(_list, ["sta_zp",  _rend, _id]);
+        array_push(_list, ["label",   _vp + "eok"]);
+        if (_vn < 255) {
+            array_push(_list, ["lda_zp",  _rend, _id]);
+            array_push(_list, ["cmp_imm", _vn + 1, _id]);
+            array_push(_list, ["bcc",     _vp + "eok2", _id]);
+            array_push(_list, ["lda_imm", _vn, _id]);
+            array_push(_list, ["sta_zp",  _rend, _id]);
+            array_push(_list, ["label",   _vp + "eok2"]);
+        }
+
+        // for cur = from to end: play line cur
+        array_push(_list, ["label",   _vp + "loop"]);
+        array_push(_list, ["lda_zp",  _rcur, _id]);
+        array_push(_list, ["cmp_zp",  _rend, _id]);
+        array_push(_list, ["bcc",     _vp + "go", _id]);
+        array_push(_list, ["beq",     _vp + "go", _id]);
+        array_push(_list, ["jmp_abs", _vp + "done", _id]);
+        array_push(_list, ["label",   _vp + "go"]);
+        array_push(_list, ["ldy_zp",  _rcur, _id]);
+        array_push(_list, ["dey",     0,     _id]);          // 1-based -> table index
+        array_push(_list, ["lda_aby", _vp + "tlo", _id]);
+        array_push(_list, ["sta_zp",  _rtmp, _id]);
+        array_push(_list, ["lda_aby", _vp + "thi", _id]);
+        array_push(_list, ["tax",     0,     _id]);
+        array_push(_list, ["lda_zp",  _rtmp, _id]);
+        array_push(_list, ["jsr",     "voi64_play", _id]);
+        array_push(_list, ["inc_zp",  _rcur, _id]);
+        array_push(_list, ["jmp_abs", _vp + "loop", _id]);
+        array_push(_list, ["label",   _vp + "done"]);
+        break;
+    }
+
+    var _phon = scr_voi64_say_phoneme_string(_id);
+    if (string_trim(_phon) == "") {
+        show_debug_message("VOI64 SAY#" + string(_id) + ": nothing to say");
+        break;
+    }
+
+    var _fr = scr_voi64_sid_frames(_phon, _v.pitch, _v.speed, _v.throat, _v.mouth);
+    if (array_length(_fr) == 0) {
+        break;
+    }
+
+    var _p    = "voi64s" + string(real(_id)) + "_";
+    var _data = _p + "data";
+
+    array_push(_list, ["jmp_abs", _p + "skip", _id]);
+    array_push(_list, ["label",   _data]);
+    for (var _fi = 0; _fi < array_length(_fr); _fi++) {
+        var _f = _fr[_fi];
+        for (var _bi = 0; _bi < 8; _bi++) {
+            array_push(_list, ["byte", _f[_bi], _id]);
+        }
+    }
+    // Terminator frame. The player reads byte 7 first, so only that byte
+    // has to be $FF, but a full eight keeps the stream a clean multiple.
+    for (var _ti = 0; _ti < 7; _ti++) {
+        array_push(_list, ["byte", 0x00, _id]);
+    }
+    array_push(_list, ["byte", 0xFF, _id]);
+    array_push(_list, ["label",   _p + "skip"]);
+
+    // One glottal period per frame. Written per SAY so a per-say pitch
+    // override changes the clock as well as the frame data.
+    var _per = scr_voi64_sid_timer_period(_v.pitch);
+    array_push(_list, ["lda_imm", _per & 0xFF,        _id]);
+    array_push(_list, ["sta_abs", 0xDD04,             _id]);
+    array_push(_list, ["lda_imm", (_per >> 8) & 0xFF, _id]);
+    array_push(_list, ["sta_abs", 0xDD05,             _id]);
+    array_push(_list, ["lda_imm", 0x11,               _id]);  // force load + start, continuous
+    array_push(_list, ["sta_abs", 0xDD0E,             _id]);
+
+    array_push(_list, ["lda_lab_lo", _data, _id]);
+    array_push(_list, ["ldx_lab_hi", _data, _id]);
+    array_push(_list, ["jsr",        "voi64_play", _id]);
+} break;
+
+// ════════════════════════════════════════════════════════════════════
+// MACRO_SID_PAUSE — stop and restart the music tick
+//
+// Sets a flag that every SID play call is guarded by, so the IRQ keeps
+// firing (raster splits, sprite work, anything else in the handler is
+// untouched) and only the music stops advancing. That frees all three SID
+// voices for something else — VOI64 speech, sound effects, whatever —
+// and RESUME hands them straight back.
+//
+// Resuming needs no state restore: SID players rewrite the whole register
+// set every frame, so the first tick after RESUME puts the chip back the
+// way the tune wants it. The tune picks up where it paused rather than
+// restarting, because its own counters live in RAM and were never touched.
+// ════════════════════════════════════════════════════════════════════
+case "MACRO_SID_PAUSE": {
+    var _id = _curr;
+    var _i0 = _curr.instructions[0];
+
+    var _state = 0;   // 0 = PAUSE, 1 = RESUME
+    if (array_length(_i0) > 1 && is_real(_i0[1])) { _state = real(_i0[1]); }
+
+    // The flag lives in the spine, emitted once and jumped over.
+    if (!global.sid_pause_flag_emitted) {
+        global.sid_pause_flag_emitted = true;
+        array_push(_list, ["jmp_abs", "sid_pause_flag_skip", _id]);
+        array_push(_list, ["label",   "sid_pause_flag"]);
+        array_push(_list, ["byte",    0x00, _id]);
+        array_push(_list, ["label",   "sid_pause_flag_skip"]);
+    }
+
+    if (_state == 1) {
+        array_push(_list, ["lda_imm", 0x00, _id]);
+        array_push(_list, ["sta_abs", "sid_pause_flag", _id]);
+    } else {
+        array_push(_list, ["lda_imm", 0x01, _id]);
+        array_push(_list, ["sta_abs", "sid_pause_flag", _id]);
+
+        // Silence what the tune left sounding. SID registers are WRITE
+        // ONLY, so there is no read-modify-write here — a known-safe zero
+        // goes in instead. Control 0 drops the gate and clears the
+        // waveform; SR 0 makes the release instant, so a note with a long
+        // release tail cannot drone on underneath whatever comes next.
+        array_push(_list, ["lda_imm", 0x00,   _id]);
+        array_push(_list, ["sta_abs", 0xD404, _id]);
+        array_push(_list, ["sta_abs", 0xD40B, _id]);
+        array_push(_list, ["sta_abs", 0xD412, _id]);
+        array_push(_list, ["sta_abs", 0xD406, _id]);
+        array_push(_list, ["sta_abs", 0xD40D, _id]);
+        array_push(_list, ["sta_abs", 0xD414, _id]);
+    }
+} break;
+
 case "MACRO_REU": {
     var _id        = _curr;
     var _reu_op    = is_real(_curr.instructions[0][1]) ? real(_curr.instructions[0][1]) : 0;
@@ -10514,6 +11053,11 @@ case "MACRO_IRQ_HANDLER": {
         array_push(_list, ["lda_imm", _sid_slot,          _id]);
         array_push(_list, ["cmp_lab", _lbl_index,         _id]);
         array_push(_list, ["bne",     _lbl_skip_sid,      _id]);
+        // [SIDPAUSE] see the note on the sid_irq guard.
+        if (global.sid_pause_present) {
+            array_push(_list, ["lda_abs", "sid_pause_flag", _id]);
+            array_push(_list, ["bne",     _lbl_skip_sid,    _id]);
+        }
         array_push(_list, ["jsr",     real(_play_addr_h), _id]);
         array_push(_list, ["label",   _lbl_skip_sid]);
     }
@@ -10790,7 +11334,16 @@ array_push(_list, ["label",   _lbl_handler]);
     }
     // User payload
     if (_play_music) {
+        // [SIDPAUSE] see the note on the sid_irq guard.
+        var _lbl_nomus = _p + "nomusic";
+        if (global.sid_pause_present) {
+            array_push(_list, ["lda_abs", "sid_pause_flag", _id]);
+            array_push(_list, ["bne",     _lbl_nomus,       _id]);
+        }
         array_push(_list, ["jsr", real(_play_addr), _id]);
+        if (global.sid_pause_present) {
+            array_push(_list, ["label", _lbl_nomus]);
+        }
     }
     if (_call_label != "") {
         array_push(_list, ["jsr", _call_label, _id]);

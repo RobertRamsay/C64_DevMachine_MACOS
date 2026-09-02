@@ -576,6 +576,91 @@ function scr_node_tooltip_text(_node_type) {
             ]
         },
 
+        "MACRO_SID_PAUSE": {
+            title: "SID PAUSE",
+            lines: [
+                "Stops and restarts the music tick. PAUSE sets a flag that",
+                "every SID play call is guarded by, so the IRQ keeps firing",
+                "- raster splits and everything else in the handler are",
+                "untouched - and only the music stops advancing.",
+                "",
+                "That hands all three SID voices to whatever you want them",
+                "for: VOI64 speech, sound effects, a jingle. RESUME gives",
+                "them straight back.",
+                "",
+                "PAUSE also silences the three voices, because a note with",
+                "a long release would otherwise drone on underneath.",
+                "",
+                "Nothing needs restoring on RESUME: SID players rewrite the",
+                "whole register set every frame, so the first tick after",
+                "puts the chip back. The tune continues from where it",
+                "paused rather than restarting - its counters live in RAM",
+                "and were never touched.",
+                "",
+                "Costs nothing unless used: with no SID PAUSE node in the",
+                "project the guards are not emitted at all."
+            ]
+        },
+
+        "MACRO_VOI64_MASTER": {
+            title: "VOI64 MASTER",
+            lines: [
+                "Sets the SID up for speech and emits the Voi64 player",
+                "once. Every VOI64 SAY in the project needs one of these",
+                "connected - without it a SAY emits nothing.",
+                "",
+                "PITCH is the glottal rate in Hz. THROAT scales the first",
+                "formant (deeper / chestier), MOUTH scales the second and",
+                "third (brighter / more forward). SPEED is 0-255 with 128",
+                "nominal, and HIGHER IS FASTER.",
+                "",
+                "The player is BLOCKING: it owns the CPU until the phrase",
+                "ends, so no raster effects and no music while it speaks.",
+                "",
+                "Voices: V3 is a silent pitch source, V1 is the first",
+                "formant hard-synced to it, V2 is the second. On unvoiced",
+                "sounds V3 switches to noise and carries the frication."
+            ]
+        },
+
+        "MACRO_VOI64_SAY": {
+            title: "VOI64 SAY",
+            lines: [
+                "Speaks a phrase. TEXT mode runs English letter-to-sound",
+                "on the PC at build time, so the C64 never sees a letter -",
+                "only the finished frames. PHONEME mode takes a phoneme",
+                "string verbatim, which is how you fix a word the rules",
+                "get wrong.",
+                "",
+                "Source is either typed inline or a TEXT_DATA asset. Both",
+                "are known at build time, which is what keeps the runtime",
+                "cost to eight bytes per glottal period.",
+                "",
+                "In TEXT DATA mode, LINE FROM / LINE TO pick a slice of the",
+                "asset - one phrase per line, so a single asset becomes a",
+                "phrase bank several SAY nodes share. Leave both blank for",
+                "the whole thing. Lines rather than the byte offsets PRINT",
+                "uses: the asset never reaches the C64, so a byte range",
+                "would only let you cut a word in half.",
+                "",
+                "Either end can be a byte VAR instead of a number, so the",
+                "program picks its line at runtime - set the var, call the",
+                "macro. Line 1-255.",
+                "",
+                "COST: a var-driven SAY compiles EVERY line of the asset",
+                "and indexes them through a pointer table, because the",
+                "range is not known until the program runs. A fixed range",
+                "compiles only the lines it names.",
+                "",
+                "PITCH / SPEED / THROAT / MOUTH show a dash when they are",
+                "inherited from the master. Type a value to override it",
+                "for this phrase only.",
+                "",
+                "PREVIEW VOICE plays it through the tool using the same",
+                "phoneme string the build will emit."
+            ]
+        },
+
         "MACRO_RANDOM": {
             title: "RANDOM",
             lines: [

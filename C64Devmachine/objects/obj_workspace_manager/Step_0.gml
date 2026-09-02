@@ -1,3 +1,10 @@
+// First frame only: offer back an emergency save if the last run crashed.
+// In Step rather than Create so everything the loader touches already exists.
+if (!recovery_checked) {
+    recovery_checked = true;
+    scr_crash_recovery_check();
+}
+
 // Advance the asynchronous C64U REU upload.
 scr_c64u_reu_step();
 
@@ -903,6 +910,7 @@ if (is_entering_text) {
 		else if (_ntype == "MACRO_CLR_SCREEN"   && _nidx == 1)                   { _is_address_field = true; }
 		else if (_ntype == "MACRO_GET_CHAR"     && (_nidx == 10 || _nidx == 11)) { _is_address_field = true; }
 		else if (_ntype == "MACRO_RANDOM"       && (_nidx == 2  || _nidx == 8))  { _is_address_field = true; }
+		else if (_ntype == "MACRO_VOI64_MASTER" && _nidx == 5)                   { _is_address_field = true; }
 	else if (_ntype == "MACRO_SID_SOUND"    && (_nidx == 8  || _nidx == 11 || _nidx == 14 || _nidx == 18 || _nidx == 20)) { _is_address_field = true; }
         else if (_ntype == "MACRO_PRINT"        && _nidx == 6) { _is_address_field = true; }
         else if (_ntype == "MACRO_TEXT_SCROLL"  && _nidx == 5) { _is_address_field = true; }

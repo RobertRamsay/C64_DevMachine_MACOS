@@ -1057,6 +1057,9 @@ if ((mouse_check_button_pressed(mb_left) or scr_opt_pressed()) && !is_dragging &
         case "MACRO_CLR_SCREEN": scr_node_step_macro_clr_screen(draw_x); break;
         case "MACRO_MATH":       scr_node_step_macro_math(draw_x); break;
         case "MACRO_RANDOM":     scr_node_step_macro_random(draw_x);     break;
+        case "MACRO_SID_PAUSE":    scr_node_step_macro_sid_pause(draw_x);    break;
+        case "MACRO_VOI64_MASTER": scr_node_step_macro_voi64_master(draw_x); break;
+        case "MACRO_VOI64_SAY":    scr_node_step_macro_voi64_say(draw_x);    break;
 		case "MACRO_SID_SOUND":  scr_node_step_macro_sid_sound(draw_x);  break;
 		case "MACRO_SID_SONG":   scr_node_step_macro_sid_song(draw_x);   break;
 		case "MACRO_GET_CHAR":   scr_node_step_macro_get_char(draw_x);   break;

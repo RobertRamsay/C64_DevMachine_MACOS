@@ -762,6 +762,72 @@
 	        }
 	        global.addresses_dirty = true;
 
+	    // --- VOI64 MASTER ---
+	    // [1] pitch Hz  [2] speed  [3] throat  [4] mouth  [5] zp_base (hex)
+	    } else if (_target.node_type == "MACRO_VOI64_MASTER") {
+	        while (array_length(_target.instructions[0]) <= 5) {
+	            array_push(_target.instructions[0], 0);
+	        }
+	        if (_idx == 5) {
+	            var _vz = (string_char_at(_input, 1) == "$")
+	                    ? string_delete(_input, 1, 1) : _input;
+	            // Nine consecutive bytes: pointer lo/hi, flags, three control
+	            // shadows, and the range loop's cursor/end/temp. $F7 is the
+	            // highest base that keeps all nine inside page zero — above
+	            // that they wrap onto $00 and $01.
+	            _target.instructions[0][5] = clamp(hex_to_decimal(_vz), 0x02, 0xF7);
+	        } else if (_idx == 1) {
+	            // Outside 50-400Hz it stops reading as a voice: too low and
+	            // the sync source cannot excite the formant once per period,
+	            // too high and the formants alias into each other.
+	            _target.instructions[0][1] = clamp(real(string_digits(_input)), 50, 400);
+	        } else {
+	            _target.instructions[0][_idx] = clamp(real(string_digits(_input)), 0, 255);
+	        }
+	        global.addresses_dirty = true;
+
+	    // --- VOI64 SAY ---
+	    // [5] inline text  [6] asset name  [7..10] voice overrides
+	    } else if (_target.node_type == "MACRO_VOI64_SAY") {
+	        while (array_length(_target.instructions[0]) <= 16) {
+	            var _vn = array_length(_target.instructions[0]);
+	            if (_vn == 5 || _vn == 6 || _vn == 14 || _vn == 16) {
+	                array_push(_target.instructions[0], "");
+	            } else if (_vn >= 7 && _vn <= 10) {
+	                array_push(_target.instructions[0], -1);
+	            } else {
+	                array_push(_target.instructions[0], 0);
+	            }
+	        }
+	        if (_idx == 5 || _idx == 6) {
+	            _target.instructions[0][_idx] = _input;
+	        } else if (_idx == 14 || _idx == 16) {
+	            _target.instructions[0][_idx] = string_upper(string_trim(_input));
+	        } else if (_idx == 11 || _idx == 12) {
+	            // Blank means "the end you did not specify" — 0 reads as line 1
+	            // for FROM and as the last line for TO, so an untouched node
+	            // speaks the whole asset.
+	            var _lt = string_trim(_input);
+	            if (_lt == "" || _lt == "-") {
+	                _target.instructions[0][_idx] = 0;
+	            } else {
+	                _target.instructions[0][_idx] = clamp(real(string_digits(_lt)), 0, 9999);
+	            }
+	        } else if (_idx >= 7 && _idx <= 10) {
+	            // Empty clears the override back to "inherit from master",
+	            // which is what the node draws as a dash. Without this there
+	            // would be no way to undo an override once one was typed.
+	            var _vt = string_trim(_input);
+	            if (_vt == "" || _vt == "-") {
+	                _target.instructions[0][_idx] = -1;
+	            } else if (_idx == 7) {
+	                _target.instructions[0][7] = clamp(real(string_digits(_vt)), 50, 400);
+	            } else {
+	                _target.instructions[0][_idx] = clamp(real(string_digits(_vt)), 0, 255);
+	            }
+	        }
+	        global.addresses_dirty = true;
+
 	    // --- MACRO_RANDOM ---
 	    // [2] freq (hex 16-bit)  [4] clamp_min  [5] clamp_max
 	    // [7] dst_var  [8] zp_base (hex)
