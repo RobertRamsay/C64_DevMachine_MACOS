@@ -1077,6 +1077,7 @@ if ((mouse_check_button_pressed(mb_left) or scr_opt_pressed()) && !is_dragging &
         case "MACRO_CHR":    scr_macro_chr_step(id);             break;
         case "MACRO_MAP":        scr_node_step_macro_map(id);        break;
 		case "MACRO_METAMAP":    scr_node_step_macro_metamap(draw_x);    break;
+		case "MACRO_METASCROLL": scr_node_step_macro_metascroll(draw_x); break;
 		case "MACRO_MAP_SWITCH": scr_node_step_macro_map_switch(id); break;
         case "NEW_STR":      scr_node_step_new_str();            break;
        
@@ -1713,6 +1714,13 @@ case "COMMENT":
                                 if (node_type == "MACRO_VSCROLL") {
                                     array_push(other.label_picker_list, "Scroller_U");
                                     array_push(other.label_picker_list, "Scroller_D");
+                                }
+                                if (node_type == "MACRO_METASCROLL") {
+                                    array_push(other.label_picker_list, "MSC_L");
+                                    array_push(other.label_picker_list, "MSC_R");
+                                    array_push(other.label_picker_list, "MSC_U");
+                                    array_push(other.label_picker_list, "MSC_D");
+                                    array_push(other.label_picker_list, "MSC_Update");
                                 }
                                 if (node_type == "MACRO_TEXT_SCROLL") {
                                     var _jsr_m = (array_length(instructions[0]) > 11 && is_real(instructions[0][11])) ? real(instructions[0][11]) : 0;
