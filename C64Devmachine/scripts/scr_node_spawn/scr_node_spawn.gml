@@ -48,7 +48,7 @@ case "LABEL": {
         case "COMMENT":
             _n.node_title   = "COMMENT";
             _n.instructions = [["Comment", ""]];
-            _n.width        = 240;
+            scr_comment_sync_layout(_n);
             _n.pc_address   = 0x1200;
             break;
 
@@ -1016,4 +1016,52 @@ case "LABEL": {
     }
 
     return _n;
+}
+
+
+/// Comments wrap for display only; never insert newlines into saved instructions.
+/// Keep measurement and drawing on the same font, padding and standard node width.
+function scr_comment_sync_layout(_node) {
+    var _raw = (array_length(_node.instructions) > 0)
+        ? string(_node.instructions[0][1]) : "";
+    var _font = draw_get_font();
+    draw_set_font(fnt_c64_code);
+    var _text_w = max(1, global.node_display_width - 20);
+    if (_node.comment_source_cache != _raw || _node.comment_text_width != _text_w) {
+        var _lines = string_split(string_replace_all(string_replace_all(_raw, "\r\n", "\n"), "\r", "\n"), "\n");
+        var _wrapped = [];
+        for (var _i = 0; _i < array_length(_lines); _i++) {
+            var _rest = _lines[_i];
+            while (string_length(_rest) > 25 || string_width(_rest) > _text_w) {
+                // Limit by both character count and actual glyph width.
+                var _fit = min(25, string_length(_rest));
+                while (_fit > 1 && string_width(string_copy(_rest, 1, _fit)) > _text_w) _fit--;
+                var _space = string_last_pos(" ", string_copy(_rest, 1, _fit + 1));
+                var _take = (_space > 1) ? _space - 1 : _fit;
+                array_push(_wrapped, string_copy(_rest, 1, _take));
+                _rest = string_delete(_rest, 1, (_space > 1) ? _space : _take);
+            }
+            array_push(_wrapped, _rest);
+        }
+        var _display = "";
+        for (var _i = 0; _i < array_length(_wrapped); _i++) {
+            if (_i > 0) _display += "\n";
+            _display += _wrapped[_i];
+        }
+        _node.comment_source_cache = _raw;
+        _node.comment_display_text = _display;
+        _node.comment_text_width = _text_w;
+        _node.height_dirty = true;
+    }
+    var _height = ceil((28 + max(18, string_height_ext(_node.comment_display_text, 18, -1)) + 10) / 20) * 20;
+    if (_node.height != _height) {
+        _node.height_dirty = true;
+        // Use the normal spine repack, not a second delta push on the next Step.
+        if (_node.is_connected) global.addresses_dirty = true;
+        _node.prev_height = _height;
+    }
+    _node.width = global.node_display_width;
+    _node.height = _height;
+    _node.cached_height = _height;
+    draw_set_font(_font);
 }
