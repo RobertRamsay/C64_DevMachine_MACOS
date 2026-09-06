@@ -680,6 +680,14 @@ case "MACRO_PLACE_CHAR": {
     var _scr_base  = (array_length(_i0) > 16 && is_real(_i0[16])) ? real(_i0[16]) : 0x0400;
     var _zp        = (array_length(_i0) > 17 && is_real(_i0[17])) ? real(_i0[17]) : 0xFB;
 
+    // Appended slots keep old 18-slot projects in literal mode.
+    var _colour_vmode = (array_length(_i0) > 18 && is_real(_i0[18])) ? real(_i0[18]) : 0;
+    var _colour_var = (array_length(_i0) > 19) ? string(_i0[19]) : "";
+    var _colour_addr = (_set_col == 1 && _colour_vmode == 1) ? scr_resolve_var_addr(_colour_var) : 0;
+    if (_set_col == 1 && _colour_vmode == 1 && _colour_addr == 0) {
+        show_debug_message("MACRO_PLACE_CHAR WARNING: colour var '" + _colour_var + "' not resolved; using literal colour.");
+    }
+
     var _zp_sl = _zp;
     var _zp_sh = _zp + 1;
     var _zp_cl = _zp + 2;
@@ -797,7 +805,12 @@ case "MACRO_PLACE_CHAR": {
     array_push(_list, ["sta_izy", _zp_sl, _id]);
 
     if (_set_col == 1) {
-        array_push(_list, ["lda_imm", _col_val, _id]);
+        if (_colour_vmode == 1 && _colour_addr != 0) {
+            array_push(_list, ["lda_abs", _colour_addr, _id]);
+            array_push(_list, ["and_imm", 0x0F, _id]);
+        } else {
+            array_push(_list, ["lda_imm", _col_val, _id]);
+        }
         array_push(_list, ["sta_izy", _zp_cl,   _id]);
     }
 } break;
@@ -7446,6 +7459,9 @@ case "MACRO_PRINT": {
     var _align_h     = (array_length(_curr.instructions[0]) > 7) ? real(_curr.instructions[0][7]) : 0;
     var _align_v     = (array_length(_curr.instructions[0]) > 8) ? real(_curr.instructions[0][8]) : 0;
 
+    // Appended X/Y/colour LIT/VAR pairs; missing fields mean LIT.
+    var _pd = scr_print_dynamic_config(_curr.instructions[0], 18, _align_h, _align_v);
+
     // [9]  source mode: 0 = INLINE (existing behaviour), 1 = ASSET
     // [10] asset name (TEXT_DATA), used when [9] == 1
     // [11] start offset into asset
@@ -7548,8 +7564,10 @@ case "MACRO_PRINT": {
         array_push(_list, ["bne",     _lbl_cls2,  _id]);
     }
 
+    _list = scr_print_position_emit(_list, _id, _pd, _sx, _sy, _scr_base);
+
     // Set cursor colour
-    array_push(_list, ["lda_imm", _col,    _id]);
+    _list = scr_print_colour_emit(_list, _id, _pd, _col);
     array_push(_list, ["sta_abs", 0x0286,  _id]);
 
     // ── Resolve runtime var addresses (asset mode only) ───────────
@@ -7582,6 +7600,8 @@ case "MACRO_PRINT": {
         if (_src_mode == 1) {
             _asset_base = _text_addr - _start_off;
         }
+
+        if (!_use_svar) _asset_base += _start_off;
 
         // ptr_lo = <base + start_lo ; ptr_hi = >base + start_hi + carry
         array_push(_list, ["clc",     0,                         _id]);
@@ -7617,23 +7637,23 @@ case "MACRO_PRINT": {
         array_push(_list, ["ldy_imm", 0,                         _id]);
         array_push(_list, ["label",   _lbl_loop                     ]);
         array_push(_list, ["lda_izy", 0xFB,                      _id]); // lda ($FB),Y
-        array_push(_list, ["sta_aby", _screen_dest,              _id]);
-        array_push(_list, ["lda_imm", _col,                      _id]);
-        array_push(_list, ["sta_aby", _colour_dest,              _id]);
+        array_push(_list, [_pd.position ? "sta_izy" : "sta_aby", _pd.position ? 0xF5 : _screen_dest, _id]);
+        _list = scr_print_colour_emit(_list, _id, _pd, _col);
+        array_push(_list, [_pd.position ? "sta_izy" : "sta_aby", _pd.position ? 0xF7 : _colour_dest, _id]);
         array_push(_list, ["iny",     0,                         _id]);
         array_push(_list, ["cpy_zp",  0x02,                      _id]); // cpy count
         array_push(_list, ["bne",     _lbl_loop,                 _id]);
         array_push(_list, ["label",   _lbl_pskip                    ]);
     } else if (_len > 0) {
         // Original constant-length path (inline + literal-offset asset)
-        array_push(_list, ["ldx_imm", 0,             _id]);
+        array_push(_list, [_pd.position ? "ldy_imm" : "ldx_imm", 0, _id]);
         array_push(_list, ["label",   _lbl_loop          ]);
-        array_push(_list, ["lda_abx", _text_addr,    _id]);
-        array_push(_list, ["sta_abx", _screen_dest,  _id]);
-        array_push(_list, ["lda_imm", _col,          _id]);
-        array_push(_list, ["sta_abx", _colour_dest,  _id]);
-        array_push(_list, ["inx",     0,             _id]);
-        array_push(_list, ["cpx_imm", _len,          _id]);
+        array_push(_list, [_pd.position ? "lda_aby" : "lda_abx", _text_addr, _id]);
+        array_push(_list, [_pd.position ? "sta_izy" : "sta_abx", _pd.position ? 0xF5 : _screen_dest, _id]);
+        _list = scr_print_colour_emit(_list, _id, _pd, _col);
+        array_push(_list, [_pd.position ? "sta_izy" : "sta_abx", _pd.position ? 0xF7 : _colour_dest, _id]);
+        array_push(_list, [_pd.position ? "iny" : "inx", 0, _id]);
+        array_push(_list, [_pd.position ? "cpy_imm" : "cpx_imm", _len, _id]);
         array_push(_list, ["bne",     _lbl_loop,     _id]);
     }
 } break;
@@ -7665,6 +7685,9 @@ case "MACRO_PRINT_EXT": {
     var _align_h  = (array_length(_curr.instructions[0]) > 9 && is_real(_curr.instructions[0][9])) ? real(_curr.instructions[0][9]) : 0;
     var _align_v  = (array_length(_curr.instructions[0]) > 10 && is_real(_curr.instructions[0][10])) ? real(_curr.instructions[0][10]) : 0;
     var _pad      = (array_length(_curr.instructions[0]) > 11 && is_real(_curr.instructions[0][11])) ? real(_curr.instructions[0][11]) : 0;
+
+    // Appended X/Y/colour LIT/VAR pairs; missing fields mean LIT.
+    var _pd = scr_print_dynamic_config(_curr.instructions[0], 12, _align_h, _align_v);
 
     // ── Resolve value width ────────────────────────────────────────
     // Registers are always 1 byte. Vars follow UV/HW meta size.
@@ -7894,8 +7917,10 @@ case "MACRO_PRINT_EXT": {
         }
     }
 
+    _list = scr_print_position_emit(_list, _id, _pd, _sx, _sy, 0x0400);
+
     // Set cursor colour (legacy, harmless)
-    array_push(_list, ["lda_imm", _col,   _id]);
+    _list = scr_print_colour_emit(_list, _id, _pd, _col);
     array_push(_list, ["sta_abs", 0x0286, _id]);
 
     // ════════════════════════════════════════════════════════════════
@@ -7930,7 +7955,7 @@ case "MACRO_PRINT_EXT": {
                 // Last digit: always print as '0'..'9' regardless of leading state
                 array_push(_list, ["clc",     0,    _id]);
                 array_push(_list, ["adc_imm", 0x30, _id]);
-                array_push(_list, ["sta_abs", _scr_pos, _id]);
+                _list = scr_print_store_emit(_list, _id, _pd, _scr_pos, _screen_dest, 0xF5);
             } else {
                 // Leading-suppress: if A==0 AND no real digit yet, print pad char
                 var _real = _p + "dr" + string(_di);
@@ -7942,20 +7967,20 @@ case "MACRO_PRINT_EXT": {
                 array_push(_list, ["bne",     _real, _id]); // already printing digits
                 // still leading -> pad
                 array_push(_list, ["lda_imm", _pad_screencode, _id]);
-                array_push(_list, ["sta_abs", _scr_pos, _id]);
+                _list = scr_print_store_emit(_list, _id, _pd, _scr_pos, _screen_dest, 0xF5);
                 array_push(_list, ["jmp_abs", _wend, _id]);
                 // real digit
                 array_push(_list, ["label",   _real]);
                 array_push(_list, ["clc",     0,    _id]);
                 array_push(_list, ["adc_imm", 0x30, _id]);
-                array_push(_list, ["sta_abs", _scr_pos, _id]);
+                _list = scr_print_store_emit(_list, _id, _pd, _scr_pos, _screen_dest, 0xF5);
                 array_push(_list, ["lda_imm", 0x01, _id]); // mark real digit seen
                 array_push(_list, ["sta_zp",  0xF9, _id]);
                 array_push(_list, ["label",   _wend]);
             }
             // Colour
-            array_push(_list, ["lda_imm", _col,    _id]);
-            array_push(_list, ["sta_abs", _col_pos, _id]);
+            _list = scr_print_colour_emit(_list, _id, _pd, _col);
+            _list = scr_print_store_emit(_list, _id, _pd, _col_pos, _colour_dest, 0xF7);
         }
 
     } else if (_fmt == 1) {
@@ -7977,18 +8002,18 @@ case "MACRO_PRINT_EXT": {
             array_push(_list, ["lsr_a",   0,     _id]);
             array_push(_list, ["tax",     0,     _id]);
             array_push(_list, ["lda_abx", "pext_hexlut", _id]);
-            array_push(_list, ["sta_abs", _screen_dest + _char_i, _id]);
-            array_push(_list, ["lda_imm", _col,  _id]);
-            array_push(_list, ["sta_abs", _colour_dest + _char_i, _id]);
+            _list = scr_print_store_emit(_list, _id, _pd, _screen_dest + _char_i, _screen_dest, 0xF5);
+            _list = scr_print_colour_emit(_list, _id, _pd, _col);
+            _list = scr_print_store_emit(_list, _id, _pd, _colour_dest + _char_i, _colour_dest, 0xF7);
             _char_i++;
             // low nibble
             array_push(_list, ["lda_zp",  _zp,   _id]);
             array_push(_list, ["and_imm", 0x0F,  _id]);
             array_push(_list, ["tax",     0,     _id]);
             array_push(_list, ["lda_abx", "pext_hexlut", _id]);
-            array_push(_list, ["sta_abs", _screen_dest + _char_i, _id]);
-            array_push(_list, ["lda_imm", _col,  _id]);
-            array_push(_list, ["sta_abs", _colour_dest + _char_i, _id]);
+            _list = scr_print_store_emit(_list, _id, _pd, _screen_dest + _char_i, _screen_dest, 0xF5);
+            _list = scr_print_colour_emit(_list, _id, _pd, _col);
+            _list = scr_print_store_emit(_list, _id, _pd, _colour_dest + _char_i, _colour_dest, 0xF7);
             _char_i++;
         }
 
@@ -8009,9 +8034,9 @@ case "MACRO_PRINT_EXT": {
                 array_push(_list, ["bcc",     _b1,   _id]);
                 array_push(_list, ["lda_imm", 0x31,  _id]); // '1'
                 array_push(_list, ["label",   _b1]);
-                array_push(_list, ["sta_abs", _screen_dest + _bit_i, _id]);
-                array_push(_list, ["lda_imm", _col,  _id]);
-                array_push(_list, ["sta_abs", _colour_dest + _bit_i, _id]);
+                _list = scr_print_store_emit(_list, _id, _pd, _screen_dest + _bit_i, _screen_dest, 0xF5);
+                _list = scr_print_colour_emit(_list, _id, _pd, _col);
+                _list = scr_print_store_emit(_list, _id, _pd, _colour_dest + _bit_i, _colour_dest, 0xF7);
                 _bit_i++;
             }
         }
@@ -8025,9 +8050,9 @@ case "MACRO_PRINT_EXT": {
             var _legend = [0x0E, 0x16, 0x2D, 0x02, 0x04, 0x09, 0x1A, 0x03];
             for (var _li2 = 0; _li2 < 8; _li2++) {
                 array_push(_list, ["lda_imm", _legend[_li2],          _id]);
-                array_push(_list, ["sta_abs", _legend_dest + _li2,    _id]);
-                array_push(_list, ["lda_imm", _col,                   _id]);
-                array_push(_list, ["sta_abs", _legend_col + _li2,     _id]);
+                _list = scr_print_store_emit(_list, _id, _pd, _legend_dest + _li2, _screen_dest, 0xF5);
+                _list = scr_print_colour_emit(_list, _id, _pd, _col);
+                _list = scr_print_store_emit(_list, _id, _pd, _legend_col + _li2, _colour_dest, 0xF7);
             }
         }
 
@@ -8049,18 +8074,18 @@ case "MACRO_PRINT_EXT": {
             array_push(_list, ["lsr_a",   0,     _id]);
             array_push(_list, ["clc",     0,     _id]);
             array_push(_list, ["adc_imm", 0x30,  _id]);
-            array_push(_list, ["sta_abs", _screen_dest + _char_i3, _id]);
-            array_push(_list, ["lda_imm", _col,  _id]);
-            array_push(_list, ["sta_abs", _colour_dest + _char_i3, _id]);
+            _list = scr_print_store_emit(_list, _id, _pd, _screen_dest + _char_i3, _screen_dest, 0xF5);
+            _list = scr_print_colour_emit(_list, _id, _pd, _col);
+            _list = scr_print_store_emit(_list, _id, _pd, _colour_dest + _char_i3, _colour_dest, 0xF7);
             _char_i3++;
             // low nibble
             array_push(_list, ["lda_zp",  _zp3,  _id]);
             array_push(_list, ["and_imm", 0x0F,  _id]);
             array_push(_list, ["clc",     0,     _id]);
             array_push(_list, ["adc_imm", 0x30,  _id]);
-            array_push(_list, ["sta_abs", _screen_dest + _char_i3, _id]);
-            array_push(_list, ["lda_imm", _col,  _id]);
-            array_push(_list, ["sta_abs", _colour_dest + _char_i3, _id]);
+            _list = scr_print_store_emit(_list, _id, _pd, _screen_dest + _char_i3, _screen_dest, 0xF5);
+            _list = scr_print_colour_emit(_list, _id, _pd, _col);
+            _list = scr_print_store_emit(_list, _id, _pd, _colour_dest + _char_i3, _colour_dest, 0xF7);
             _char_i3++;
         }
     }
@@ -19615,4 +19640,62 @@ buffer_delete(_null_buf);
     }
 
     return instruction_list;
+}
+
+// PRINT dynamic fields are appended, preserving every legacy slot.
+function scr_print_dynamic_config(_ins, _slot, _ah, _av) {
+    var _addresses = [0, 0, 0];
+    for (var _d = 0; _d < 3; _d++) {
+        var _m = _slot + _d * 2;
+        if (array_length(_ins) <= _m + 1 || !is_real(_ins[_m]) || _ins[_m] != 1) continue;
+        // Explicit alignment continues to override its coordinate.
+        if ((_d == 0 && _ah != 0) || (_d == 1 && _av != 0)) continue;
+        var _name = string(_ins[_m + 1]);
+        _addresses[_d] = scr_resolve_var_addr(_name);
+        if (_addresses[_d] == 0) show_debug_message("PRINT WARNING: dynamic variable '" + _name + "' not resolved; using literal.");
+    }
+    return { xa: _addresses[0], ya: _addresses[1], ca: _addresses[2], position: (_addresses[0] != 0 || _addresses[1] != 0) };
+}
+
+function scr_print_colour_emit(_list, _id, _pd, _literal) {
+    if (_pd.ca != 0) {
+        array_push(_list, ["lda_abs", _pd.ca, _id]);
+        array_push(_list, ["and_imm", 15, _id]);
+    } else array_push(_list, ["lda_imm", _literal, _id]);
+    return _list;
+}
+
+// Runtime destination pointers: $F5/$F6 screen, $F7/$F8 colour.
+// Does not touch PRINT's source pointer or PRINT VALUE's conversion scratch.
+function scr_print_position_emit(_list, _id, _pd, _sx, _sy, _base) {
+    if (!_pd.position) return _list;
+    var _p = "print_pos_" + string(real(_id)) + "_";
+    if (_pd.xa != 0) array_push(_list, ["lda_abs", _pd.xa, _id]);
+    else array_push(_list, ["lda_imm", clamp(_sx, 0, 39), _id]);
+    array_push(_list, ["cmp_imm", 40, _id], ["bcc", _p + "x", _id], ["lda_imm", 39, _id]);
+    array_push(_list, ["label", _p + "x"], ["sta_zp", 0xF7, _id]);
+    if (_pd.ya != 0) array_push(_list, ["lda_abs", _pd.ya, _id]);
+    else array_push(_list, ["lda_imm", clamp(_sy, 0, 24), _id]);
+    array_push(_list, ["cmp_imm", 25, _id], ["bcc", _p + "y", _id], ["lda_imm", 24, _id]);
+    array_push(_list, ["label", _p + "y"], ["tax", 0, _id]);
+    array_push(_list, ["lda_imm", 0, _id], ["sta_zp", 0xF5, _id], ["sta_zp", 0xF6, _id]);
+    array_push(_list, ["cpx_imm", 0, _id], ["beq", _p + "offset", _id]);
+    array_push(_list, ["label", _p + "row"]);
+    array_push(_list, ["clc", 0, _id], ["lda_zp", 0xF5, _id], ["adc_imm", 40, _id], ["sta_zp", 0xF5, _id]);
+    array_push(_list, ["lda_zp", 0xF6, _id], ["adc_imm", 0, _id], ["sta_zp", 0xF6, _id]);
+    array_push(_list, ["dex", 0, _id], ["bne", _p + "row", _id], ["label", _p + "offset"]);
+    array_push(_list, ["clc", 0, _id], ["lda_zp", 0xF5, _id], ["adc_zp", 0xF7, _id], ["sta_zp", 0xF5, _id]);
+    array_push(_list, ["lda_zp", 0xF6, _id], ["adc_imm", 0, _id], ["sta_zp", 0xF6, _id]);
+    array_push(_list, ["lda_zp", 0xF5, _id], ["sta_zp", 0xF7, _id]);
+    array_push(_list, ["lda_zp", 0xF6, _id], ["clc", 0, _id], ["adc_imm", 0xD8, _id], ["sta_zp", 0xF8, _id]);
+    array_push(_list, ["clc", 0, _id], ["lda_zp", 0xF5, _id], ["adc_imm", _base & 255, _id], ["sta_zp", 0xF5, _id]);
+    array_push(_list, ["lda_zp", 0xF6, _id], ["adc_imm", (_base >> 8) & 255, _id], ["sta_zp", 0xF6, _id]);
+    return _list;
+}
+
+function scr_print_store_emit(_list, _id, _pd, _address, _origin, _zp) {
+    if (_pd.position) {
+        array_push(_list, ["ldy_imm", _address - _origin, _id], ["sta_izy", _zp, _id]);
+    } else array_push(_list, ["sta_abs", _address, _id]);
+    return _list;
 }
