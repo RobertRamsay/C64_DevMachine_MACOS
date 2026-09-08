@@ -1810,9 +1810,14 @@ if (_lod_body) switch (node_type) {
                 continue;
             }
             if (node_type == "COMMENT") {
-                draw_set_color(c_yellow);
-                draw_set_font(fnt_c64_code);
-                draw_text_ext(draw_x + 10, _yy, comment_display_text, line_h, -1);
+                // Text only while zoomed in enough to read it (cam_zoom up to
+                // 2.5). Further out the box still draws so the comment keeps
+                // its place in the column, just without the text.
+                if (_cam_zoom <= 2.5) {
+                    draw_set_color(c_yellow);
+                    draw_set_font(fnt_c64_code);
+                    draw_text_ext(draw_x + 10, _yy, comment_display_text, line_h, -1);
+                }
                 continue;
             }
 
