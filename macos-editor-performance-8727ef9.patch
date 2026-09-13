@@ -125,7 +125,7 @@ index 5a746d2..74e7618 100644
 +editor_layout_refresh_requested = false;
 +
  /// @desc Setup Workspace, Palette & C64 Environment
- global.lite=1;
+ global.lite=0;
  global.build_date = "September 10th, 2026"; // edit this string for each release
 diff --git a/C64Devmachine/objects/obj_workspace_manager/Step_0.gml b/C64Devmachine/objects/obj_workspace_manager/Step_0.gml
 index 5acbf18..6b33cf5 100644

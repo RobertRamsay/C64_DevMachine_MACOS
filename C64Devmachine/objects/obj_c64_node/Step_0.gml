@@ -2185,8 +2185,7 @@ if (global.wedge_preview_y >= 0) {
 
 				is_dragging            = false;
 				depth                  = was_dragged ? -500 : pre_click_depth;
-				global.addresses_dirty = true;
-				scr_c64_update_addresses();
+				if (was_dragged) scr_c64_update_addresses();
 				if (was_dragged) {
 				    x = round(x / 20) * 20;
 				    y = round(y / 20) * 20;
@@ -2329,7 +2328,7 @@ if (global.wedge_preview_y >= 0) {
                        
                     }
                 }
-                scr_c64_update_addresses();
+                if (was_dragged) scr_c64_update_addresses();
             }
         }
     }
@@ -2779,19 +2778,16 @@ if (is_connected && prev_height != height && !global.drop_occurred_this_frame) {
         }
     }
     prev_height = height;
-	
+
+    // Draw can derive a new height after a drop was finalized.
+    obj_workspace_manager.editor_layout_refresh_requested = true;
     global.addresses_dirty = true;
 }
 
 /////////////////////////////////////////////////////////////////
-// E. ADDRESS DIRTY FLAG ON ANY CLICK
+// E. Actual edits and drops mark addresses dirty at their mutation sites.
+// A plain click does not change the instruction graph.
 /////////////////////////////////////////////////////////////////
-if (mouse_check_button_pressed(mb_left) || mouse_check_button_released(mb_left))
-
-
-{
-    global.addresses_dirty = true;
-}
 
 /////////////////////////////////////////////////////////////////
 // E2. TAB INDENT
