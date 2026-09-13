@@ -1,3 +1,14 @@
+// Initialize missing state once, including instances running an older Create event.
+// Preserve requests already raised by node Steps or the panel this frame.
+if (!variable_instance_exists(id, "editor_release_state_ready")) {
+    if (!variable_instance_exists(id, "editor_release_pending")) editor_release_pending = false;
+    if (!variable_instance_exists(id, "editor_release_dirty")) editor_release_dirty = false;
+    if (!variable_instance_exists(id, "editor_release_panning")) editor_release_panning = false;
+    if (!variable_instance_exists(id, "showcode_refresh_requested")) showcode_refresh_requested = true;
+    if (!variable_instance_exists(id, "editor_layout_refresh_requested")) editor_layout_refresh_requested = false;
+    editor_release_state_ready = true;
+}
+
 // All node Step handlers have completed before this event.
 var _release_changed = editor_release_pending &&
     (editor_release_dirty || global.undo_dirty || global.addresses_dirty);

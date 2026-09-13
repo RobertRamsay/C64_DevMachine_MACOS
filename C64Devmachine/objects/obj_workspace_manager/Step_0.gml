@@ -2325,7 +2325,10 @@ scr_c64u_overlay_step();
 
 var build_trigger = keyboard_check_pressed(vk_f5) || trigger_build;
 
-if (build_trigger && !global.asset_reload_in_progress) {
+// Finish both mouse and Option-key drops before compiling.
+var _editor_released = mouse_check_button_released(mb_any) || scr_opt_released() || scr_optR_released();
+if (build_trigger && _editor_released) trigger_build = true;
+if (build_trigger && !global.asset_reload_in_progress && !_editor_released) {
 	show_debug_message("[F6-A] set: c64u=" + string(trigger_c64u) + " build=" + string(trigger_build) + " ip=" + global.c64u_ip);
         trigger_build = false;
         global.egg_temp_node_ids = [];
@@ -4732,51 +4735,19 @@ if (keyboard_check_pressed(vk_tab) && array_length(global.selected_nodes) > 0 &&
 // FINAL UPDATE & CLEANUP
 // =============================================================
 
-// 1. Handle Release Logic (Snapshots and Autosave)
-if (mouse_check_button_released(mb_any)) {
-    // Alarm 1 does `global.addresses_dirty = true; scr_c64_do_update_addresses();`
-    // — a FULL recompile, unconditionally, six frames after ANY mouse release.
-    // A click on empty canvas therefore paid for the whole compile chain, and
-    // with the code panel open it also paid for the panel build, the address
-    // sort and the attribution walk on top. That is the click-in-space cost.
-    //
-    // Arming it only when something is actually dirty loses nothing: if nothing
-    // was dirty at release then nothing changed, and anything that becomes
-    // dirty later is already caught by the every-frame addresses_dirty test
-    // further down.
-    if (global.undo_dirty || global.addresses_dirty) {
-        alarm[1] = 6;
-    }
-    with (obj_c64_node) { stats_cache_dirty = true; }
-    
-    // If we were dragging or changing things, finalize the addresses now
-    if (global.undo_dirty || global.addresses_dirty) {
-        scr_c64_do_update_addresses();
-        global.addresses_dirty = false;
-        
-        // Snapshot the stable state
-        scr_undo_snapshot();
-        global.undo_dirty = false;
-        
-// Handle Autosave timer
-        if (!_was_panning && !is_panning && global.autosave_mode != 3) {
-            var _was_clean = !global.autosave_dirty;
-            global.autosave_dirty = true;
-            global.manual_saved   = false;
-            if (_was_clean && alarm[4] < game_get_speed(gamespeed_fps) * 5) {
-                alarm[4] = game_get_speed(gamespeed_fps) * 5;
-            }
-        }
-    }
+// Capture the request here; End Step sees changes from node Steps that run
+// after the manager too. Alarm 1 remains reserved for startup/load refreshes.
+if ((mouse_check_button_released(mb_any) || scr_opt_released() || scr_optR_released())) {
+    editor_release_pending = true;
+    editor_release_dirty = global.undo_dirty || global.addresses_dirty;
+    editor_release_panning = _was_panning || is_panning;
     _was_panning = false;
 }
 
-// 2. Catch-all for non-mouse changes (Keyboard/Dirty Flags)
-// NOTICE: mouse_check_button_pressed is REMOVED from here to stop the flash.
-if (keyboard_check_pressed(vk_enter) || 
-    keyboard_check_pressed(vk_escape) || 
-    global.addresses_dirty) {
-    
+// Keep keyboard refreshes immediate. A release is finalized in End Step.
+if (!(mouse_check_button_released(mb_any) || scr_opt_released() || scr_optR_released()) &&
+    (keyboard_check_pressed(vk_enter) ||
+     keyboard_check_pressed(vk_escape) || global.addresses_dirty)) {
     scr_c64_do_update_addresses();
     global.addresses_dirty = false;
 }
