@@ -35,6 +35,9 @@ function scr_asset_default_address(_type) {
 		case "VECTOR_BITMAP": return 0x4000; // bitmap base — must match MACRO_VIC/MACRO_BMP
         // BITMAP_BUILDER is an AUTHORING asset — it emits a BYTE_DATA table and
         // occupies no C64 memory itself. Address is cosmetic only.
+        // HUD is an AUTHORING asset too — MACRO_HUD emits its chars and
+        // colours inline on the spine, so it owns no address of its own.
+        case "HUD":         return 0x0000;
 		case "MUSIC_MAKER":   return 0x0000;
         case "BITMAP_BUILDER": return 0x0000;
         case "LOAD_ORG":   return 0x0000;

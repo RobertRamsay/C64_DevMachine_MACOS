@@ -7,7 +7,7 @@ editor_layout_refresh_requested = false;
 
 /// @desc Setup Workspace, Palette & C64 Environment
 global.lite=0;
-global.build_date = "September 10th, 2026"; // edit this string for each release
+global.build_date = "September 15th, 2026"; // edit this string for each release
 
 // --- GLOBAL CRASH HANDLER ---
 exception_unhandled_handler(function(_ex) {
@@ -106,11 +106,10 @@ welcome_open           = false;
 welcome_hide_checked   = false;
 welcome_credits_y      = 0;
 welcome_whats_new = [
-    "ADDED - Additional features to VAR using on the CLR BMP RECT Macro.",
-    "ADDED - KUP , KDN , KLF , KRT to Misc keys macro (cursor keys)",
-    "FIXED - Convert to nodes issue with nothing added to INIT column.",
-    "VECTOR BITMAP - Import and Export buttons functional, share your vbmp files!",
-    "PLACE CHAR and PRINT macros extended to use LIT or VAR for position and colour",
+    "NEW - HUD asset: a screen rectangle of chars + colour with named fields,",
+    "      edited against your charset and stamped by the HUD macro node.",
+    "TWEAKED - Map editor to support the *Zyrons Escape project* (*PRO ONLY)",
+    "TWEAKED - Map editor panning is SPACE only, so ALT is purely the tile picker.",
     "",
     "SHARE your Custom Code blocks like a PRO in the Discord user-code-blocks channel.",
     "SUPPORT the development by leaving a review on ITCH and buying the PRO version.",

@@ -434,6 +434,8 @@ function scr_load_workspace_from_path(_path) {
                 if (variable_struct_exists(_sm, "mc_mode"))        _meta.mc_mode        = _sm.mc_mode;
                 if (variable_struct_exists(_sm, "paint_mc"))       _meta.paint_mc       = _sm.paint_mc;
                 if (variable_struct_exists(_sm, "map_mixed"))      _meta.map_mixed      = _sm.map_mixed;
+                if (variable_struct_exists(_sm, "raw_chars"))      _meta.raw_chars      = _sm.raw_chars;
+                if (variable_struct_exists(_sm, "erase_char"))     _meta.erase_char     = _sm.erase_char;
                 if (variable_struct_exists(_sm, "override_grid"))  _meta.override_grid  = _sm.override_grid;
                 if (variable_struct_exists(_sm, "map_mc_bg"))      _meta.map_mc_bg      = _sm.map_mc_bg;
                 if (variable_struct_exists(_sm, "map_mc_col1"))    _meta.map_mc_col1    = _sm.map_mc_col1;
@@ -591,6 +593,8 @@ function scr_load_workspace_from_path(_path) {
                 if (!variable_struct_exists(_new_asset.meta, "mc_mode"))           _new_asset.meta.mc_mode           = 2;
                 if (!variable_struct_exists(_new_asset.meta, "paint_mc"))          _new_asset.meta.paint_mc          = 0;
                 if (!variable_struct_exists(_new_asset.meta, "map_mixed"))         _new_asset.meta.map_mixed         = obj_workspace_manager.map_global_mixed;
+                if (!variable_struct_exists(_new_asset.meta, "raw_chars"))         _new_asset.meta.raw_chars         = 0;
+                if (!variable_struct_exists(_new_asset.meta, "erase_char"))        _new_asset.meta.erase_char        = 0;
                 if (!variable_struct_exists(_new_asset.meta, "map_mc_bg"))         _new_asset.meta.map_mc_bg         = -1;
                 if (!variable_struct_exists(_new_asset.meta, "map_mc_col1"))       _new_asset.meta.map_mc_col1       = -1;
                 if (!variable_struct_exists(_new_asset.meta, "map_mc_col2"))       _new_asset.meta.map_mc_col2       = -1;
@@ -831,6 +835,36 @@ function scr_load_workspace_from_path(_path) {
 	            _new_asset.meta.dither_mode   = "NONE";
 	            _new_asset.meta.dither_invert = false;
 	            _new_asset.meta.brush_size    = 0;
+	        }
+	        if (_ad.type == "HUD") {
+	            // Seed a complete meta first, then lay the saved fields over it —
+	            // an asset written by an older build simply keeps the defaults for
+	            // anything it never had, and the editor never sees a gap.
+	            scr_hud_create(_new_asset);
+	            var _hdm = {};
+	            if (variable_struct_exists(_ad, "meta")) {
+	                _hdm = _ad.meta;
+	            }
+	            var _hd_keys = ["hud_x","hud_y","hud_w","hud_h","char_grid","colour_grid",
+	                            "chr_asset","fields","sel_field","active_char","active_colour",
+	                            "paint_mc","hud_mc_mode","hud_mc_bg","hud_mc_col1","hud_mc_col2",
+	                            "zoom","cur_x","cur_y","show_grid"];
+	            for (var _hki = 0; _hki < array_length(_hd_keys); _hki++) {
+	                var _hk = _hd_keys[_hki];
+	                if (variable_struct_exists(_hdm, _hk)) {
+	                    _new_asset.meta[$ _hk] = _hdm[$ _hk];
+	                }
+	            }
+	            // json_parse hands numbers back as reals but a field struct that
+	            // came from an older file may be missing the newer members.
+	            for (var _hfi = 0; _hfi < array_length(_new_asset.meta.fields); _hfi++) {
+	                var _hf = _new_asset.meta.fields[_hfi];
+	                if (!variable_struct_exists(_hf, "base"))  { _hf.base  = 48; }
+	                if (!variable_struct_exists(_hf, "pad"))   { _hf.pad   = 0;  }
+	                if (!variable_struct_exists(_hf, "full"))  { _hf.full  = 81; }
+	                if (!variable_struct_exists(_hf, "empty")) { _hf.empty = 32; }
+	            }
+	            scr_hud_flush(_new_asset);
 	        }
 	        if (_ad.type == "MUSIC_MAKER") {
 	            scr_sound_editor_create(_new_asset);

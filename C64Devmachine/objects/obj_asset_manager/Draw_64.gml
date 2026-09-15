@@ -289,7 +289,7 @@ for (var _pos = 0; _pos < _count; _pos++) {
         draw_set_color(c_lime);
         var _blink = ((current_time mod 600) < 300) ? "_" : " ";
         draw_text(_panel_right - 6, _iy + 12, editing_addr_string + _blink);
-    } else if (_asset.type == "LOAD_ORG" || _asset.type == "LOAD_REU" || _asset.type == "BITMAP_BUILDER" || _asset.type == "MUSIC_MAKER") {
+    } else if (_asset.type == "LOAD_ORG" || _asset.type == "LOAD_REU" || _asset.type == "BITMAP_BUILDER" || _asset.type == "MUSIC_MAKER" || _asset.type == "HUD") {
         // LOAD_ORG is a manifest — no meaningful load address. BITMAP_BUILDER
         // and SOUND_EDITOR are internal-only; their emitted BYTE_DATA/TEXT_DATA
         // assets hold the real addresses. Show a dash, no hover/edit affordance.
@@ -724,7 +724,7 @@ if (metamap_picker_open && instance_exists(metamap_picker_node)) {
 if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list)) {
     var _asset = ds_list_find_value(asset_list, viewer_asset);
 
-	var _wide_editor = (_asset.type == "BITMAP_BUILDER" || _asset.type == "MUSIC_MAKER");
+	var _wide_editor = (_asset.type == "BITMAP_BUILDER" || _asset.type == "MUSIC_MAKER" || _asset.type == "HUD");
     var _vx1 = _wide_editor ? 30 : 288;
     var _vy1 = 108;
     var _vx2 = _wide_editor ? (panel_x + 20) : (panel_x - 10);
@@ -777,7 +777,7 @@ if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list))
     if (!_hide_import && _asset.type != "LOAD_ORG" && _asset.type != "LOAD_REU"
 	&& _asset.type != "META_TILESET" 
 	&& _asset.type != "BITMAP_BUILDER" 
-	&& _asset.type != "MUSIC_MAKER"
+	&& _asset.type != "MUSIC_MAKER" && _asset.type != "HUD"
     && !(_asset.type == "BYTE_DATA" 
 	&& variable_struct_exists(_asset.meta, "is_save_file") && _asset.meta.is_save_file)) {
         var _lb_hover = point_in_rectangle(_mx, _my, _lbx1, _lby1, _lbx2, _lby2);
@@ -864,7 +864,7 @@ if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list))
     // asset with no C64 payload — suppress the label entirely rather than
     // showing an empty field.
     draw_set_font(fnt_c64_tiny);
-    if (_asset.type != "BITMAP_BUILDER" && _asset.type != "MUSIC_MAKER") {
+    if (_asset.type != "BITMAP_BUILDER" && _asset.type != "MUSIC_MAKER" && _asset.type != "HUD") {
         draw_set_color(c_ltgray); draw_text(_vx1 + 10, _cy, "ADDRESS:");
     }
 
@@ -876,7 +876,7 @@ if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list))
         draw_text(_vx1 + 78, _cy, editing_addr_string + _blink);
         draw_set_color(c_gray);
         draw_text(_vx1 + 170, _cy, "ENTER TO CONFIRM");
-    } else if (_asset.type == "LOAD_ORG" || _asset.type == "LOAD_REU" || _asset.type == "BITMAP_BUILDER") {
+    } else if (_asset.type == "LOAD_ORG" || _asset.type == "LOAD_REU" || _asset.type == "BITMAP_BUILDER" || _asset.type == "HUD") {
         // LOAD_ORG is a manifest; BITMAP_BUILDER is an internal authoring asset
         // whose output BYTE_DATA carries the real address. Neither has one of
         // its own — draw nothing, no value, no hover/edit affordance.
@@ -935,6 +935,12 @@ case "BITMAP_BUILDER": {
 case "MUSIC_MAKER": {
     // Same wide-panel treatment as BITMAP_BUILDER — _vx1 is already 30 here.
     scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my);
+} break;
+
+case "HUD": {
+    // Wide panel as well: the editor draws the whole 40x25 screen so a panel
+    // can be judged against the space the game actually leaves for it.
+    scr_hud_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my);
 } break;
 		
 case "CHAR_SET": {
@@ -1736,6 +1742,7 @@ draw_set_color(c_ltgray);
 	            _m.paint_mc = (_paint_mc == 0) ? 1 : 0;
 	        }
 	    }
+
 	 }
 _cy += 22;
 
@@ -1958,6 +1965,71 @@ _cy += 22;
 		    draw_set_font(fnt_c64_tiny);
 		    draw_set_color(c_white);
 		    draw_text(_sw_x + _sw_sz + 4, _cy + 3, "CHR " + string(_m.active_char));
+
+	    // RAW CHARS toggle (stacked right of the CHR swatch, with ERASE
+	    // under it — the MIXED row is where the CHARSET picker lives) — emit the char plane only (map_w bytes per row,
+	    // map_h rows) with no colour plane and no transposed copy. For engines
+	    // that index the map themselves. MACRO_MAP / MACRO_SCROLL need the
+	    // full layout, so leave this off for maps they use.
+	    if (!variable_struct_exists(_m, "raw_chars")) {
+	        _m.raw_chars = 0;
+	    }
+	    var _raw_on     = (real(_m.raw_chars) == 1) ? 1 : 0;
+	    var _rw_labels  = ["FULL MAP", "RAW CHARS"];
+	    var _rw_cols    = [make_color_rgb(30,30,45), make_color_rgb(90,40,20)];
+	    var _rw_tcols   = [make_color_rgb(80,80,100), make_color_rgb(255,170,80)];
+	    var _rwx1  = _sw_x + _sw_sz + 52;
+	    var _rwx2  = _rwx1 + 90;
+	    var _rwy1  = _cy + 2;
+	    var _rwy2  = _cy + 18;
+	    var _rwhov = point_in_rectangle(_mx, _my, _rwx1, _rwy1, _rwx2, _rwy2);
+	    draw_set_color(_rw_cols[_raw_on]);
+	    draw_rectangle(_rwx1, _rwy1, _rwx2, _rwy2, false);
+	    draw_set_font(fnt_c64_tiny);
+	    draw_set_color(_rw_tcols[_raw_on]);
+	    draw_set_halign(fa_center);
+	    draw_text(_rwx1 + 45, _rwy1 + 3, _rw_labels[_raw_on]);
+	    draw_set_halign(fa_left);
+	    if (_rwhov && mouse_check_button_pressed(mb_left)) {
+	        if (_raw_on == 1) {
+	            _m.raw_chars = 0;
+	        } else {
+	            _m.raw_chars = 1;
+	        }
+	        _m.is_dirty = true;
+	        global.addresses_dirty = true;
+	    }
+
+	    // ERASE CHAR — the char right-click paints. Defaults to 0, but a
+	    // charset whose char 0 is a real tile (Zyron: char 0 is an animated
+	    // tile, blank is $20) needs a different one. Click to take the
+	    // current ACTIVE char as the erase char.
+	    if (!variable_struct_exists(_m, "erase_char")) {
+	        _m.erase_char = 0;
+	    }
+	    var _ecx1  = _rwx1;
+	    var _ecx2  = _rwx2;
+	    var _ecy1  = _cy + 24;
+	    var _ecy2  = _cy + 40;
+	    var _echov = point_in_rectangle(_mx, _my, _ecx1, _ecy1, _ecx2, _ecy2);
+	    var _ec_v      = real(_m.erase_char);
+	    var _ec_digits = "0123456789ABCDEF";
+	    var _ec_hex    = string_char_at(_ec_digits, ((_ec_v >> 4) & 15) + 1) + string_char_at(_ec_digits, (_ec_v & 15) + 1);
+	    var _ec_bg = make_color_rgb(40,30,50);
+	    if (_echov) {
+	        _ec_bg = make_color_rgb(60,40,70);
+	    }
+	    draw_set_color(_ec_bg);
+	    draw_rectangle(_ecx1, _ecy1, _ecx2, _ecy2, false);
+	    draw_set_font(fnt_c64_tiny);
+	    draw_set_color(make_color_rgb(200,150,255));
+	    draw_set_halign(fa_center);
+	    draw_text(_ecx1 + 45, _ecy1 + 3, "ERASE $" + _ec_hex);
+	    draw_set_halign(fa_left);
+	    if (_echov && mouse_check_button_pressed(mb_left)) {
+	        _m.erase_char = _m.active_char;
+	        _m.is_dirty = true;
+	    }
 		    _cy += _sw_sz + 4;
 
 // ---- INLINE TILE EDITOR (top-right, uses linked charset) ----
@@ -2241,8 +2313,20 @@ draw_set_color(_cell_bg_col);
 
         if (_mcol >= 0 && _mcol < _gw && _mrow >= 0 && _mrow < _gh) {
             
+            // --- 0. PICK (Alt + Left Click) — take the char, colour and
+            // HR/MC state of the cell under the mouse as the paint settings.
+            // Alt is also the pan key; a click without a drag just picks.
+            if (keyboard_check(vk_alt)) {
+                if (mouse_check_button_pressed(mb_left)) {
+                    _m.active_char   = _m.char_grid[_midx];
+                    _m.active_colour = _m.colour_grid[_midx];
+                    if (_global_mixed == 1 && array_length(_m.override_grid) > _midx) {
+                        _m.paint_mc = _m.override_grid[_midx];
+                    }
+                }
+            }
             // --- 1. SELECTION (Control + Left Click/Drag) ---
-            if (scr_ctrl_held()) {
+            else if (scr_ctrl_held()) {
                 if (mouse_check_button(mb_left)) {
                     _m.sel_grid[_midx] = 1; // Mark as selected
                 }
@@ -2550,8 +2634,13 @@ draw_set_color(_cell_bg_col);
             }
 			
 
+            // --- 0. PICK (Alt + Left Click) — handled above with the paint
+            // block; while Alt is held nothing here may paint or select.
+            if (keyboard_check(vk_alt)) {
+                // pick only — no paint, no select, no erase
+            }
             // --- 1. SELECTION (Control + Left Click/Drag) ---
-            if (keyboard_check(vk_control)) {
+            else if (keyboard_check(vk_control)) {
                 if (mouse_check_button(mb_left)) {
                     _m.sel_grid[_pidx] = 1; // Mark as selected
                 }
@@ -2626,8 +2715,13 @@ draw_set_color(_cell_bg_col);
                     map_paint_last_row = _hrow;
                 }
                 
-                // Right click — erase all non-zero chars covered by stamp footprint
+                // Right click — erase all chars covered by stamp footprint.
+                // The erase char is per map (_m.erase_char, default 0).
                 if (mouse_check_button(mb_right)) {
+                    var _erase_ch = 0;
+                    if (variable_struct_exists(_m, "erase_char")) {
+                        _erase_ch = real(_m.erase_char);
+                    }
                     if (_m.stamp_active && array_length(_m.stamp_data) > 0) {
                         for (var _er = 0; _er < array_length(_m.stamp_data); _er++) {
                             var _estamp   = _m.stamp_data[_er];
@@ -2635,14 +2729,14 @@ draw_set_color(_cell_bg_col);
                             var _edest_row = _hrow + _estamp.dy;
                             if (_edest_col >= 0 && _edest_col < _gw && _edest_row >= 0 && _edest_row < _gh) {
                                 var _edest_idx = _edest_row * _gw + _edest_col;
-                                if (_m.char_grid[_edest_idx] != 0) {
-                                    _m.char_grid[_edest_idx] = 0;
+                                if (_m.char_grid[_edest_idx] != _erase_ch) {
+                                    _m.char_grid[_edest_idx] = _erase_ch;
                                 }
                                 scr_asset_map_flush_cell(_asset, _edest_row, _edest_col);
                             }
                         }
                     } else {
-                        _m.char_grid[_pidx] = 0;
+                        _m.char_grid[_pidx] = _erase_ch;
                         scr_asset_map_flush_cell(_asset, _hrow, _hcol);
                     }
                 }
@@ -2666,16 +2760,19 @@ draw_set_color(_cell_bg_col);
 		        if (mouse_wheel_up())   _m.zoom = min(6, _zoom + 1);
 		        if (mouse_wheel_down()) _m.zoom = max(1, _zoom - 1);
 
-				if (mouse_check_button_pressed(mb_middle) || keyboard_check_pressed(vk_alt) || keyboard_check_pressed(vk_space) ) {
+				// PAN is SPACE (or the middle button) only. ALT used to pan as
+				// well, which fought with ALT+CLICK picking a tile: holding ALT
+				// to pick started a pan at the same time, so the map slid out
+				// from under the cell being picked.
+				if (mouse_check_button_pressed(mb_middle) || keyboard_check_pressed(vk_space)) {
 		            _m.pan_active   = true;
 		            _m.pan_start_mx = _mx;
 		            _m.pan_start_my = _my;
 		            _m.pan_start_sx = _m.scroll_x;
 		            _m.pan_start_sy = _m.scroll_y;
 		        }
-		       if (mouse_check_button_released(mb_middle) || keyboard_check_released(vk_alt) || keyboard_check_released(vk_space) || !window_has_focus()) {
+		       if (mouse_check_button_released(mb_middle) || keyboard_check_released(vk_space) || !window_has_focus()) {
 		            _m.pan_active = false;
-		            keyboard_clear(vk_alt);
 		        }
 				if (variable_struct_exists(_m, "pan_active") && _m.pan_active && window_has_focus()) {
 		            var _dx = (_m.pan_start_mx - _mx) div _cs;
@@ -10447,7 +10544,7 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
 // REFERENCED BY (for BITMAP, default cases — SPRITE_SET and MAP_DATA handle their own above)
     if (_asset.type == "SFX_DATA") _cy = _vy2 - 100;
 	 if (_asset.type == "BYTE_DATA" || _asset.type == "TEXT_DATA" || _asset.type == "LINE_COLL") _cy = _vy2 - 100;
-    if (_asset.type != "SPRITE_SET" && _asset.type != "MAP_DATA" && _asset.type != "BITMAP" && _asset.type != "META_TILESET" && _asset.type != "META_MAP" && _asset.type != "BITMAP_BUILDER" && _asset.type != "MUSIC_MAKER") {
+    if (_asset.type != "SPRITE_SET" && _asset.type != "MAP_DATA" && _asset.type != "BITMAP" && _asset.type != "META_TILESET" && _asset.type != "META_MAP" && _asset.type != "BITMAP_BUILDER" && _asset.type != "MUSIC_MAKER" && _asset.type != "HUD") {
         draw_set_font(fnt_c64_code);
         draw_set_color(make_color_rgb(60,60,80));
         draw_line(_vx1 + 10, _cy, _vx2 - 10, _cy);

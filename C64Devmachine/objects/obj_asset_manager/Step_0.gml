@@ -1931,6 +1931,8 @@ if (mouse_check_button_pressed(mb_left) && !global.any_picker_open) {
                 map_mc_bg         : -1,
                 map_mc_col1       : -1,
                 map_mc_col2       : -1,
+                raw_chars         : 0,
+                erase_char        : 0,
                 stamp_data        : [],
                 stamp_active      : false,
                 sel_grid          : array_create(40 * 25, 0),
@@ -1946,6 +1948,13 @@ if (mouse_check_button_pressed(mb_left) && !global.any_picker_open) {
             if (buffer_exists(_new_asset.buffer)) buffer_delete(_new_asset.buffer);
             _new_asset.buffer = buffer_create(1, buffer_fixed, 1);
             scr_bitmap_builder_create(_new_asset);
+        }
+        if (_type == "HUD") {
+            // Authoring asset: the buffer is only there so the workspace saver
+            // has something to blob out — MACRO_HUD reads the grids in meta.
+            if (buffer_exists(_new_asset.buffer)) buffer_delete(_new_asset.buffer);
+            _new_asset.buffer = buffer_create(1, buffer_fixed, 1);
+            scr_hud_create(_new_asset);
         }
         if (_type == "MUSIC_MAKER") {
             // Authoring asset — no C64 payload of its own, same family as

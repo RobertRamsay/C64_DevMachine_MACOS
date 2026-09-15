@@ -70,6 +70,7 @@ asset_types = [
 	"LOAD_REU",
 	"META_TILESET",
 	"LINE_COLL",
+	"HUD",
 ];
 // -------------------------------------------------------
 // ASSET VIEWER
@@ -98,7 +99,8 @@ type_colours = {
     LOAD_REU      : make_color_rgb(100, 200, 180),
     META_TILESET  : make_color_rgb(120, 200, 255),
     META_MAP      : make_color_rgb( 80, 140, 255),
-    LINE_COLL     : make_color_rgb(255, 100, 100)
+    LINE_COLL     : make_color_rgb(255, 100, 100),
+    HUD           : make_color_rgb( 90, 220, 190)
 };
 // -------------------------------------------------------
 // NAME EDITING
