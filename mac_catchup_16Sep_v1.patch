@@ -1,0 +1,1055 @@
+diff --git a/C64Devmachine/objects/obj_c64_node/Create_0.gml b/C64Devmachine/objects/obj_c64_node/Create_0.gml
+index e4743f9..16e60b2 100644
+--- a/C64Devmachine/objects/obj_c64_node/Create_0.gml
++++ b/C64Devmachine/objects/obj_c64_node/Create_0.gml
+@@ -215,6 +215,13 @@ height_dirty         = true;
+ comment_source_cache = undefined;
+ comment_display_text = "";
+ comment_text_width   = 0;
++// Raw index each wrapped display line starts at - scr_comment_sync_layout
++// fills it, the in-place editor maps clicks and the caret through it.
++comment_line_start   = [];
++// COMMENT width, in whole standard node widths: 1, 2 or 3. The < > handles
++// on the header step it, and scr_comment_sync_layout rewraps the body to
++// match, so a wider comment reflows rather than being clipped.
++comment_w_mult       = 1;
+ 
+ // ORG BLOCK COLLAPSE. Meaningful only on ORG nodes, but every node carries it
+ // so scr_node_is_hidden() can read a parent's flag without testing for the
+diff --git a/C64Devmachine/objects/obj_c64_node/Draw_0.gml b/C64Devmachine/objects/obj_c64_node/Draw_0.gml
+index 1b55194..556af03 100644
+--- a/C64Devmachine/objects/obj_c64_node/Draw_0.gml
++++ b/C64Devmachine/objects/obj_c64_node/Draw_0.gml
+@@ -298,7 +298,9 @@ var _raw_h = header_h + (array_length(instructions) * _line_gap) + _bottom_pad +
+ // =============================================================
+ switch (node_type) {
+     case "COMMENT":
+-        width = global.node_display_width;
++        // scr_comment_sync_layout (top of this event) has already set width
++        // from comment_w_mult. Re-forcing the standard width here would throw
++        // that away every frame.
+         break;
+     case "DATA_TEXT":
+         draw_set_font(fnt_c64_code);
+@@ -1821,9 +1823,33 @@ if (_lod_body) switch (node_type) {
+                 // 2.5). Further out the box still draws so the comment keeps
+                 // its place in the column, just without the text.
+                 if (_cam_zoom <= 2.5) {
+-                    draw_set_color(c_yellow);
++                    // While this comment has the keyboard, what is drawn here
++                    // IS the editor - the workspace writes each keystroke back
++                    // to the node and re-wraps, and no modal is shown.
++                    var _cm_edit = (instance_exists(obj_workspace_manager)
++                                 && obj_workspace_manager.is_entering_text
++                                 && obj_workspace_manager.input_target_node == id);
++
+                     draw_set_font(fnt_c64_code);
++                    draw_set_color(_cm_edit ? c_white : c_yellow);
+                     draw_text_ext(draw_x + 10, _yy, comment_display_text, line_h, -1);
++
++                    if (_cm_edit) {
++                        var _cm_cp = scr_comment_caret_pos(id,
++                                                           obj_workspace_manager.cursor_pos,
++                                                           draw_x + 10, _yy);
++                        if ((current_time div 500) mod 2 == 0) {
++                            draw_set_color(c_white);
++                            // +3 on both ends: the bar sat high against the
++                            // glyphs, this drops it onto the text baseline.
++                            draw_rectangle(_cm_cp.cx,     _cm_cp.cy + 2,
++                                           _cm_cp.cx + 1, _cm_cp.cy + line_h - 1, false);
++                        }
++                        // A frame, so it is obvious which comment is taking
++                        // the typing when several sit in a column.
++                        draw_set_color(make_color_rgb(120, 200, 255));
++                        draw_rectangle(draw_x, y, draw_x + width, y + height, true);
++                    }
+                 }
+                 continue;
+             }
+@@ -1924,6 +1950,54 @@ draw_set_font(fnt_c64_code);
+     }
+ }
+ 
++// =============================================================
++// K2. COMMENT WIDTH HANDLES  < >
++// One standard node width per step, 1x to 3x. Drawn last so nothing
++// painted earlier in this event sits on top of them.
++// =============================================================
++// While this comment is being typed into, the handles are hidden - the header
++// is part of the click-away/caret area then, and a stray < or > would resize
++// the node mid-sentence. This block is separate from the body draw above, so
++// the test has to be made again here.
++var _cw_editing = (instance_exists(obj_workspace_manager)
++                && obj_workspace_manager.is_entering_text
++                && obj_workspace_manager.input_target_node == id);
++
++if (node_type == "COMMENT" && global.comments_visible && !_cw_editing) {
++    var _cw_mult = 1;
++    if (variable_instance_exists(id, "comment_w_mult")) {
++        _cw_mult = clamp(round(comment_w_mult), 1, 3);
++    }
++    var _cw_h  = 16;
++    var _cw_y  = y + 4;
++    var _cw_rx = draw_x + width - 20;
++    var _cw_lx = draw_x + width - 38;
++
++    var _cw_l_on  = (_cw_mult > 1);
++    var _cw_r_on  = (_cw_mult < 3);
++    var _cw_l_hov = _cw_l_on && point_in_rectangle(mouse_x, mouse_y, _cw_lx, _cw_y, _cw_lx + 16, _cw_y + _cw_h);
++    var _cw_r_hov = _cw_r_on && point_in_rectangle(mouse_x, mouse_y, _cw_rx, _cw_y, _cw_rx + 16, _cw_y + _cw_h);
++
++    draw_set_font(fnt_c64_tiny);
++    draw_set_halign(fa_center);
++    draw_set_valign(fa_middle);
++
++    draw_set_color(_cw_l_hov ? make_color_rgb(95, 95, 95) : make_color_rgb(48, 48, 48));
++    draw_rectangle(_cw_lx, _cw_y, _cw_lx + 16, _cw_y + _cw_h, false);
++    draw_set_color(_cw_l_on ? (_cw_l_hov ? c_white : make_color_rgb(205, 205, 205))
++                            : make_color_rgb(85, 85, 85));
++    draw_text(_cw_lx + 8, _cw_y + _cw_h * 0.5, "<");
++
++    draw_set_color(_cw_r_hov ? make_color_rgb(95, 95, 95) : make_color_rgb(48, 48, 48));
++    draw_rectangle(_cw_rx, _cw_y, _cw_rx + 16, _cw_y + _cw_h, false);
++    draw_set_color(_cw_r_on ? (_cw_r_hov ? c_white : make_color_rgb(205, 205, 205))
++                            : make_color_rgb(85, 85, 85));
++    draw_text(_cw_rx + 8, _cw_y + _cw_h * 0.5, ">");
++
++    draw_set_halign(fa_left);
++    draw_set_valign(fa_top);
++}
++
+ // =============================================================
+ // L. OUTLINE + MEMORY OVERLAP WARNING
+ // Simply use the conflict status determined by the global scanner
+diff --git a/C64Devmachine/objects/obj_c64_node/Step_0.gml b/C64Devmachine/objects/obj_c64_node/Step_0.gml
+index cf0f87c..41f1d09 100644
+--- a/C64Devmachine/objects/obj_c64_node/Step_0.gml
++++ b/C64Devmachine/objects/obj_c64_node/Step_0.gml
+@@ -1113,14 +1113,25 @@ if ((mouse_check_button_pressed(mb_left) or scr_opt_pressed()) && !is_dragging &
+ 		
+ case "COMMENT":
+         if (!global.comments_visible) break;
+-        if (point_in_rectangle(mouse_x, mouse_y, draw_x, y + 20, draw_x + width, y + height)) {
++        // Body only, from y + 24 down: the header band (y .. y + 24) belongs to
++        // the drag start further down this event, and it used to overlap this
++        // rectangle by 4px so a header click both opened the editor and
++        // started a drag.
++        if (point_in_rectangle(mouse_x, mouse_y, draw_x, y + 24, draw_x + width, y + height)) {
++            // Edited in place on the node, not in the centre-screen modal.
++            // is_entering_text still goes up, because every keyboard shortcut
++            // in the workspace is guarded on it - the difference is that
++            // nothing draws the modal and the node owns the caret.
++            var _cm_caret = scr_comment_caret_at(id, draw_x + 10, y + 28, mouse_x, mouse_y);
+             with (obj_workspace_manager) {
+                 is_entering_text     = true;
+                 input_target_node    = other.id;
+                 input_target_index   = 0;
+                 current_input_string = string(other.instructions[0][1]);
+                 keyboard_string      = "";
+-                cursor_pos           = string_length(current_input_string);
++                cursor_pos           = _cm_caret;
++                input_sel_start      = -1;
++                input_sel_end        = -1;
+             }
+         }
+         break;
+@@ -1877,6 +1888,45 @@ if ((mouse_check_button_pressed(mb_left) or scr_opt_pressed())&& !_mouse_in_gui
+          if (point_in_rectangle(mouse_x, mouse_y, draw_x, y, draw_x + width, y + 24) &&
+             !(node_type == "LABEL" && array_length(instructions) > 0 && array_length(instructions[0]) > 1 && string(instructions[0][1]) == "sid_exit")) {
+ 
++            // ---- COMMENT WIDTH HANDLES ----
++            // First thing inside the header hit-test, so a click on < or >
++            // resizes instead of starting a drag.
++            // Not while this comment is being typed into - Draw_0 hides the
++            // handles then, and an invisible one must not be clickable.
++            var _cwm_edit = (instance_exists(obj_workspace_manager)
++                          && obj_workspace_manager.is_entering_text
++                          && obj_workspace_manager.input_target_node == id);
++
++            if (node_type == "COMMENT" && !_cwm_edit
++            &&  point_in_rectangle(mouse_x, mouse_y,
++                                   draw_x + width - 38, y + 4,
++                                   draw_x + width - 4,  y + 20)) {
++                var _cwm_old = 1;
++                if (variable_instance_exists(id, "comment_w_mult")) {
++                    _cwm_old = clamp(round(comment_w_mult), 1, 3);
++                }
++                var _cwm_new = _cwm_old;
++                if (mouse_x < draw_x + width - 20) {
++                    _cwm_new = max(1, _cwm_old - 1);
++                } else {
++                    _cwm_new = min(3, _cwm_old + 1);
++                }
++                if (_cwm_new != _cwm_old) {
++                    scr_undo_snapshot();
++                    comment_w_mult = _cwm_new;
++                    // Force the rewrap: sync_layout only re-measures when the
++                    // source text or the wrap width it last used has changed.
++                    comment_text_width = 0;
++                    height_dirty       = true;
++                    global.undo_dirty  = true;
++                    with (obj_c64_node) {
++                        last_overlap_check  = false;
++                        overlap_check_dirty = true;
++                    }
++                }
++                exit;
++            }
++
+             // ---- GROUP MOVE DRAG ----
+             if (id == global.group_drag_handle && array_length(global.selected_nodes) > 1
+                 && !(keyboard_check(vk_control) || scr_cmd_held())) {
+@@ -2833,28 +2883,14 @@ with (obj_c64_node) {
+     }
+ }
+ 
+-if (_has_irq_handler && exit_spawned) {
+-    var _self_ref = id;
+-    with (obj_c64_node) {
+-        if (node_type == "LABEL" && is_connected && org_parent == noone &&
+-            array_length(instructions) > 0 && array_length(instructions[0]) > 1 &&
+-            string(instructions[0][1]) == "sid_exit") {
+-            var _target_y = _self_ref.y + _self_ref.height;
+-            if (y != _target_y) {
+-                var _old_y  = y;
+-                var _lbl_id = id;
+-                // Push nodes that are at the target position down to make room
+-                with (obj_c64_node) {
+-                    if (id != _lbl_id && id != _self_ref && is_connected &&
+-                        org_parent == noone && y >= _target_y && y < _old_y) {
+-                        y += _lbl_id.height;
+-                    }
+-                }
+-                y = _target_y;
+-                scr_c64_update_addresses();
+-            }
+-        }
+-    }
++// With a MACRO_IRQ_HANDLER connected, MACRO_SID emits nothing between its JMP
++// and the label except sid_init_entry, so sid_exit only has to clear this node.
++// exit_spawned is set on any MACRO_SID that has seen the label exist, including
++// one just loaded from a file, so this used to re-snap the label on load and on
++// every height recalculation. scr_sid_exit_settle now leaves it alone unless it
++// is genuinely too high.
++if (_has_irq_handler && exit_spawned && node_type == "MACRO_SID") {
++    scr_sid_exit_settle(y + height);
+ }
+ 
+ 
+@@ -2898,14 +2934,33 @@ if (node_type == "MACRO_SID" && is_connected && !exit_spawned && org_parent == n
+        
+ 
+ var _label_ref  = _nl;
+-		var _label_push = 60; // LABEL fixed height = _G * 3
++        // The label's real height, not the 60 this used to assume — event_user(0)
++        // has run by now, so it is known, and a LABEL is 40. Assuming 60 made
++        // the node below the label look like a collision when it was merely
++        // adjacent, which is the common case.
++		var _label_push = max(20, _label_ref.height);
+         var _push_y     = _self_ref.y + _self_ref.height; // push from MACRO_SID bottom
+-       
++
++        // Only shove the rest of the spine down if the slot is genuinely
++        // taken. This used to push unconditionally, which is invisible when
++        // MACRO_SID sits low down and ruinous when it sits first: the label
++        // self-destructs whenever the SID node is briefly disconnected — a
++        // drag does it — and every respawn moved the ENTIRE program 60px
++        // further down the workspace.
++        var _slot_taken = false;
+         with (obj_c64_node) {
+             if (id != _self_ref && id != _label_ref && is_connected &&
+-                org_parent == noone && y >= _push_y) {
+-               
+-                y += _label_push;
++                org_parent == noone && y >= _push_y && y < _push_y + _label_push) {
++                _slot_taken = true;
++            }
++        }
++        if (_slot_taken) {
++            with (obj_c64_node) {
++                if (id != _self_ref && id != _label_ref && is_connected &&
++                    org_parent == noone && y >= _push_y) {
++
++                    y += _label_push;
++                }
+             }
+         }
+         scr_c64_update_addresses();
+diff --git a/C64Devmachine/objects/obj_workspace_manager/Create_0.gml b/C64Devmachine/objects/obj_workspace_manager/Create_0.gml
+index c453539..47ea5b7 100644
+--- a/C64Devmachine/objects/obj_workspace_manager/Create_0.gml
++++ b/C64Devmachine/objects/obj_workspace_manager/Create_0.gml
+@@ -246,6 +246,10 @@ code_editor_max_line_px            = 0;
+ code_editor_symbol_cache_dirty     = true;
+ code_editor_indent_cache           = [];
+ code_editor_line_starts            = [];
++// -1 = nothing to centre. FIND sets it to the line the match is on and the
++// draw, which is the only place that knows how many lines fit on screen,
++// turns it back into a scroll position and clears it.
++code_editor_center_line            = -1;
+ code_editor_local_labels           = ds_map_create();
+ code_editor_local_consts           = ds_map_create();
+ code_editor_global_labels          = ds_map_create();
+diff --git a/C64Devmachine/objects/obj_workspace_manager/Draw_64.gml b/C64Devmachine/objects/obj_workspace_manager/Draw_64.gml
+index 4257433..905766c 100644
+--- a/C64Devmachine/objects/obj_workspace_manager/Draw_64.gml
++++ b/C64Devmachine/objects/obj_workspace_manager/Draw_64.gml
+@@ -2366,15 +2366,19 @@ scr_draw_memory_bar(_bar_x1, _bar_x2, gui_h - 40);
+ /////////////////////////////////////////////////////////////////
+ ///// 4. DYNAMIC MODALS (EDITING & QUIT)
+ /////////////////////////////////////////////////////////////////
+-if (is_entering_text) {
++// A COMMENT is typed on the node itself now, so the centre-screen modal is
++// skipped entirely for one - obj_c64_node draws the live text and the caret.
++// Everything else still gets the modal.
++var _modal_is_comment = (is_entering_text && instance_exists(input_target_node)
++                      && (input_target_node.node_type == "COMMENT"
++                       || input_target_node.node_title == "COMMENT"));
++if (is_entering_text && !_modal_is_comment) {
+     if (global.show_info_window) is_entering_text = false;
+ 
+     var mid_x      = gui_w / 2;
+     var mid_y      = gui_h / 2;
+ 	
+-	var is_comment    = (instance_exists(input_target_node) &&
+-                        (input_target_node.node_type == "COMMENT" ||
+-                         input_target_node.node_title == "COMMENT"));
++	var is_comment    = false;
+ 	var is_scrolltxt  = (instance_exists(input_target_node) &&
+                          input_target_node.node_type == "MACRO_TEXT_SCROLL" &&
+                          input_target_index == 6);
+diff --git a/C64Devmachine/objects/obj_workspace_manager/Step_0.gml b/C64Devmachine/objects/obj_workspace_manager/Step_0.gml
+index 33a5753..22312a6 100644
+--- a/C64Devmachine/objects/obj_workspace_manager/Step_0.gml
++++ b/C64Devmachine/objects/obj_workspace_manager/Step_0.gml
+@@ -878,8 +878,14 @@ if (is_entering_text && !_was_entering_text) {
+     input_sel_end   = -1;
+     input_key_timer = 0;
+     // Cursor always lands at end of the seeded value, regardless of
+-    // whether the opening step script set it.
+-    cursor_pos      = string_length(current_input_string);
++    // whether the opening step script set it - except for a COMMENT, which
++    // is edited in place and wants the caret where the pointer was. Its
++    // opening step already worked that out; this would throw it away.
++    var _open_is_comment = (instance_exists(input_target_node)
++                         && input_target_node.node_type == "COMMENT");
++    if (!_open_is_comment) {
++        cursor_pos = string_length(current_input_string);
++    }
+ }
+ _was_entering_text = is_entering_text;
+ 
+@@ -921,7 +927,9 @@ if (is_entering_text) {
+         
+     }
+ 
+-    var char_limit = is_comment ? 160 : (_is_long_text ? 512 : (_is_address_field ? 5 : 40));
++    // 160 was the old modal box's capacity. A comment is a paragraph now, and
++    // the node grows to fit it.
++    var char_limit = is_comment ? 4096 : (_is_long_text ? 512 : (_is_address_field ? 5 : 40));
+ 
+     var _shift = keyboard_check(vk_shift);
+     var _ctrl  = scr_cmd_held();
+@@ -1173,9 +1181,18 @@ if (is_entering_text) {
+             }
+             keyboard_clear(vk_enter);
+         }
++    } else if (is_comment) {
++        // In place on the node there is no OK button to reach for, so ENTER is
++        // just a new line - plain or shifted. Clicking off the node is what
++        // ends the edit. The old 5-line cap went with the modal box.
++        if (keyboard_check_pressed(vk_enter)) {
++            current_input_string = string_insert("\n", current_input_string, cursor_pos + 1);
++            cursor_pos++;
++            keyboard_clear(vk_enter);
++        }
+     } else {
+         if (keyboard_check_pressed(vk_enter) && _shift) {
+-            if (is_comment || _is_long_text) {
++            if (_is_long_text) {
+                 if (string_count("\n", current_input_string) < 5) {
+                     current_input_string = string_insert("\n", current_input_string, cursor_pos + 1);
+                     cursor_pos++;
+@@ -1185,8 +1202,14 @@ if (is_entering_text) {
+         }
+     }
+ 
+-// ── Auto word-wrap for comment/long text ──
+-    if ((is_comment || _is_long_text) && !keyboard_check(vk_backspace)) {
++// ── Auto word-wrap for long text ──
++    // Comments are deliberately not in here any more. This inserts real
++    // newlines at 25 characters and hard-trims anything past them, which is
++    // the opposite of what scr_comment_sync_layout does - that wraps for
++    // DISPLAY only and never touches the stored string, so the same text
++    // reflows when the node is widened to 2x or 3x. Running both meant a
++    // comment came back from an edit chopped to 6 lines of 25.
++    if (_is_long_text && !keyboard_check(vk_backspace)) {
+         var _lines         = string_split(current_input_string, "\n");
+         var _temp_len      = 0;
+         var _curr_line_idx = 0;
+@@ -1224,10 +1247,10 @@ if (is_entering_text) {
+     // Skipped on the frame the modal opens: the click that opened the field
+     // is still "pressed" this step and would drag the caret to wherever the
+     // node's value happened to sit on screen.
+-    if (mouse_check_button_pressed(mb_left) && _was_entering_text) {
++    if (mouse_check_button_pressed(mb_left) && _was_entering_text && !is_comment) {
+         var _gmx    = global.gui_mouse_x;
+         var _gmy    = global.gui_mouse_y;
+-        var _is_ml  = (is_comment || _is_long_text || _is_code_editor);
++        var _is_ml  = (_is_long_text || _is_code_editor);
+         var _txt_x  = _is_ml ? ((input_target_node != noone && (input_target_node.node_type == "MACRO_TEXT_SCROLL" || input_target_node.node_type == "MACRO_CODE")) ? (global.gui_w / 2) - 180 : (global.gui_w / 2) - 125) : (global.gui_w / 2);
+         var _txt_y0 = (display_get_gui_height() / 2) - 60;
+         var _lh_px  = 18 * 1.2;
+@@ -1320,6 +1343,44 @@ if (is_entering_text) {
+         }
+         keyboard_string = "";
+     }
++
++    // ── COMMENT: live on the node, and clicking away is what ends it ──
++    if (is_comment && instance_exists(input_target_node)) {
++
++        // What is on the node IS what you are typing - wrapped, and grown to
++        // fit - because nothing else is showing it now.
++        if (string(input_target_node.instructions[0][1]) != current_input_string) {
++            input_target_node.instructions[0][1] = current_input_string;
++            scr_comment_sync_layout(input_target_node);
++            input_target_node.height_dirty = true;
++        }
++
++        // _was_entering_text keeps the click that OPENED the editor from
++        // closing it again on the same frame.
++        if (mouse_check_button_pressed(mb_left) && _was_entering_text) {
++            var _cm_dx = input_target_node.x + input_target_node.x_indent;
++            var _cm_in = point_in_rectangle(mouse_x, mouse_y,
++                                            _cm_dx, input_target_node.y,
++                                            _cm_dx + input_target_node.width,
++                                            input_target_node.y + input_target_node.height);
++            if (_cm_in) {
++                // Still on the node: move the caret to the pointer.
++                cursor_pos      = scr_comment_caret_at(input_target_node,
++                                                       _cm_dx + 10,
++                                                       input_target_node.y + 28,
++                                                       mouse_x, mouse_y);
++                input_sel_start = -1;
++                input_sel_end   = -1;
++            } else {
++                scr_comment_commit_inline(input_target_node, input_target_index, current_input_string);
++                is_entering_text = false;
++                input_sel_start  = -1;
++                input_sel_end    = -1;
++                keyboard_string  = "";
++            }
++        }
++    }
++
+     // ── Commit ──
+     var _do_commit = false;
+     if (_is_code_editor) {
+@@ -1345,6 +1406,11 @@ if (is_entering_text) {
+ 
+     // ── Escape ──
+     if (keyboard_check_pressed(vk_escape)) {
++        if (is_comment && instance_exists(input_target_node)) {
++            // Same ending as clicking away - there is no "cancel" for a
++            // comment, the text on the node is already the text.
++            scr_comment_commit_inline(input_target_node, input_target_index, current_input_string);
++        }
+         if (input_target_node != noone &&
+             input_target_node.node_type == "MACRO_CODE" &&
+             input_target_index == 0) {
+diff --git a/C64Devmachine/scripts/scr_autosave/scr_autosave.gml b/C64Devmachine/scripts/scr_autosave/scr_autosave.gml
+index 6cb7d1b..4429855 100644
+--- a/C64Devmachine/scripts/scr_autosave/scr_autosave.gml
++++ b/C64Devmachine/scripts/scr_autosave/scr_autosave.gml
+@@ -64,6 +64,7 @@ var _base = "unsaved";
+             collapsed:      inst.collapsed,
+             proxy:        variable_instance_exists(inst, "proxy")       ? inst.proxy       : false,
+             x_indent:     variable_instance_exists(inst, "x_indent")    ? inst.x_indent    : 0,
++            comment_w_mult: variable_instance_exists(inst, "comment_w_mult") ? inst.comment_w_mult : 1,
+ 			helper_text:  variable_instance_exists(inst, "helper_text") ? inst.helper_text : "",
+ 			anim_alias:      variable_instance_exists(inst, "anim_alias")       ? inst.anim_alias       : "",
+             scroll_alias:    variable_instance_exists(inst, "scroll_alias")     ? inst.scroll_alias     : "",
+diff --git a/C64Devmachine/scripts/scr_code_editor_do_search/scr_code_editor_do_search.gml b/C64Devmachine/scripts/scr_code_editor_do_search/scr_code_editor_do_search.gml
+index 03cf60f..0e6da6f 100644
+--- a/C64Devmachine/scripts/scr_code_editor_do_search/scr_code_editor_do_search.gml
++++ b/C64Devmachine/scripts/scr_code_editor_do_search/scr_code_editor_do_search.gml
+@@ -48,5 +48,9 @@ function scr_code_editor_do_search(_dir) {
+         code_editor_sel_end   = _found - 1 + _slen;
+         code_editor_cursor    = code_editor_sel_end;
+         code_editor_blink     = 0;
++        // Which line the match is on. The draw turns this into a scroll
++        // position, because it is the only place that knows how many lines
++        // fit in the panel.
++        code_editor_center_line = string_count("\n", string_copy(code_editor_text, 1, _found - 1));
+     }
+ }
+\ No newline at end of file
+diff --git a/C64Devmachine/scripts/scr_code_editor_draw/scr_code_editor_draw.gml b/C64Devmachine/scripts/scr_code_editor_draw/scr_code_editor_draw.gml
+index 3ced5c0..1a3521c 100644
+--- a/C64Devmachine/scripts/scr_code_editor_draw/scr_code_editor_draw.gml
++++ b/C64Devmachine/scripts/scr_code_editor_draw/scr_code_editor_draw.gml
+@@ -246,25 +246,45 @@ if (_close_hover && mouse_check_button_pressed(mb_left)) {
+ // ─── Find cursor line and column using cached line starts ───
+     var _cur_line = 0;
+     var _cur_col  = 0;
+-    if (array_length(code_editor_line_starts) == _total_lines) {
+-        var _lo = 0;
+-        var _hi = _total_lines - 1;
+-        while (_lo < _hi) {
+-            var _mid = _lo + ((_hi - _lo + 1) >> 1);
+-            if (code_editor_line_starts[_mid] <= _cur) {
+-                _lo = _mid;
+-            } else {
+-                _hi = _mid - 1;
+-            }
++    // The cache has to be correct BEFORE the lookup, not after it. This used
++    // to bail out when the cached length did not match, leaving _cur_line at
++    // 0 - and the auto-scroll below then obediently scrolled to line 0. Any
++    // edit that changes the line count and does not rebuild the cache showed
++    // up as the view jumping to the top. Rebuild it here instead of giving
++    // up, so no caller can cause that again.
++    if (array_length(code_editor_line_starts) != _total_lines) {
++        code_editor_line_starts = array_create(_total_lines, 0);
++        var _ls_off = 0;
++        for (var _lsi = 0; _lsi < _total_lines; _lsi++) {
++            code_editor_line_starts[_lsi] = _ls_off;
++            _ls_off += string_length(_lines[_lsi]) + 1;
++        }
++    }
++    var _lo = 0;
++    var _hi = _total_lines - 1;
++    while (_lo < _hi) {
++        var _mid = _lo + ((_hi - _lo + 1) >> 1);
++        if (code_editor_line_starts[_mid] <= _cur) {
++            _lo = _mid;
++        } else {
++            _hi = _mid - 1;
+         }
+-        _cur_line = _lo;
+-        _cur_col  = _cur - code_editor_line_starts[_lo];
+     }
++    _cur_line = _lo;
++    _cur_col  = _cur - code_editor_line_starts[_lo];
+ 
+     // Auto-scroll only when cursor moves, not while scrollbar dragging
+     if (!code_editor_scrollbar_dragging && code_editor_cursor != code_editor_last_cursor) {
+         if (_cur_line < code_editor_scroll_y) code_editor_scroll_y = _cur_line;
+         if (_cur_line >= code_editor_scroll_y + _max_lines) code_editor_scroll_y = _cur_line - _max_lines + 1;
++    }
++    // FIND asks for its match to sit in the middle of the view. The minimal
++    // auto-scroll above would leave a forward match on the last visible line,
++    // which is the worst place to read a hit from - there is no context under
++    // it. The clamp on the next line deals with a match near either end.
++    if (code_editor_center_line >= 0) {
++        code_editor_scroll_y    = code_editor_center_line - floor(_max_lines / 2);
++        code_editor_center_line = -1;
+     }
+ 	code_editor_scroll_y = clamp(code_editor_scroll_y, 0, max(0, _total_lines - _max_lines));
+ 
+@@ -1228,6 +1248,6 @@ var _g_is_valid = false;
+     draw_set_color(make_color_rgb(100, 180, 200));
+     draw_text(_px + 8, _py + _ph - 19, "(CTRL+ENTER) or ESCAPE to  CLOSE  |  F5: BUILD  |  CTRL+C/X/V  |  CTRL+A  |  TAB |  F12 : FONT  Z CTRL/(+SHIFT)+F FIND+REPLACE");
+ 	
+-	if (code_editor_find_open) scr_code_editor_draw_find_dialogue(_px, _py, _pw, _mx, _my);
++	if (code_editor_find_open) scr_code_editor_draw_find_dialogue(_px, _py, _pw, _ph, _mx, _my);
+ 	
+ }
+diff --git a/C64Devmachine/scripts/scr_code_editor_draw_find_dialogue/scr_code_editor_draw_find_dialogue.gml b/C64Devmachine/scripts/scr_code_editor_draw_find_dialogue/scr_code_editor_draw_find_dialogue.gml
+index bff9333..e22e199 100644
+--- a/C64Devmachine/scripts/scr_code_editor_draw_find_dialogue/scr_code_editor_draw_find_dialogue.gml
++++ b/C64Devmachine/scripts/scr_code_editor_draw_find_dialogue/scr_code_editor_draw_find_dialogue.gml
+@@ -1,4 +1,4 @@
+-function scr_code_editor_draw_find_dialogue(_px, _py, _pw, _mx, _my) {
++function scr_code_editor_draw_find_dialogue(_px, _py, _pw, _ph, _mx, _my) {
+     var _dw = 420;
+     var _dh = 130;
+     var _dx = _px + _pw - _dw - 20;
+@@ -106,6 +106,10 @@ function scr_code_editor_draw_find_dialogue(_px, _py, _pw, _mx, _my) {
+             code_editor_sel_start = -1;
+             code_editor_sel_end   = -1;
+             code_editor_symbol_cache_dirty = true;
++            // A replacement can be a different length, or carry a newline, so
++            // the line-start cache and the measured line widths are both out
++            // of date the moment this runs.
++            code_editor_cache_dirty        = true;
+         }
+     }
+     _bx += _bt_w + _gap;
+@@ -138,4 +142,40 @@ function scr_code_editor_draw_find_dialogue(_px, _py, _pw, _mx, _my) {
+     draw_set_font(fnt_c64_tiny);
+     draw_set_color(make_color_rgb(70, 90, 80));
+     draw_text(_dx + 8, _bt_y - 25, "TAB: switch field  |  ESC: close  |  ENTER: next");
++
++    // ─── CLICK AWAY ───────────────────────────────────────────────
++    // Last thing in the function on purpose: every field and button inside
++    // the box has already had its go at this click, so anything still
++    // unclaimed landed outside the box.
++    //
++    // Outside the box but still on the editor: dismiss the box and stop
++    // there. The click is not passed through to the code area, which
++    // ignores the mouse while the find panel is open anyway (the
++    // !code_editor_find_open guards in scr_code_editor_draw) - so one
++    // click dismisses, and the next one places the cursor.
++    //
++    // Outside the editor panel: close the editor too. That commits, which
++    // is the only thing closing ever does - scr_code_editor_close has no
++    // cancel concept, so nothing typed can be lost this way.
++    if (mouse_check_button_pressed(mb_left)) {
++
++        var _in_box = (_mx >= _dx && _mx <= _dx + _dw
++                    && _my >= _dy && _my <= _dy + _dh);
++
++        if (!_in_box) {
++            code_editor_find_open         = false;
++            code_editor_find_active_field = 0;
++
++            var _in_panel = (_mx >= _px && _mx <= _px + _pw
++                          && _my >= _py && _my <= _py + _ph);
++
++            if (!_in_panel) {
++                if (instance_exists(code_editor_node)) {
++                    code_editor_node.code_cache_dirty = true;
++                }
++                code_editor_symbol_cache_dirty = true;
++                scr_code_editor_close(true);
++            }
++        }
++    }
+ }
+\ No newline at end of file
+diff --git a/C64Devmachine/scripts/scr_code_editor_step/scr_code_editor_step.gml b/C64Devmachine/scripts/scr_code_editor_step/scr_code_editor_step.gml
+index bf1836a..d5fb27a 100644
+--- a/C64Devmachine/scripts/scr_code_editor_step/scr_code_editor_step.gml
++++ b/C64Devmachine/scripts/scr_code_editor_step/scr_code_editor_step.gml
+@@ -329,6 +329,11 @@ if (code_editor_find_open && code_editor_find_active_field > 0) {
+ 
+     if (_do_action) {
+ 
++        // BACKSPACE and DELETE are the only keys in here that change the
++        // text, and they used to leave code_editor_line_starts alone. See
++        // the rebuild at the bottom of this block for why that matters.
++        var _edit_before = code_editor_text;
++
+         // ─── LEFT ───
+         if (keyboard_check(vk_left)) {
+             code_editor_preferred_col = 0;
+@@ -444,6 +449,25 @@ if (code_editor_find_open && code_editor_find_active_field > 0) {
+             code_editor_blink  = 0;
+ 			
+         }
++
++        // A stale line-start cache is not a cosmetic problem. The draw looks
++        // the cursor's line up in it, and when the cached length no longer
++        // matches the real line count that lookup was skipped with the line
++        // still 0 - so the auto-scroll snapped the view to the top of the
++        // file. That is what backspacing over a line end looked like.
++        // ENTER, CUT and PASTE already rebuild it here; BACKSPACE and DELETE
++        // now do too.
++        if (code_editor_text != _edit_before) {
++            code_editor_cache_dirty = true;
++            var _bs_lines = string_split(code_editor_text, "\n");
++            var _bs_count = array_length(_bs_lines);
++            code_editor_line_starts = array_create(_bs_count, 0);
++            var _bs_off = 0;
++            for (var _bsi = 0; _bsi < _bs_count; _bsi++) {
++                code_editor_line_starts[_bsi] = _bs_off;
++                _bs_off += string_length(_bs_lines[_bsi]) + 1;
++            }
++        }
+     }
+ 
+     // ─── PAGE UP ───
+diff --git a/C64Devmachine/scripts/scr_load_workspace_from_path/scr_load_workspace_from_path.gml b/C64Devmachine/scripts/scr_load_workspace_from_path/scr_load_workspace_from_path.gml
+index aa38b93..427d430 100644
+--- a/C64Devmachine/scripts/scr_load_workspace_from_path/scr_load_workspace_from_path.gml
++++ b/C64Devmachine/scripts/scr_load_workspace_from_path/scr_load_workspace_from_path.gml
+@@ -64,6 +64,7 @@ function scr_load_workspace_from_path(_path) {
+         if (variable_struct_exists(d, "pc_address"))   _n.pc_address   = d.pc_address;
+         if (variable_struct_exists(d, "end_address"))  _n.end_address  = d.end_address;
+         if (variable_struct_exists(d, "x_indent"))     _n.x_indent     = d.x_indent;
++        if (variable_struct_exists(d, "comment_w_mult")) _n.comment_w_mult = clamp(round(d.comment_w_mult), 1, 3);
+         if (variable_struct_exists(d, "anim_alias")   && d.anim_alias   != "") _n.anim_alias   = d.anim_alias;
+         if (variable_struct_exists(d, "scroll_alias") && d.scroll_alias != "") _n.scroll_alias = d.scroll_alias;
+ 		if (variable_struct_exists(d, "code_descriptor")) _n.code_descriptor = d.code_descriptor;
+diff --git a/C64Devmachine/scripts/scr_node_spawn/scr_node_spawn.gml b/C64Devmachine/scripts/scr_node_spawn/scr_node_spawn.gml
+index 5830aa6..d5d1b9d 100644
+--- a/C64Devmachine/scripts/scr_node_spawn/scr_node_spawn.gml
++++ b/C64Devmachine/scripts/scr_node_spawn/scr_node_spawn.gml
+@@ -1039,6 +1039,99 @@ case "LABEL": {
+ }
+ 
+ 
++/// @function scr_comment_commit_inline(_node, _idx, _text)
++/// @desc Ends an in-place comment edit. The text is already on the node - the
++///       editor writes it every frame - so this is the bookkeeping: commit it
++///       properly, re-measure, and tell the workspace something changed.
++function scr_comment_commit_inline(_node, _idx, _text) {
++    if (!instance_exists(_node)) { return; }
++    scr_node_commit(_node, _idx, _text);
++    scr_comment_sync_layout(_node);
++    _node.height_dirty = true;
++    global.undo_dirty        = true;
++    global.node_change_dirty = true;
++    global.addresses_dirty   = true;
++    if (instance_exists(obj_workspace_manager)) { obj_workspace_manager.alarm[3] = 6; }
++    scr_c64_do_update_addresses();
++    with (obj_c64_node) {
++        last_overlap_check  = false;
++        overlap_check_dirty = true;
++        stats_cache_dirty   = true;
++    }
++}
++
++
++/// COMMENT IN-PLACE EDITING
++/// The body is drawn with draw_text_ext at a line height of 18 (obj_c64_node's
++/// Draw event, `line_h`). Both helpers take the body's room origin from the
++/// CALLER rather than working it out: the Draw event temporarily folds
++/// x_indent into x, so no single expression is right from both events.
++
++/// @function scr_comment_caret_at(_node, _bx, _by, _mx, _my)
++/// @desc Room position -> caret index into the RAW comment text, so a click in
++///       the body puts the caret where the pointer is.
++/// @return {Real} 0 .. length of the raw string
++function scr_comment_caret_at(_node, _bx, _by, _mx, _my) {
++    var _raw = (array_length(_node.instructions) > 0)
++             ? string(_node.instructions[0][1]) : "";
++    var _len = string_length(_raw);
++    if (!variable_instance_exists(_node, "comment_line_start")) { return _len; }
++    var _starts = _node.comment_line_start;
++    var _disp   = string_split(_node.comment_display_text, "\n");
++    var _n      = min(array_length(_disp), array_length(_starts));
++    if (_n <= 0) { return _len; }
++
++    var _li = floor((_my - _by) / 18);
++    if (_li < 0)   { _li = 0; }
++    if (_li >= _n) { _li = _n - 1; }
++
++    var _font = draw_get_font();
++    draw_set_font(fnt_c64_code);
++    var _line = _disp[_li];
++    var _col  = string_length(_line);
++    for (var _c = 0; _c <= string_length(_line); _c++) {
++        // Land on whichever character boundary the pointer is nearest.
++        if (_bx + string_width(string_copy(_line, 1, _c)) >= _mx - 3) {
++            _col = _c;
++            break;
++        }
++    }
++    draw_set_font(_font);
++
++    return clamp(_starts[_li] + _col, 0, _len);
++}
++
++
++/// @function scr_comment_caret_pos(_node, _caret, _bx, _by)
++/// @desc The inverse: caret index -> where to draw the bar.
++/// @return {Struct} cx, cy, line
++function scr_comment_caret_pos(_node, _caret, _bx, _by) {
++    var _out = { cx : _bx, cy : _by, line : 0 };
++    if (!variable_instance_exists(_node, "comment_line_start")) { return _out; }
++    var _starts = _node.comment_line_start;
++    var _disp   = string_split(_node.comment_display_text, "\n");
++    var _n      = min(array_length(_disp), array_length(_starts));
++    if (_n <= 0) { return _out; }
++
++    // The last display line that starts at or before the caret.
++    var _li = 0;
++    for (var _i = 0; _i < _n; _i++) {
++        if (_starts[_i] <= _caret) { _li = _i; } else { break; }
++    }
++    var _col = _caret - _starts[_li];
++    if (_col < 0) { _col = 0; }
++    if (_col > string_length(_disp[_li])) { _col = string_length(_disp[_li]); }
++
++    var _font = draw_get_font();
++    draw_set_font(fnt_c64_code);
++    _out.cx = _bx + string_width(string_copy(_disp[_li], 1, _col));
++    draw_set_font(_font);
++    _out.cy   = _by + (_li * 18);
++    _out.line = _li;
++    return _out;
++}
++
++
+ /// Comments wrap for display only; never insert newlines into saved instructions.
+ /// Keep measurement and drawing on the same font, padding and standard node width.
+ function scr_comment_sync_layout(_node) {
+@@ -1046,22 +1139,44 @@ function scr_comment_sync_layout(_node) {
+         ? string(_node.instructions[0][1]) : "";
+     var _font = draw_get_font();
+     draw_set_font(fnt_c64_code);
+-    var _text_w = max(1, global.node_display_width - 20);
++    // A comment is 1, 2 or 3 standard node widths across - whole steps only,
++    // so a row of them still lines up with everything else on the canvas.
++    // The wrap width follows the node, which is what makes widening reflow
++    // the text instead of just stretching the box around the old line breaks.
++    var _mult = 1;
++    if (variable_instance_exists(_node, "comment_w_mult")) {
++        _mult = clamp(round(_node.comment_w_mult), 1, 3);
++    }
++    var _node_w = global.node_display_width * _mult;
++    var _text_w = max(1, _node_w - 20);
++    var _max_ch = 25 * _mult;
+     if (_node.comment_source_cache != _raw || _node.comment_text_width != _text_w) {
+         var _lines = string_split(string_replace_all(string_replace_all(_raw, "\r\n", "\n"), "\r", "\n"), "\n");
+         var _wrapped = [];
++        // Where each DISPLAY line starts in the RAW text, 0-based. The wrap is
++        // display-only, so without this there is no way back from "the caret is
++        // on display line 3, column 8" to an index into the stored string - and
++        // in-place editing needs exactly that, in both directions.
++        var _starts  = [];
++        var _raw_pos = 0;
+         for (var _i = 0; _i < array_length(_lines); _i++) {
+-            var _rest = _lines[_i];
+-            while (string_length(_rest) > 25 || string_width(_rest) > _text_w) {
++            var _rest     = _lines[_i];
++            var _line_raw = _raw_pos;
++            while (string_length(_rest) > _max_ch || string_width(_rest) > _text_w) {
+                 // Limit by both character count and actual glyph width.
+-                var _fit = min(25, string_length(_rest));
++                var _fit = min(_max_ch, string_length(_rest));
+                 while (_fit > 1 && string_width(string_copy(_rest, 1, _fit)) > _text_w) _fit--;
+                 var _space = string_last_pos(" ", string_copy(_rest, 1, _fit + 1));
+                 var _take = (_space > 1) ? _space - 1 : _fit;
+                 array_push(_wrapped, string_copy(_rest, 1, _take));
+-                _rest = string_delete(_rest, 1, (_space > 1) ? _space : _take);
++                array_push(_starts, _line_raw);
++                var _eaten = (_space > 1) ? _space : _take;
++                _rest      = string_delete(_rest, 1, _eaten);
++                _line_raw += _eaten;
+             }
+             array_push(_wrapped, _rest);
++            array_push(_starts, _line_raw);
++            _raw_pos += string_length(_lines[_i]) + 1;   // +1 for the newline
+         }
+         var _display = "";
+         for (var _i = 0; _i < array_length(_wrapped); _i++) {
+@@ -1070,6 +1185,7 @@ function scr_comment_sync_layout(_node) {
+         }
+         _node.comment_source_cache = _raw;
+         _node.comment_display_text = _display;
++        _node.comment_line_start   = _starts;
+         _node.comment_text_width = _text_w;
+         _node.height_dirty = true;
+     }
+@@ -1080,7 +1196,7 @@ function scr_comment_sync_layout(_node) {
+         if (_node.is_connected) global.addresses_dirty = true;
+         _node.prev_height = _height;
+     }
+-    _node.width = global.node_display_width;
++    _node.width = _node_w;
+     _node.height = _height;
+     _node.cached_height = _height;
+     draw_set_font(_font);
+diff --git a/C64Devmachine/scripts/scr_node_step_macro_sid/scr_node_step_macro_sid.gml b/C64Devmachine/scripts/scr_node_step_macro_sid/scr_node_step_macro_sid.gml
+index 7a1427a..5a94c3a 100644
+--- a/C64Devmachine/scripts/scr_node_step_macro_sid/scr_node_step_macro_sid.gml
++++ b/C64Devmachine/scripts/scr_node_step_macro_sid/scr_node_step_macro_sid.gml
+@@ -46,41 +46,11 @@ _fy += _line_h; // irq line - editable
+         }
+     }
+     if (is_connected && org_parent == noone && !_has_irq_handler) {
+-        var _exit_node = noone;
+-        var _lowest_irq = noone;
+-        var _lowest_irq_y = -1;
+-        with (obj_c64_node) {
+-            if (is_connected && org_parent == noone) {
+-                if (node_type == "LABEL" && array_length(instructions) > 0 && array_length(instructions[0]) > 1 && string(instructions[0][1]) == "sid_exit") {
+-                    _exit_node = id;
+-                }
+-                if (node_type == "MACRO_IRQ") {
+-                    if (y > _lowest_irq_y) {
+-                        _lowest_irq_y = y;
+-                        _lowest_irq = id;
+-                    }
+-                }
+-            }
+-        }
+-		
+-		
+-        if (_exit_node != noone && _lowest_irq != noone) {
+-            var _new_y = _lowest_irq.y + _lowest_irq.height;
+-            if (_exit_node.y != _new_y) {
+-                var _old_y  = _exit_node.y;
+-                var _lbl_id = _exit_node;
+-                with (obj_c64_node) {
+-                    if (id != _lbl_id && is_connected && org_parent == noone &&
+-                        y >= _new_y && y < _old_y) {
+-                        y += _lbl_id.height;
+-                    }
+-                }
+-                _exit_node.y = _new_y;
+-                _exit_node.is_auto_adjusting = true;
+-                scr_c64_update_addresses();
+-            }
+-        }
+-    }
++        // Same rule as the per-frame pass in scr_node_step_macro_sid_frame:
++        // directly below this node, and left where the user put it once it
++        // already is. See scr_sid_exit_settle for why.
++        scr_sid_exit_settle(y + height);
++    }
+ 	
+ 	
+ }
+\ No newline at end of file
+diff --git a/C64Devmachine/scripts/scr_node_step_macro_sid_frame/scr_node_step_macro_sid_frame.gml b/C64Devmachine/scripts/scr_node_step_macro_sid_frame/scr_node_step_macro_sid_frame.gml
+index d73246a..58f3551 100644
+--- a/C64Devmachine/scripts/scr_node_step_macro_sid_frame/scr_node_step_macro_sid_frame.gml
++++ b/C64Devmachine/scripts/scr_node_step_macro_sid_frame/scr_node_step_macro_sid_frame.gml
+@@ -1,3 +1,57 @@
++/// @desc Settle the sid_exit label at _target_y, but only when it is above it.
++/// @param {real} _target_y  the highest Y sid_exit is allowed to sit at
++/// @return {bool} true when the label was moved
++//
++// Every repositioner in the project used to write sid_exit's Y unconditionally,
++// every frame. A node whose height was recalculated, or a MACRO_IRQ dragged
++// anywhere, moved the label with it — and because none of them checked what was
++// already parked at the destination, it regularly landed on top of another
++// spine node. Two nodes on the same Y is the one arrangement _walk_spine cannot
++// survive: it picks the next node by smallest Y strictly greater than the
++// current one, so one of the pair is silently dropped from the build.
++//
++// The rule here is the weakest one that still holds the constraint: sid_exit
++// has to be BELOW the macro that jumps to it. If it already is, it is left
++// exactly where the user put it. If it is not, it moves down to _target_y and
++// anything sitting in that slot is pushed clear first.
++function scr_sid_exit_settle(_target_y) {
++    var _exit_node = noone;
++    with (obj_c64_node) {
++        if (node_type == "LABEL" && is_connected && org_parent == noone &&
++            array_length(instructions) > 0 && array_length(instructions[0]) > 1 &&
++            string(instructions[0][1]) == "sid_exit") {
++            _exit_node = id;
++            break;
++        }
++    }
++    if (_exit_node == noone) return false;
++    if (_exit_node.y >= _target_y) return false;   // already legal — hands off
++
++    var _lbl_id = _exit_node;
++    var _lbl_h  = max(20, _exit_node.height);
++
++    // Only disturb the workspace if the slot is actually taken.
++    var _clash = false;
++    with (obj_c64_node) {
++        if (id != _lbl_id && is_connected && org_parent == noone &&
++            y >= _target_y && y < _target_y + _lbl_h) {
++            _clash = true;
++        }
++    }
++    if (_clash) {
++        with (obj_c64_node) {
++            if (id != _lbl_id && is_connected && org_parent == noone && y >= _target_y) {
++                y += _lbl_h;
++            }
++        }
++    }
++
++    _exit_node.y = _target_y;
++    _exit_node.is_auto_adjusting = true;
++    scr_c64_update_addresses();
++    return true;
++}
++
+ /// @desc ()
+ // Per-frame sid_exit repositioning — runs every step, not just on click
+ function scr_node_step_macro_sid_frame() {
+@@ -26,38 +80,14 @@ function scr_node_step_macro_sid_frame() {
+ 	}
+ 
+ 	if (!_has_irq_handler && !is_dragging) {
+-	    var _exit_node = noone;
+-	    var _lowest_irq = noone;
+-	    var _lowest_irq_y = -1;
+-	    with (obj_c64_node) {
+-	        if (is_connected && org_parent == noone) {
+-	            if (node_type == "LABEL" && array_length(instructions) > 0 && array_length(instructions[0]) > 1 && string(instructions[0][1]) == "sid_exit") {
+-	                _exit_node = id;
+-	            }
+-	            if (node_type == "MACRO_IRQ") {
+-	                if (y > _lowest_irq_y) {
+-	                    _lowest_irq_y = y;
+-	                    _lowest_irq = id;
+-	                }
+-	            }
+-	        }
+-	    }
+-	   var _anchor_node = _lowest_irq;
+-	    if (_anchor_node == noone) {
+-	        with (obj_c64_node) {
+-	            if (is_connected && org_parent == noone && node_type == "MACRO_SID") {
+-	                _anchor_node = id;
+-	                break;
+-	            }
+-	        }
+-	    }
+-	    if (_exit_node != noone && _anchor_node != noone) {
+-	        var _new_y = _anchor_node.y + _anchor_node.height;
+-	        if (_exit_node.y != _new_y) {
+-	            _exit_node.y = _new_y;
+-	            _exit_node.is_auto_adjusting = true;
+-	            scr_c64_update_addresses();
+-	        }
+-	    }
++	    // Directly below this node, and that is the whole rule — the same one
++	    // the IRQ_HANDLER branch uses, so MACRO_SID behaves identically either
++	    // way. It used to be forced below every MACRO_IRQ as well, which made
++	    // the label unplaceable whenever the SID node came first on the spine.
++	    // It does not need to be: MACRO_IRQ wraps its own handler body in
++	    // JSR init / JMP skip ... skip:, so it jumps over itself. The only run
++	    // sid_exit has to clear is the one MACRO_SID emits inline after the
++	    // JMP - sid_irq and sid_init_entry - and that ends at this node.
++	    scr_sid_exit_settle(y + height);
+ 	}
+ }
+\ No newline at end of file
+diff --git a/C64Devmachine/scripts/scr_save_workspace_as/scr_save_workspace_as.gml b/C64Devmachine/scripts/scr_save_workspace_as/scr_save_workspace_as.gml
+index 1630844..d903fa0 100644
+--- a/C64Devmachine/scripts/scr_save_workspace_as/scr_save_workspace_as.gml
++++ b/C64Devmachine/scripts/scr_save_workspace_as/scr_save_workspace_as.gml
+@@ -71,6 +71,7 @@
+ 				proxy:          variable_instance_exists(inst, "proxy") ? inst.proxy : false,
+ 	            helper_text:    variable_instance_exists(inst, "helper_text") ? inst.helper_text : "",
+ 				x_indent:       variable_instance_exists(inst, "x_indent") ? inst.x_indent : 0,
++				comment_w_mult: variable_instance_exists(inst, "comment_w_mult") ? inst.comment_w_mult : 1,
+ 	            anim_alias:     variable_instance_exists(inst, "anim_alias") ? inst.anim_alias : "",
+ 	            scroll_alias:   variable_instance_exists(inst, "scroll_alias") ? inst.scroll_alias : "",
+ 				code_descriptor: variable_instance_exists(inst, "code_descriptor") ? inst.code_descriptor : "Code Block",
+diff --git a/C64Devmachine/scripts/scr_save_workspace_as_path/scr_save_workspace_as_path.gml b/C64Devmachine/scripts/scr_save_workspace_as_path/scr_save_workspace_as_path.gml
+index 1506394..ad87876 100644
+--- a/C64Devmachine/scripts/scr_save_workspace_as_path/scr_save_workspace_as_path.gml
++++ b/C64Devmachine/scripts/scr_save_workspace_as_path/scr_save_workspace_as_path.gml
+@@ -63,6 +63,7 @@ global.workspace_path = path;
+ 			proxy:          variable_instance_exists(inst, "proxy") ? inst.proxy : false,
+             helper_text:    variable_instance_exists(inst, "helper_text") ? inst.helper_text : "",
+ 			x_indent:       variable_instance_exists(inst, "x_indent") ? inst.x_indent : 0,
++			comment_w_mult: variable_instance_exists(inst, "comment_w_mult") ? inst.comment_w_mult : 1,
+             anim_alias:     variable_instance_exists(inst, "anim_alias") ? inst.anim_alias : "",
+             scroll_alias:   variable_instance_exists(inst, "scroll_alias") ? inst.scroll_alias : "",
+ 			code_descriptor: variable_instance_exists(inst, "code_descriptor") ? inst.code_descriptor : "Code Block",
+diff --git a/C64Devmachine/scripts/scr_undo_restore/scr_undo_restore.gml b/C64Devmachine/scripts/scr_undo_restore/scr_undo_restore.gml
+index 33c5db2..876db6e 100644
+--- a/C64Devmachine/scripts/scr_undo_restore/scr_undo_restore.gml
++++ b/C64Devmachine/scripts/scr_undo_restore/scr_undo_restore.gml
+@@ -57,6 +57,7 @@ function scr_undo_restore(_path) {
+         if (variable_struct_exists(_d, "pc_address"))   _n.pc_address   = _d.pc_address;
+         if (variable_struct_exists(_d, "end_address"))  _n.end_address  = _d.end_address;
+         if (variable_struct_exists(_d, "x_indent"))     _n.x_indent     = _d.x_indent;
++        if (variable_struct_exists(_d, "comment_w_mult")) _n.comment_w_mult = clamp(round(_d.comment_w_mult), 1, 3);
+         if (variable_struct_exists(_d, "stable_uid"))   _n.stable_uid   = _d.stable_uid;
+ 		if (variable_struct_exists(_d, "anim_alias") && _d.anim_alias != "")         _n.anim_alias       = _d.anim_alias;
+         if (variable_struct_exists(_d, "scroll_alias") && _d.scroll_alias != "")     _n.scroll_alias     = _d.scroll_alias;
+diff --git a/C64Devmachine/scripts/scr_undo_snapshot/scr_undo_snapshot.gml b/C64Devmachine/scripts/scr_undo_snapshot/scr_undo_snapshot.gml
+index 4c399d3..9847caa 100644
+--- a/C64Devmachine/scripts/scr_undo_snapshot/scr_undo_snapshot.gml
++++ b/C64Devmachine/scripts/scr_undo_snapshot/scr_undo_snapshot.gml
+@@ -88,6 +88,7 @@ function scr_undo_snapshot() {
+             proxy:          variable_instance_exists(_inst, "proxy")        ? _inst.proxy        : false,
+             helper_text:    variable_instance_exists(_inst, "helper_text")  ? _inst.helper_text  : "",
+             x_indent:       variable_instance_exists(_inst, "x_indent")     ? _inst.x_indent     : 0,
++            comment_w_mult: variable_instance_exists(_inst, "comment_w_mult") ? _inst.comment_w_mult : 1,
+ 			anim_alias:      variable_instance_exists(_inst, "anim_alias")      ? _inst.anim_alias      : "",
+             scroll_alias:    variable_instance_exists(_inst, "scroll_alias")     ? _inst.scroll_alias    : "",
+             code_descriptor: variable_instance_exists(_inst, "code_descriptor")  ? _inst.code_descriptor : "",

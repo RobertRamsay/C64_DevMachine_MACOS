@@ -1113,14 +1113,25 @@ if ((mouse_check_button_pressed(mb_left) or scr_opt_pressed()) && !is_dragging &
 		
 case "COMMENT":
         if (!global.comments_visible) break;
-        if (point_in_rectangle(mouse_x, mouse_y, draw_x, y + 20, draw_x + width, y + height)) {
+        // Body only, from y + 24 down: the header band (y .. y + 24) belongs to
+        // the drag start further down this event, and it used to overlap this
+        // rectangle by 4px so a header click both opened the editor and
+        // started a drag.
+        if (point_in_rectangle(mouse_x, mouse_y, draw_x, y + 24, draw_x + width, y + height)) {
+            // Edited in place on the node, not in the centre-screen modal.
+            // is_entering_text still goes up, because every keyboard shortcut
+            // in the workspace is guarded on it - the difference is that
+            // nothing draws the modal and the node owns the caret.
+            var _cm_caret = scr_comment_caret_at(id, draw_x + 10, y + 28, mouse_x, mouse_y);
             with (obj_workspace_manager) {
                 is_entering_text     = true;
                 input_target_node    = other.id;
                 input_target_index   = 0;
                 current_input_string = string(other.instructions[0][1]);
                 keyboard_string      = "";
-                cursor_pos           = string_length(current_input_string);
+                cursor_pos           = _cm_caret;
+                input_sel_start      = -1;
+                input_sel_end        = -1;
             }
         }
         break;
@@ -1876,6 +1887,45 @@ if (node_type == "INIT") {
 if ((mouse_check_button_pressed(mb_left) or scr_opt_pressed())&& !_mouse_in_gui && !obj_workspace_manager.is_panning && !instance_exists(obj_ui_color_picker) && _cam_zoom < 3.55 && !label_picker_open && !global.any_picker_open) {
          if (point_in_rectangle(mouse_x, mouse_y, draw_x, y, draw_x + width, y + 24) &&
             !(node_type == "LABEL" && array_length(instructions) > 0 && array_length(instructions[0]) > 1 && string(instructions[0][1]) == "sid_exit")) {
+
+            // ---- COMMENT WIDTH HANDLES ----
+            // First thing inside the header hit-test, so a click on < or >
+            // resizes instead of starting a drag.
+            // Not while this comment is being typed into - Draw_0 hides the
+            // handles then, and an invisible one must not be clickable.
+            var _cwm_edit = (instance_exists(obj_workspace_manager)
+                          && obj_workspace_manager.is_entering_text
+                          && obj_workspace_manager.input_target_node == id);
+
+            if (node_type == "COMMENT" && !_cwm_edit
+            &&  point_in_rectangle(mouse_x, mouse_y,
+                                   draw_x + width - 38, y + 4,
+                                   draw_x + width - 4,  y + 20)) {
+                var _cwm_old = 1;
+                if (variable_instance_exists(id, "comment_w_mult")) {
+                    _cwm_old = clamp(round(comment_w_mult), 1, 3);
+                }
+                var _cwm_new = _cwm_old;
+                if (mouse_x < draw_x + width - 20) {
+                    _cwm_new = max(1, _cwm_old - 1);
+                } else {
+                    _cwm_new = min(3, _cwm_old + 1);
+                }
+                if (_cwm_new != _cwm_old) {
+                    scr_undo_snapshot();
+                    comment_w_mult = _cwm_new;
+                    // Force the rewrap: sync_layout only re-measures when the
+                    // source text or the wrap width it last used has changed.
+                    comment_text_width = 0;
+                    height_dirty       = true;
+                    global.undo_dirty  = true;
+                    with (obj_c64_node) {
+                        last_overlap_check  = false;
+                        overlap_check_dirty = true;
+                    }
+                }
+                exit;
+            }
 
             // ---- GROUP MOVE DRAG ----
             if (id == global.group_drag_handle && array_length(global.selected_nodes) > 1
@@ -2833,28 +2883,14 @@ with (obj_c64_node) {
     }
 }
 
-if (_has_irq_handler && exit_spawned) {
-    var _self_ref = id;
-    with (obj_c64_node) {
-        if (node_type == "LABEL" && is_connected && org_parent == noone &&
-            array_length(instructions) > 0 && array_length(instructions[0]) > 1 &&
-            string(instructions[0][1]) == "sid_exit") {
-            var _target_y = _self_ref.y + _self_ref.height;
-            if (y != _target_y) {
-                var _old_y  = y;
-                var _lbl_id = id;
-                // Push nodes that are at the target position down to make room
-                with (obj_c64_node) {
-                    if (id != _lbl_id && id != _self_ref && is_connected &&
-                        org_parent == noone && y >= _target_y && y < _old_y) {
-                        y += _lbl_id.height;
-                    }
-                }
-                y = _target_y;
-                scr_c64_update_addresses();
-            }
-        }
-    }
+// With a MACRO_IRQ_HANDLER connected, MACRO_SID emits nothing between its JMP
+// and the label except sid_init_entry, so sid_exit only has to clear this node.
+// exit_spawned is set on any MACRO_SID that has seen the label exist, including
+// one just loaded from a file, so this used to re-snap the label on load and on
+// every height recalculation. scr_sid_exit_settle now leaves it alone unless it
+// is genuinely too high.
+if (_has_irq_handler && exit_spawned && node_type == "MACRO_SID") {
+    scr_sid_exit_settle(y + height);
 }
 
 
@@ -2898,14 +2934,33 @@ if (node_type == "MACRO_SID" && is_connected && !exit_spawned && org_parent == n
        
 
 var _label_ref  = _nl;
-		var _label_push = 60; // LABEL fixed height = _G * 3
+        // The label's real height, not the 60 this used to assume — event_user(0)
+        // has run by now, so it is known, and a LABEL is 40. Assuming 60 made
+        // the node below the label look like a collision when it was merely
+        // adjacent, which is the common case.
+		var _label_push = max(20, _label_ref.height);
         var _push_y     = _self_ref.y + _self_ref.height; // push from MACRO_SID bottom
-       
+
+        // Only shove the rest of the spine down if the slot is genuinely
+        // taken. This used to push unconditionally, which is invisible when
+        // MACRO_SID sits low down and ruinous when it sits first: the label
+        // self-destructs whenever the SID node is briefly disconnected — a
+        // drag does it — and every respawn moved the ENTIRE program 60px
+        // further down the workspace.
+        var _slot_taken = false;
         with (obj_c64_node) {
             if (id != _self_ref && id != _label_ref && is_connected &&
-                org_parent == noone && y >= _push_y) {
-               
-                y += _label_push;
+                org_parent == noone && y >= _push_y && y < _push_y + _label_push) {
+                _slot_taken = true;
+            }
+        }
+        if (_slot_taken) {
+            with (obj_c64_node) {
+                if (id != _self_ref && id != _label_ref && is_connected &&
+                    org_parent == noone && y >= _push_y) {
+
+                    y += _label_push;
+                }
             }
         }
         scr_c64_update_addresses();
