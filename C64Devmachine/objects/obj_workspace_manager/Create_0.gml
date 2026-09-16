@@ -6,8 +6,8 @@ showcode_refresh_requested = false;
 editor_layout_refresh_requested = false;
 
 /// @desc Setup Workspace, Palette & C64 Environment
-global.lite=0;
-global.build_date = "September 15th, 2026"; // edit this string for each release
+global.lite=1;
+global.build_date = "September 16th, 2026"; // edit this string for each release
 
 // --- GLOBAL CRASH HANDLER ---
 exception_unhandled_handler(function(_ex) {
