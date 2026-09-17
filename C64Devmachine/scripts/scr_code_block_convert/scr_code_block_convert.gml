@@ -1189,7 +1189,7 @@ function scr_cbc_convert() {
     var _sel = _val.nodes;
     var _ex  = scr_cbc_extract(_sel);
     if (!_ex.ok) {
-        scr_show_message("CONVERT FAILED\n\n" + _ex.reason);
+        scr_show_message(L("CONVERT FAILED\n\n") + _ex.reason);
         return false;
     }
 
@@ -1204,9 +1204,9 @@ function scr_cbc_convert() {
         _want_bytes += _sel[_b].total_node_size;
     }
     if (_want_bytes != _ex.spine_bytes) {
-        scr_show_message("CONVERT ABANDONED — extracted " + string(_ex.spine_bytes)
+        scr_show_message(L("CONVERT ABANDONED — extracted ") + string(_ex.spine_bytes)
             + " inline bytes but the selection reports " + string(_want_bytes)
-            + ".\n\nNothing has been changed.");
+            + L(".\n\nNothing has been changed."));
         return false;
     }
 
@@ -1288,7 +1288,7 @@ function scr_cbc_convert() {
             }
 
             if (array_length(_entries) < 1) {
-                scr_show_message("CONVERT ABANDONED — could not read the bytes of\nTEXT DATA \"" + _dp.name + "\".\n\nNothing has been changed.");
+                scr_show_message(L("CONVERT ABANDONED — could not read the bytes of\nTEXT DATA \"") + _dp.name + L("\".\n\nNothing has been changed."));
                 return false;
             }
 
@@ -1307,7 +1307,7 @@ function scr_cbc_convert() {
         // refused conversion.
         show_debug_message("CONVERT TO CODE BLOCK — VERIFY FAILED: " + _fail);
         show_debug_message("---- generated text ----\n" + _txt);
-        scr_show_message("CONVERT ABANDONED — the generated block does not\nassemble to the same bytes.\n\n" + _fail + "\n\nNothing has been changed. The full text is in the\ndebug log.");
+        scr_show_message(L("CONVERT ABANDONED — the generated block does not\nassemble to the same bytes.\n\n") + _fail + L("\n\nNothing has been changed. The full text is in the\ndebug log."));
         return false;
     }
 
@@ -1364,7 +1364,7 @@ function scr_cbc_convert() {
     global.undo_dirty      = true;
     global.autosave_dirty  = true;
 
-    scr_show_message("CONVERTED " + string(_count) + " NODES TO A CODE BLOCK");
+    scr_show_message(L("CONVERTED ") + string(_count) + L(" NODES TO A CODE BLOCK"));
     return true;
 }
 
@@ -1388,17 +1388,17 @@ function scr_cbc_convert() {
 /// Step for the hit test as well as from Draw.
 function scr_cbc_message_rect(_txt) {
     var _font_before = draw_get_font();
-    draw_set_font(fnt_C64_Angled);
+    draw_set_font_l(fnt_C64_Angled);
 
     var _lines = string_split(string(_txt), "\n");
     var _tw    = 0;
     for (var _i = 0; _i < array_length(_lines); _i++) {
-        _tw = max(_tw, string_width(_lines[_i]));
+        _tw = max(_tw, string_width_l(_lines[_i]));
     }
     var _lh = string_height("A");
     var _th = _lh * max(1, array_length(_lines));
 
-    draw_set_font(_font_before);
+    draw_set_font_l(_font_before);
 
     var _gw = global.gui_w;
     var _gh = display_get_gui_height();
@@ -1499,15 +1499,15 @@ function scr_cbc_draw_button() {
         var _halign_before = draw_get_halign();
         var _valign_before = draw_get_valign();
 
-        draw_set_font(fnt_C64_Angled);
+        draw_set_font_l(fnt_C64_Angled);
         draw_set_halign(fa_center);
         draw_set_valign(fa_middle);
 
         draw_set_color(_col);
         draw_rectangle(_r.x + 2, _r.y + 2, _r.x + _r.w - 2, _r.y + _r.h - 2, true);
-        draw_text_transformed(_r.x + (_r.w / 2), _r.y + (_r.h / 2), _lbl, 1.0, 1.0, 0);
+        draw_text_transformed_l(_r.x + (_r.w / 2), _r.y + (_r.h / 2), _lbl, 1.0, 1.0, 0);
 
-        draw_set_font(_font_before);
+        draw_set_font_l(_font_before);
         draw_set_halign(_halign_before);
         draw_set_valign(_valign_before);
         draw_set_color(c_white);

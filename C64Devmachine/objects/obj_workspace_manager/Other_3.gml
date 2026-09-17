@@ -27,6 +27,9 @@ ini_write_real("Settings", "opcode_headers", opcode_headers_on ? 1 : 0);
 ini_write_real("Settings", "opcode_extra_height", opcode_extra_height ? 1 : 0);
 ini_close();
 
+// File write only - no dialogs, so it is safe inside macOS terminate.
+scr_lang_dump_missing();
+
 // Silent save on quit ONLY if we have an existing path.
 // No dialog, no Save As (file picker would re-enter the run loop).
 if (!global.manual_saved) {
