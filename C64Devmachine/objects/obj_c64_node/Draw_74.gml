@@ -1,4 +1,6 @@
-// DRAW GUI BEGIN (was Draw GUI). This object sits at a nearer depth than
+// DRAW GUI BEGIN - event 74. (Draw_72 is Draw BEGIN, room space: the 8 Sep
+// move landed there by mistake, so this overlay drew in the wrong space and
+// was effectively invisible.) Was Draw GUI. This object sits at a nearer depth than
 // obj_workspace_manager, so as a plain Draw GUI event its overlay was painted
 // AFTER the menus, menu bar and code panel - on top of them. Draw GUI Begin
 // runs for every instance before any Draw GUI event, so the manager's GUI
@@ -22,8 +24,9 @@ if (obj_workspace_manager.is_entering_text) exit;
 var _cam_x = obj_workspace_manager.cam_x;
 var _cam_y = obj_workspace_manager.cam_y;
 var _alpha_comment = clamp((_cam_zoom - 2.5) / 1.5, 0, 1);
-var _alpha_header  = clamp((_cam_zoom - 2.0) / 1.0, 0, 1)
-                   * clamp(1.0 - (_cam_zoom - 4.5) / 1.0, 0, 1);
+// Fades in between zoom 2 and 3 and then stays: the camera goes out to
+// 6.0 and the old fade-out past 4.5 left the far view with no labels at all.
+var _alpha_header  = clamp((_cam_zoom - 2.0) / 1.0, 0, 1);
 
 var _shelf_edge = obj_workspace_manager.shelf_width + 40;
 var _sc_edge    = global.sc_x_start - 40;
@@ -46,7 +49,8 @@ if (node_type == "COMMENT") {
     var _edge_alpha = clamp((_sx - _shelf_edge) / 30.0, 0, 1)
                     * clamp((_sc_edge - _sx)    / 30.0, 0, 1);
     var _is_editing = (obj_workspace_manager.is_entering_text &&
-                       obj_workspace_manager.input_target_node == id);
+                       obj_workspace_manager.input_target_node == id &&
+                       obj_workspace_manager.input_target_index == 0);
     var _text = _is_editing
                 ? obj_workspace_manager.current_input_string
                 : ((array_length(instructions) > 0) ? string(instructions[0][1]) : "");
