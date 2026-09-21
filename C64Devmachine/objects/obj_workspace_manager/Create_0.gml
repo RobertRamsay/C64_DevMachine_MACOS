@@ -12,7 +12,7 @@ editor_layout_refresh_requested = false;
 
 /// @desc Setup Workspace, Palette & C64 Environment
 global.lite=0;
-global.build_date = "September 19th, 2026"; // edit this string for each release
+global.build_date = "September 21st, 2026"; // edit this string for each release
 
 // Frame counter. Incremented once in Begin Step, and used as the validity
 // stamp for per-frame lookup caches (see scr_reu_asset_map). Anything keyed
@@ -129,8 +129,12 @@ welcome_open           = false;
 welcome_hide_checked   = false;
 welcome_credits_y      = 0;
 welcome_whats_new = [
-	"NEW - CHINESE SIMPLIFIED Launguage added - Toggle via Options",
-	"NEW - HUD Asset editor",
+    "NEW - CHINESE SIMPLIFIED Launguage added - Toggle via Options",
+    "NEW - COMMENT nodes now editable directly and exapandable < and >",
+    "NEW - REU Handling improved overall, auto injects the LOAD_REU for vice",
+    "NEW - REU BMP Import option added to IMPORT menu for batch KLA/KOA import.",
+    "NEW - ASSETS can now be grouped.",
+    "NEW - HUD Asset editor.",
     "",
     "SHARE your Custom Code blocks like a PRO in the Discord user-code-blocks channel.",
     "SUPPORT the development by leaving a review on ITCH and buying the PRO version.",
