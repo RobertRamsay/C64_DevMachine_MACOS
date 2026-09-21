@@ -1,3 +1,6 @@
+/// @desc Setup Workspace, Palette & C64 Environment
+global.lite=0;
+
 global.text_prompt = undefined;
 // Language first: every text wrapper below depends on it.
 scr_lang_init();
@@ -10,8 +13,7 @@ editor_release_panning = false;
 showcode_refresh_requested = false;
 editor_layout_refresh_requested = false;
 
-/// @desc Setup Workspace, Palette & C64 Environment
-global.lite=0;
+
 global.build_date = "September 21st, 2026"; // edit this string for each release
 
 // Frame counter. Incremented once in Begin Step, and used as the validity
