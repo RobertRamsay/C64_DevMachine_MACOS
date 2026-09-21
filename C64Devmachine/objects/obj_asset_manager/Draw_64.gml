@@ -10703,9 +10703,6 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
                 if (array_length(instructions[0]) > 1)
                     _ref_name = string(instructions[0][1]);
                 break;
-                    if (array_length(instructions[0]) > 1)
-                        _ref_name = string(instructions[0][1]);
-                    break;
                 case "MACRO_TEXT_SCROLL":
                     if (array_length(instructions[0]) > 10)
                         _ref_name = string(instructions[0][10]);

@@ -242,10 +242,18 @@ var _base = "unsaved";
         }
     }
 
+// Group registry. obj_asset_manager declares asset_groups in its Create
+// event, so the only case to guard is the manager not existing at all -
+// which the old _am reference could not survive, because _am is only
+// assigned inside an instance_exists block further up.
+var _groups_out = [];
+if (instance_exists(obj_asset_manager)) {
+    _groups_out = obj_asset_manager.asset_groups;
+}
 var _root = { nodes:node_data, boxes:box_data, assets:asset_data,
  // Group registry. Project-level, not per-asset, so an empty group
  // survives a save with nothing in it.
- asset_groups:       variable_instance_exists(_am, "asset_groups") ? _am.asset_groups : [],
+ asset_groups:       _groups_out,
                   basic_unlocked:global.basic_unlocked, kernal_unlocked:global.kernal_unlocked,
                   code_editor_font_index: code_editor_font_index,
                   map_global_mixed: obj_workspace_manager.map_global_mixed,

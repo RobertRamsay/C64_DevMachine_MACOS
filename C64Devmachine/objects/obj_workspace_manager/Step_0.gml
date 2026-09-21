@@ -2810,7 +2810,7 @@ if (build_trigger && !global.asset_reload_in_progress && !_editor_released) {
 		var _vice_file = "export.prg";
         if (os_type == os_macosx) {
 		    show_debug_message("Launching Mac Vice.");
-			var _vice_file_path = "/Users/tonybrice/Downloads/";
+			_vice_file_path = "/Users/tonybrice/Downloads/";
 			var launch_command = _vice_exe_path+_vice_file_path+_vice_file;
 			var temp = ProcessExecute(launch_command);
 			//var temp = ProcessExecuteAsync(launch_command);
