@@ -1039,8 +1039,8 @@ welcome_open          = !welcome_hide_checked;
 // ---- SHOW CODE PANEL (floating live listing, left of the shortcuts column) ----
 // -1 on x is the "never positioned" marker; the draw script parks it beside the
 // shortcuts column the first time it runs, then this holds the dragged position.
-showcode_x    = ini_read_real("showcode", "x",    -1);
-showcode_y    = ini_read_real("showcode", "y",    53);
+showcode_x    = ini_read_real("showcode", "x",    1395);
+showcode_y    = ini_read_real("showcode", "y",    52);
 // SHOWCODE_W_MIN/MAX rather than the literals this used to carry. The panel's
 // floor moved to 225 when it was allowed to narrow further, but this clamp kept
 // its own 300 — so a saved width below 300 was quietly widened on every load
