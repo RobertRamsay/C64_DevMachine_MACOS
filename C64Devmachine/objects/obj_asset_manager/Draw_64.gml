@@ -99,6 +99,34 @@ for (var _soi = 0; _soi < array_length(_sort_opts); _soi++) {
     }
 }
 
+// [+GRP] — creates an empty group. Sits after the three sort buttons,
+// which end at panel_x + 208 inside a 270-wide panel.
+var _grp_x1  = _sort_btn_x + (3 * 50) + 4;
+var _grp_x2  = _grp_x1 + 48;
+var _grp_hov = point_in_rectangle(_mx, _my, _grp_x1, _sort_row_y, _grp_x2, _sort_row_y + 16);
+draw_set_color(_grp_hov ? make_color_rgb(120, 200, 255) : make_color_rgb(60, 130, 190));
+draw_rectangle(_grp_x1, _sort_row_y, _grp_x2, _sort_row_y + 16, false);
+draw_set_color(c_white);
+draw_set_halign(fa_center);
+draw_set_color(_grp_hov ? c_black : c_white);
+draw_text_l((_grp_x1 + _grp_x2) / 2, _sort_row_y + 2, "+GRP");
+draw_set_halign(fa_left);
+if (_grp_hov && mouse_check_button_pressed(mb_left)) {
+    scr_prompt_text("Group name", "", function(_text, _ctx) {
+        var _name = string_upper(string_trim(_text));
+        if (_name == "") return;
+        with (obj_asset_manager) {
+            for (var _gi = 0; _gi < array_length(asset_groups); _gi++) {
+                if (asset_groups[_gi] == _name) return;
+            }
+            array_push(asset_groups, _name);
+            ds_map_add(asset_group_open, _name, true);
+            global.autosave_dirty = true;
+            global.undo_dirty     = true;
+        }
+    }, {});
+}
+
 // -------------------------------------------------------
 // ASSET LIST
 // -------------------------------------------------------
@@ -108,16 +136,75 @@ var _list_y = panel_y + 66;
 // Sort a display-order index array rather than asset_list itself, so the
 // underlying list's real insertion order (needed for "ADDR", and relied
 // on everywhere else that indexes asset_list directly) never changes.
-// Shared with Step_0's hit-testing via scr_asset_sorted_indices() so the
+// Shared with Step_0's hit-testing via scr_asset_display_rows() so the
 // two can never disagree about display order.
-var _sorted_indices = scr_asset_sorted_indices();
+var _rows   = scr_asset_display_rows();
+var _disp_n = array_length(_rows);
 
-for (var _pos = 0; _pos < _count; _pos++) {
-    var _i     = _sorted_indices[_pos];
+// ---- MEMBERSHIP LOOKUP -------------------------------------------------
+// One pass over every manifest's links, giving asset name -> manifest type
+// and name. The row loop below then answers "is this asset inside a LOAD_ORG
+// or LOAD_REU?" with a single map read. It used to answer that by walking
+// the whole asset list and then the whole linked_assets array, per visible
+// row. On a project with a few hundred linked bitmaps that is tens of
+// thousands of string compares every frame, and it was the single largest
+// cost in this event.
+ds_map_clear(tag_member_map);
+var _tm_n = ds_list_size(asset_list);
+for (var _tmi = 0; _tmi < _tm_n; _tmi++) {
+    var _tm = ds_list_find_value(asset_list, _tmi);
+    if (_tm.type != "LOAD_ORG" && _tm.type != "LOAD_REU") continue;
+    if (!variable_struct_exists(_tm, "linked_assets")) continue;
+    var _tm_links = _tm.linked_assets;
+    for (var _tmli = 0; _tmli < array_length(_tm_links); _tmli++) {
+        // First manifest to claim a name wins, which is what the old
+        // scan-and-break did when an asset appeared in more than one.
+        var _tm_name = _tm_links[_tmli].asset_name;
+        if (!is_undefined(ds_map_find_value(tag_member_map, _tm_name))) continue;
+        ds_map_set(tag_member_map, _tm_name, { type: _tm.type, name: _tm.name });
+    }
+}
+asset_group_rows = [];   // Step_0 hit-tests group headers against this
+
+for (var _pos = 0; _pos < _disp_n; _pos++) {
+    var _row = _rows[_pos];
+    var _row_y = _list_y + (_pos * item_h) - panel_scroll;
+
+    // ---- GROUP HEADER ROW ----
+    if (_row.kind == "group") {
+        if (_row_y + item_h > panel_y + 66 && _row_y < _panel_bottom - 38) {
+            var _gh_hot = (asset_drag_idx >= 0 && asset_drag_over_group == _row.group);
+            draw_set_color(_gh_hot ? make_color_rgb(45, 110, 95) : make_color_rgb(18, 40, 38));
+            draw_rectangle(panel_x, _row_y, _panel_right, _row_y + item_h, false);
+            draw_set_color(make_color_rgb(100, 200, 180));
+            draw_rectangle(panel_x, _row_y, panel_x + 4, _row_y + item_h, false);
+            draw_set_font_l(fnt_c64_tiny);
+            var _gchev = "[+]";
+            if (_row.open) _gchev = "[-]";
+            draw_text_l(panel_x + 10, _row_y + 12, _gchev);
+            // The label is a separate hit zone from the chevron: chevron folds,
+            // label renames. Highlighted on hover so the split is visible.
+            var _gl_x = panel_x + 44;
+            var _gl_hov = point_in_rectangle(_mx, _my, _gl_x, _row_y, _panel_right - 30, _row_y + item_h);
+            draw_set_color(_gl_hov ? c_yellow : make_color_rgb(100, 200, 180));
+            draw_text_l(_gl_x, _row_y + 12, _row.group + " (" + string(_row.count) + ")");
+            // Delete: only offered while the group is empty, so no asset
+            // can lose its group by accident.
+            if (_row.count == 0) {
+                draw_set_color(make_color_rgb(100, 30, 30));
+                draw_rectangle(_panel_right - 26, _row_y + 8, _panel_right - 8, _row_y + item_h - 8, false);
+                draw_set_color(c_white);
+                draw_text_l(_panel_right - 21, _row_y + 10, "X");
+            }
+        }
+        array_push(asset_group_rows, { group: _row.group, y: _row_y, count: _row.count });
+        continue;
+    }
+
+    var _i     = _row.idx;
     var _asset = ds_list_find_value(asset_list, _i);
-    var _iy    = _list_y + (_pos * item_h) - panel_scroll;
-
-	if (_iy + item_h <= panel_y + 66 || _iy >= _panel_bottom - 38) continue;
+    var _iy    = _row_y;
+    if (_iy + item_h <= panel_y + 66 || _iy >= _panel_bottom - 38) continue;
 
    // Row background
         var _is_load_org = false;
@@ -265,6 +352,9 @@ for (var _pos = 0; _pos < _count; _pos++) {
             draw_set_color(c_white);
             draw_line(panel_x + 10 + _cw, _iy + 17, panel_x + 10 + _cw, _iy + item_h - 4);
         }
+    } else if (_asset.group != "") {
+        draw_set_color(c_white);
+        draw_text_l(panel_x + 20, _iy + 16, _asset.name);
     } else {
         draw_set_color(c_white);
         draw_text_l(panel_x + 8, _iy + 16, _asset.name);
@@ -316,46 +406,35 @@ for (var _pos = 0; _pos < _count; _pos++) {
     }
     draw_set_halign(fa_left);
 
-	// LOAD_ORG membership tag
-	    if (instance_exists(obj_asset_manager)) {
+	// LOAD_ORG / LOAD_REU membership tag. One map read, no rescan.
+	    var _tag_owner = ds_map_find_value(tag_member_map, _asset.name);
+	    if (!is_undefined(_tag_owner)) {
 	        var _tag_x = _edit_x - 4;
-	        for (var _tai = 0; _tai < ds_list_size(asset_list); _tai++) {
-	            var _ta = ds_list_find_value(asset_list, _tai);
-	            if (_ta.type != "LOAD_ORG" && _ta.type != "LOAD_REU") continue;
-	            if (!variable_struct_exists(_ta, "linked_assets")) continue;
-	            for (var _tli = 0; _tli < array_length(_ta.linked_assets); _tli++) {
-	                if (_ta.linked_assets[_tli].asset_name == _asset.name) {
-	                    var _tag_col = (_ta.type == "LOAD_REU")
-			             ? make_color_rgb(45, 105, 120)
-			             : make_color_rgb(200, 160, 40);
-	                    draw_set_color(_tag_col);
-	                    // Keep the badge above the asset name (which starts at y + 16).
-	                    draw_rectangle(_tag_x - 80, _iy + 1, _tag_x - 2, _iy + 15, false);
-	                    draw_set_font_l(fnt_c64_pico);
-	                    draw_set_color(c_white);
-	                    draw_set_halign(fa_center);
-						var _tag_sprite = (_ta.type == "LOAD_REU") ? spr_chipRam : spr_disk;
-
-							draw_sprite_ext(
-							    _tag_sprite,
-							    0,
-							    _tag_x - 73,
-							    _iy + 8,
-							    .1,
-							    .1,
-							    0,
-							    c_white,
-							    1.0
-							);
-	                    var _short = string_copy(_ta.name, 1, 12);
-					
-	                    draw_text_l(_tag_x - 34, _iy + 2, _short);
-						draw_set_halign(fa_left);
-	                   
-	                    break;
-	                }
-	            }
+	        var _tag_col = make_color_rgb(200, 160, 40);
+	        var _tag_sprite = spr_disk;
+	        if (_tag_owner.type == "LOAD_REU") {
+	            _tag_col = make_color_rgb(45, 105, 120);
+	            _tag_sprite = spr_chipRam;
 	        }
+	        draw_set_color(_tag_col);
+	        // Keep the badge above the asset name (which starts at y + 16).
+	        draw_rectangle(_tag_x - 80, _iy + 1, _tag_x - 2, _iy + 15, false);
+	        draw_set_font_l(fnt_c64_pico);
+	        draw_set_color(c_white);
+	        draw_set_halign(fa_center);
+	        draw_sprite_ext(
+	            _tag_sprite,
+	            0,
+	            _tag_x - 73,
+	            _iy + 8,
+	            .1,
+	            .1,
+	            0,
+	            c_white,
+	            1.0
+	        );
+	        draw_text_l(_tag_x - 34, _iy + 2, string_copy(_tag_owner.name, 1, 12));
+	        draw_set_halign(fa_left);
 	    }
 
 	    // Row divider
@@ -373,6 +452,28 @@ if (_count == 0) {
     draw_set_halign(fa_left);
 }
 } // end hide panel when viewer open
+
+// -------------------------------------------------------
+// GROUP DRAG FEEDBACK
+// A row being dragged follows the cursor as a label. Releasing over a group
+// header joins it; releasing anywhere else in the list leaves the group.
+// -------------------------------------------------------
+if (asset_drag_idx >= 0 && asset_drag_idx < ds_list_size(asset_list)) {
+    var _dg = ds_list_find_value(asset_list, asset_drag_idx);
+    draw_set_font_l(fnt_c64_tiny);
+    draw_set_alpha(0.9);
+    draw_set_color(make_color_rgb(20, 50, 45));
+    draw_rectangle(_mx + 8, _my - 8, _mx + 8 + string_width(_dg.name) + 16, _my + 10, false);
+    draw_set_alpha(1);
+    draw_set_color(make_color_rgb(100, 200, 180));
+    draw_rectangle(_mx + 8, _my - 8, _mx + 8 + string_width(_dg.name) + 16, _my + 10, true);
+    draw_set_color(c_white);
+    draw_text_l(_mx + 16, _my - 6, _dg.name);
+    if (asset_drag_over_group == "" && asset_drag_over_loose) {
+        draw_set_color(make_color_rgb(200, 160, 40));
+        draw_text_l(panel_x + 6, _panel_bottom - 52, "RELEASE TO UNGROUP");
+    }
+}
 
 // -------------------------------------------------------
 // ADD DROPDOWN (drawn over list)
@@ -730,12 +831,14 @@ if (metamap_picker_open && instance_exists(metamap_picker_node)) {
 // ASSET VIEWER
 // -------------------------------------------------------
 
+var _vx1 = 288;
+var _vy1 = 108;
 if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list)) {
     var _asset = ds_list_find_value(asset_list, viewer_asset);
 
 	var _wide_editor = (_asset.type == "BITMAP_BUILDER" || _asset.type == "MUSIC_MAKER" || _asset.type == "HUD");
-    var _vx1 = _wide_editor ? 30 : 288;
-    var _vy1 = 108;
+    _vx1 = _wide_editor ? 30 : 288;
+    _vy1 = 108;
     var _vx2 = _wide_editor ? (panel_x + 20) : (panel_x - 10);
     var _vy2 = 972;
     
@@ -1198,7 +1301,7 @@ case "CHAR_SET": {
     var _use_mc_surf  = (_chr_mc == 1) &&
                         variable_struct_exists(_asset.meta, "preview_surf_mc") &&
                         surface_exists(_asset.meta.preview_surf_mc);
-    var _chr_surf_key = _use_mc_surf ? "preview_surf_mc" : "preview_surf";
+    _chr_surf_key = _use_mc_surf ? "preview_surf_mc" : "preview_surf";
 
 
 
@@ -1252,23 +1355,13 @@ case "MAP_DATA": {
     draw_set_halign(fa_left);
 
     if (_crbhov && mouse_check_button_pressed(mb_left)) {
-        var _input_cr = get_string("New map dimensions (e.g. 40,25 or 40x25):", "40,25");
-        if (_input_cr == "") { /* cancelled */ } else {
-        var _gw = 40;
-        var _gh = 25;
-        var _sep_cr = ",";
-        if (string_count("x", string_lower(_input_cr)) > 0 && string_count(",", _input_cr) == 0) {
-            if (string_count("X", _input_cr) > 0) {
-                _sep_cr = "X";
-            } else {
-                _sep_cr = "x";
-            }
-        }
-        var _parts_cr = string_split(_input_cr, _sep_cr);
-        if (array_length(_parts_cr) >= 2) {
-            _gw = clamp(real(string_digits(_parts_cr[0])), 1, 160);
-            _gh = clamp(real(string_digits(_parts_cr[1])), 1, 160);
-        }
+        scr_prompt_text("New map dimensions (e.g. 40,25 or 40x25):", "40,25", function(_input_cr, _context) {
+            if (_input_cr == "") return;
+            var _asset = _context.asset;
+            if (!instance_exists(obj_asset_manager) || ds_list_find_index(obj_asset_manager.asset_list, _asset) < 0) return;
+            var _dims = scr_prompt_dimensions(_input_cr,40,25);
+            var _gw = clamp(_dims.w,1,160);
+            var _gh = clamp(_dims.h,1,160);
         _asset.meta.map_w          = _gw;
         _asset.meta.map_h          = _gh;
         _asset.meta.grid_w         = _gw;
@@ -1294,7 +1387,8 @@ case "MAP_DATA": {
 
         scr_asset_map_flush(_asset);
         global.undo_dirty = true;
-        } // end else (input not cancelled)
+        }, {asset:_asset});
+
     }
 		    if (!variable_struct_exists(_m, "char_grid")) {
 		        draw_set_color(make_color_rgb(40, 40, 60));
@@ -3995,10 +4089,10 @@ if (!variable_struct_exists(_asset.meta, "dirty_timer")) _asset.meta.dirty_timer
 	        var _pw_y    = _asset.meta.prev_win_y;
 	        var _pw_w    = _draw_w;
 	        var _pw_h    = _draw_h;
-	        var _mx      = device_mouse_x_to_gui(0);
-	        var _my      = device_mouse_y_to_gui(0);
-	        var _gui_w   = display_get_gui_width();
-	        var _gui_h   = display_get_gui_height();
+	        _mx      = device_mouse_x_to_gui(0);
+	        _my      = device_mouse_y_to_gui(0);
+	        _gui_w   = display_get_gui_width();
+	        _gui_h   = display_get_gui_height();
 
 	        // Input block now that scale vars exist
 	        var _prev_input_blocked = _asset.meta.prev_win_drag ||
@@ -4905,7 +4999,6 @@ surface_reset_target();
 	                }
 	                    
 	                // Skip rest of editor tools while in conversion mode
-	                goto_end_editor = true;
 	            } // end png_import_mode
 	            var goto_end_editor = variable_struct_exists(_asset.meta, "png_import_mode") && _asset.meta.png_import_mode;
 	            if (!goto_end_editor) {
@@ -5458,7 +5551,7 @@ if (_asset.meta.grab_w > 0 && _asset.meta.grab_h > 0) {
 	                                    for (var _gy = 0; _gy < _asset.meta.grab_h; _gy++) {
 	                                        for (var _gx = 0; _gx < _asset.meta.grab_w; _gx += _dith_step) {
 	                                            var _tx = _draw_x + _gx;
-	                                            var _ty = _draw_y + _gy;;
+	                                            var _ty = _draw_y + _gy;
 	                                            if (_tx < 0 || _tx > _dith_max_x || _ty < 0 || _ty >= 200) continue;
                                                 
 												
@@ -5692,8 +5785,8 @@ if (_asset.meta.grab_w > 0 && _asset.meta.grab_h > 0) {
 	                        }
 	                    }
 					} // end _draw_allowed
-	                                } // end if _px in bounds
-	                                if (buffer_exists(_read_buf)) buffer_delete(_read_buf);
+                                    if (buffer_exists(_read_buf)) buffer_delete(_read_buf);
+	                                } // end brush interpolation loop
 	                            } // end steps loop
 	                        gpu_set_blendmode(bm_normal);
 	                        gpu_set_texfilter(_prev_filter);
@@ -6186,7 +6279,7 @@ if (_asset.meta.grab_w > 0 && _asset.meta.grab_h > 0) {
 	                    var _gx1 = floor(min(_asset.meta.grab_x1, _raw_px)) + _asset.meta.grab_off_x1;
 	                            var _gy1 = floor(min(_asset.meta.grab_y1, _raw_py)) + _asset.meta.grab_off_y1;
 	                            var _gx2 = floor(max(_asset.meta.grab_x1, _raw_px)) + _asset.meta.grab_off_x2;
-	                            var _gy2 = floor(max(_asset.meta.grab_y1, _raw_py)) + _asset.meta.grab_off_y2;;
+	                            var _gy2 = floor(max(_asset.meta.grab_y1, _raw_py)) + _asset.meta.grab_off_y2;
                                 
 						_gx1 = (_gx1 div 2) * 2;
 	                    _gx2 = (_gx2 div 2) * 2 + 1; // Last pixel of MC pair — matches capture snap
@@ -6349,8 +6442,8 @@ if (_asset.meta.active_tool == "DRAW" && surface_exists(_asset.meta.grab_surf) &
 	                        _screen_y = floor(_sy + ((_draw_y - _src_y2) / _src_h2 * _sh));
 	                    }
 	                    // Also snap scale_x so each stamp pixel lands on exact screen pixel multiples
-	                    var _scale_x = floor(_scale_x * _asset.meta.grab_w) / _asset.meta.grab_w;
-	                    var _scale_y = floor(_scale_y * _asset.meta.grab_h) / _asset.meta.grab_h;
+	                    _scale_x = floor(_scale_x * _asset.meta.grab_w) / _asset.meta.grab_w;
+	                    _scale_y = floor(_scale_y * _asset.meta.grab_h) / _asset.meta.grab_h;
                         
 gpu_set_texfilter(false);
 	                    if (_asset.meta.dither_mode == "NONE") {
@@ -7668,11 +7761,30 @@ case "LOAD_REU": {
     draw_text_l(_cn,_cy,"ASSET"); draw_text_l(_cc,_cy,"C64"); draw_text_l(_cr,_cy,"REU"); draw_text_l(_cs,_cy,"BYTES"); draw_text_l(_cm,_cy,"PACK"); draw_text_l(_ci,_cy,"IDX");
     _cy += 14;
     var _links=variable_struct_exists(_asset,"linked_assets")?_asset.linked_assets:[];
-    load_reu_rows_y = _cy;
+    // Windowed row list. Rows are a fixed 22px and scrolling moves whole rows,
+    // so a row is either fully drawn or not drawn at all and no clipping is
+    // needed. The footer buttons are pinned under the list further down.
+    var _reu_foot_h       = 34;
+    load_reu_list_y1      = _cy;
+    load_reu_list_y2      = _vy2 - _reu_foot_h;
+    load_reu_rows_visible = max(1, floor((load_reu_list_y2 - load_reu_list_y1) / 22));
+    load_reu_scroll_max   = max(0, array_length(_links) - load_reu_rows_visible);
+    load_reu_scroll       = clamp(load_reu_scroll, 0, load_reu_scroll_max);
+    load_reu_rows_y       = load_reu_list_y1;
     var _bmp_idx = 0;
     for(var _li=0;_li<array_length(_links);_li++){
         var _lk=_links[_li], _la=scr_reu_find_asset(_lk.asset_name), _pl=scr_reu_asset_size(_la);
         var _la_type    = is_undefined(_la) ? "" : _la.type;
+        // IDX numbers every bitmap in link order to match scr_compile_chain, so
+        // the counter must advance for scrolled-out rows too. Work it out before
+        // the visibility test, never inside the drawing below.
+        var _is_bmp_row = false;
+        if (!is_undefined(_la) && (_la.type == "BITMAP" || _la.type == "BITMAP_KLA")) _is_bmp_row = true;
+        var _row_bmp_idx = _bmp_idx;
+        if (_is_bmp_row) _bmp_idx++;
+        if (_li < load_reu_scroll) continue;
+        if (_li >= load_reu_scroll + load_reu_rows_visible) continue;
+        _cy = load_reu_list_y1 + ((_li - load_reu_scroll) * 22);
         var _is_dragged = (reu_drag_row == _li);
         if (_is_dragged) draw_set_alpha(0.4);
         draw_set_color((_li mod 2==0)?make_color_rgb(22,30,34):make_color_rgb(18,25,29)); draw_rectangle(_vx1+8,_cy,_vx2-8,_cy+20,false);
@@ -7691,10 +7803,9 @@ case "LOAD_REU": {
         draw_set_color(c_white); draw_text_l(_cm+53,_cy+4,"-"); draw_text_l(_cm+71,_cy+4,"+");
         // IDX: position within MACRO_REU INDEXED mode's table — bitmaps only,
         // in link order, matching scr_compile_chain's filter exactly.
-        var _is_bmp = !is_undefined(_la) && (_la.type == "BITMAP" || _la.type == "BITMAP_KLA");
+        var _is_bmp = _is_bmp_row;
         if (_is_bmp) {
-            draw_set_color(c_white); draw_text_l(_ci,_cy+4,string(_bmp_idx));
-            _bmp_idx++;
+            draw_set_color(c_white); draw_text_l(_ci,_cy+4,string(_row_bmp_idx));
         } else {
             draw_set_color(make_color_rgb(90,90,100)); draw_text_l(_ci,_cy+4,"--");
         }
@@ -7709,9 +7820,29 @@ case "LOAD_REU": {
             draw_set_color(c_yellow);
             draw_line(_vx1+8,_cy,_vx2-8,_cy);
         }
-        _cy+=22;
     }
+
+    // Scrollbar, drawn clear of the per-row X button which ends at _vx2-8.
+    load_reu_sb_x1 = _vx2 - 6;
+    load_reu_sb_x2 = _vx2 - 1;
+    if (load_reu_scroll_max > 0) {
+        var _reu_sb_h = load_reu_list_y2 - load_reu_list_y1;
+        draw_set_color(make_color_rgb(28,36,42));
+        draw_rectangle(load_reu_sb_x1, load_reu_list_y1, load_reu_sb_x2, load_reu_list_y2, false);
+        var _reu_thumb_h = max(24, _reu_sb_h * (load_reu_rows_visible / array_length(_links)));
+        var _reu_thumb_y = load_reu_list_y1 + ((_reu_sb_h - _reu_thumb_h) * (load_reu_scroll / load_reu_scroll_max));
+        draw_set_color(make_color_rgb(100,200,180));
+        draw_rectangle(load_reu_sb_x1, _reu_thumb_y, load_reu_sb_x2, _reu_thumb_y + _reu_thumb_h, false);
+    }
+
+    _cy = load_reu_list_y2 + 6;
     load_reu_add_y = _cy;
+    if (load_reu_scroll_max > 0) {
+        var _reu_first = load_reu_scroll + 1;
+        var _reu_last  = min(array_length(_links), load_reu_scroll + load_reu_rows_visible);
+        draw_set_color(make_color_rgb(120,120,140));
+        draw_text_l(_vx1+210,_cy+5,string(_reu_first) + "-" + string(_reu_last) + " / " + string(array_length(_links)));
+    }
     var _hov=point_in_rectangle(_mx,_my,_vx1+10,_cy,_vx1+90,_cy+20);
     draw_set_color(_hov?make_color_rgb(45,150,100):make_color_rgb(25,75,55)); draw_rectangle(_vx1+10,_cy+2,_vx1+90,_cy+20,false);
     draw_set_color(c_white); draw_set_halign(fa_center); draw_text_l(_vx1+50,_cy+5,"[+ ADD]"); draw_set_halign(fa_left);
@@ -8614,7 +8745,6 @@ case "META_TILESET": {
     // Only valid if the clipboard size matches the current stamp cell count
     // (same stamp dimensions), so a copy at one size can't corrupt another.
     if (scr_ctrl_held() && keyboard_check_pressed(ord("V"))) {
-        var _cv_cells = _m.stamp_w * _m.stamp_h;
         var _cv_cells = _m.stamp_w * _m.stamp_h;
         if (_m.edit_stamp >= 0
          && _m.stamp_clip_valid
@@ -9701,7 +9831,7 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
     }
 
     for (var _trow = _draw_row0; _trow < _draw_row1; _trow++) {
-        for (var _tcol = _draw_col0; _tcol < _draw_col1; _tcol++) {
+        for (_tcol = _draw_col0; _tcol < _draw_col1; _tcol++) {
             var _tidx = _trow * _test_cols + _tcol;
             if (_tidx >= array_length(_active_grid)) continue;
             var _tstamp_idx = _active_grid[_tidx];
@@ -10178,7 +10308,7 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
         var _mtd_b = variable_struct_exists(_m, "mt_data_bytes_disp") ? _m.mt_data_bytes_disp : 0;
         draw_set_color(make_color_rgb(140, 160, 180));
         draw_text_l(_ced_x , _ced_y - 46, L("METATILE DATA: ") + string(_mtd_b) + " b");
-		;
+
 
         // ---- PER-CHAR HR/MC TOGGLE (writes char_lut bit 4, preserves colour) ----
         _m.char_lut_len = _ts_chr_ref.meta.char_count;
@@ -11202,7 +11332,7 @@ if (pngstrip.open) {
 // META TILESET CHARSET PICKER DROPDOWN
 // -------------------------------------------------------
 if (meta_ts_picker_open) {
-    var _vx1   = 288;
+    _vx1   = 288;
     var _tspx  = _vx1 + 74;
     var _tspy  = meta_ts_btn_y + 14;
     var _tspw  = 180;
@@ -11288,7 +11418,7 @@ if (chr_picker_open && instance_exists(chr_picker_node)) {
 if (map_chr_picker_open) {
     draw_set_alpha(1.0);
     gpu_set_scissor(0, 0, window_get_width(), window_get_height());
-    var _vx1  = 288;
+    _vx1  = 288;
     var _mcpx = _vx1 + 268;
     var _mcpy = map_chr_picker_draw_y;
     var _mcpw = 180;

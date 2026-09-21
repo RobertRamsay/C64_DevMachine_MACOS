@@ -94,7 +94,7 @@ var _base = "unsaved";
                 _hex = scr_blob_encode(_a.buffer);
             }
             // Full meta mirror — reuse the same field list as scr_save_workspace_as
-            var _mo = {};
+            _mo = {};
             var _me = _a.meta;
             var _fields = ["sprite_mcs","sprite_ucs","mc1_col","mc2_col","used_count","bg_col","bmp_mode","tone_sorted",
                            "sprite_json","compositor","anim",
@@ -237,11 +237,15 @@ var _base = "unsaved";
                 reu_size      : variable_struct_exists(_a, "reu_size")      ? _a.reu_size      : 0,
                 reu_used      : variable_struct_exists(_a, "reu_used")      ? _a.reu_used      : 0,
                 linked_assets : variable_struct_exists(_a, "linked_assets") ? _a.linked_assets : [],
+                group         : variable_struct_exists(_a, "group")         ? _a.group         : "",
             });
         }
     }
 
 var _root = { nodes:node_data, boxes:box_data, assets:asset_data,
+ // Group registry. Project-level, not per-asset, so an empty group
+ // survives a save with nothing in it.
+ asset_groups:       variable_instance_exists(_am, "asset_groups") ? _am.asset_groups : [],
                   basic_unlocked:global.basic_unlocked, kernal_unlocked:global.kernal_unlocked,
                   code_editor_font_index: code_editor_font_index,
                   map_global_mixed: obj_workspace_manager.map_global_mixed,

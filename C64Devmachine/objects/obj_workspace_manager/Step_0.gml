@@ -1310,7 +1310,7 @@ if (is_entering_text) {
             var _row_y1   = (display_get_gui_height() / 2) - 14;
             var _row_y2   = (display_get_gui_height() / 2) + 14;
             if (_gmy >= _row_y1 && _gmy < _row_y2) {
-                var _len     = string_length(_full_str);
+                _len     = string_length(_full_str);
                 var _best    = _len;
                 for (var _ci = 0; _ci <= _len; _ci++) {
                     var _cx1 = _start_x + string_width_l(string_copy(_full_str, 1, _ci)) * 1.5;
@@ -4269,13 +4269,39 @@ for (var i = 0; i < array_length(_exp_code); i++) {
     }
 
     scr_node_build_inject(_exp_buf, _base_pc);
-    scr_reu_build_images(filename_path(_chosen));
+
+    // The REU image is written NEXT TO THE EXPORTED FILE, not into
+    // export_dir where F5 puts its copy. A manually exported PRG is run by
+    // hand, so nothing attaches the image for it the way scr_launch_vice
+    // does on F5 — and an emulator still holding the F5 copy from an earlier
+    // build will happily run the new PRG against stale frame data, which
+    // looks exactly like a packing bug and is not one. Name the file in the
+    // confirmation so it is obvious which image this PRG expects.
+    var _exp_reu_paths = scr_reu_build_images(filename_path(_chosen));
 
     var _exp_msg = "";
 
     if (!_exp_build_d64) {
         buffer_save(_exp_buf, _chosen);
         _exp_msg = "PRG exported to:\n" + _chosen;
+        for (var _eri = 0; _eri < array_length(_exp_reu_paths); _eri++) {
+            _exp_msg += "\n\nREU image written to:\n" + string(_exp_reu_paths[_eri]);
+
+            // Only the first image gets a launcher. A project is limited to
+            // one LOAD_REU manifest anyway (scr_reu_build_images refuses to
+            // build past one), so a second entry would mean an invalid
+            // project rather than a second thing worth launching.
+            if (_eri == 0) {
+                var _exp_launch = scr_write_reu_launcher(_chosen, string(_exp_reu_paths[_eri]));
+                if (_exp_launch != "") {
+                    _exp_msg += "\n\nRun it with:\n" + _exp_launch
+                              + "\nThis attaches the image for you. The whole folder can be"
+                              + "\nzipped and sent on - the paths inside are relative.";
+                } else {
+                    _exp_msg += "\nAttach THIS image when you run the PRG.";
+                }
+            }
+        }
     }
 
     // -------------------------------------------------------------
@@ -4377,7 +4403,7 @@ for (var i = 0; i < array_length(_exp_code); i++) {
 // =============================================================
 var mouse_room_x = mouse_x;
 var mouse_room_y = mouse_y;
-var zoom_speed   = 0.1;
+zoom_speed   = 0.1;
 
 
 

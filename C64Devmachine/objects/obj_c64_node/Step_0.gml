@@ -1126,6 +1126,7 @@ if ((mouse_check_button_pressed(mb_left) or scr_opt_pressed()) && !is_dragging &
 		case "COND_IF_WORD": scr_node_step_cond_if_word(draw_x); break;
         case "BANK_SWITCH":  scr_node_step_bank_switch(draw_x); break;
         case "MACRO_REU":    scr_node_step_macro_reu(draw_x);   break;
+        case "MACRO_UCI_REU": scr_node_step_macro_uci_reu(draw_x); break;
 		
 		
 		
@@ -2018,7 +2019,7 @@ if (global.group_drag_handle == id) {
                     }
                     if (_removed_h > 0) {
                         var _gap_y    = _filtered[1].y;
-                        var _handle_spine = _filtered[0].org_parent;
+                        _handle_spine = _filtered[0].org_parent;
                         var _init_bottom_ref = 80; // INIT y=60 + height=20
                         with (obj_c64_node) {
                             if (node_type == "INIT") { _init_bottom_ref = y + height; break; }

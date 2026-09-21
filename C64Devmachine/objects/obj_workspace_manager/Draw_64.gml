@@ -13,6 +13,10 @@ if (idle_snapshot_active && sprite_exists(idle_snapshot_spr)) {
 // scr_show_code_draw() sets it again further down when the panel is live.
 global.showcode_mouse_over = false;
 
+// Load progress sits above every panel and ahead of the hideui bail-out,
+// so a project opening with the UI hidden still shows it is working.
+scr_bmp_preview_queue_draw();
+
 if hideui exit;
 // Block draw + interaction when asset viewer is open
 if (instance_exists(obj_asset_manager) && obj_asset_manager.viewer_open) {
@@ -983,6 +987,7 @@ if (gui_menu_open == 1 && !global.lite) {
         { title: "MATH",             type: "MACRO_MATH"          },
         { title: "RANDOM",           type: "MACRO_RANDOM"        },
         { title: "REU",              type: "MACRO_REU"           },
+        { title: "UCI LOAD REU",     type: "MACRO_UCI_REU"       },
         { title: "VOI64 MASTER",     type: "MACRO_VOI64_MASTER"  },
         { title: "VOI64 SAY",        type: "MACRO_VOI64_SAY"     },
     ];
@@ -1185,7 +1190,7 @@ if (gui_menu_open == 3) {
 
     var _item_h_p   = 20;
     var _panel_w_p  = 220;
-    var _mbar_btn_gap = _mbar_btn_w + 4;
+    _mbar_btn_gap = _mbar_btn_w + 4;
     var _panel_x_p  = _mbar_start_x + (3 * _mbar_btn_gap);
     var _panel_y_p  = _mbar_btn_h;
     var _panel_h_p  = array_length(_proj_list) * _item_h_p + 28;
@@ -1476,6 +1481,7 @@ if (gui_menu_open == 6) {
     // on its own.
     if (global.lite == 0) {
         array_push(_imp_list, { title: "CODE BLOCK (.ASM)", action: "CODE_ASM" });
+        array_push(_imp_list, { title: "REU BMP IMPORT",    action: "REU_BMP" });
     }
     
     var _item_h_i   = 20;
@@ -1520,6 +1526,9 @@ if (gui_menu_open == 6) {
             }
             else if (_ip.action == "CODE_ASM") {
                 scr_import_code_block_menu();
+            }
+            else if (_ip.action == "REU_BMP") {
+                scr_import_reu_bmp_batch();
             }
         }
     }
@@ -1596,7 +1605,7 @@ if (gui_menu_open == 0) {
     var _panel_w    = 200;
     var _slice_top  = 20;
     var _slice_bot  = 20;
-    var _mbar_btn_gap = _mbar_btn_w + 4;
+    _mbar_btn_gap = _mbar_btn_w + 4;
     var _panel_x    = _mbar_start_x;           // aligns with MACROS button
     var _panel_y    = _mbar_btn_h;             // sits just below the menu bar
     var _panel_h    = array_length(_mac_list) * _item_h + _slice_top + _slice_bot;
@@ -2091,7 +2100,7 @@ case "TOGGLE AUTOSAVE MODE":
                 with(_n) { event_user(0); }
                 break;
 			case "ADD BITMAP KLA":
-			    var _n          = instance_create_layer(mouse_x - 400, mouse_y + 20, "Layer_Nodes", obj_c64_node);
+			    _n          = instance_create_layer(mouse_x - 400, mouse_y + 20, "Layer_Nodes", obj_c64_node);
 			    _n.node_title   = "BITMAP KLA";
 			    _n.node_type    = "BITMAP_KLA";
 			    _n.instructions = [["bitmap_kla", "", 0]];
@@ -2116,7 +2125,7 @@ case "TOGGLE AUTOSAVE MODE":
 				
 				
             case "ADD SPR64":
-                var _n = instance_create_layer(mouse_x - 400, mouse_y + 20, "Layer_Nodes", obj_c64_node);
+                _n = instance_create_layer(mouse_x - 400, mouse_y + 20, "Layer_Nodes", obj_c64_node);
                 _n.node_title   = "SPR64";
                 _n.node_type    = "SPR64";
                 _n.instructions = [["spr", "", "", 0, "SPRITES", 0, 0, 0]];
@@ -2124,7 +2133,7 @@ case "TOGGLE AUTOSAVE MODE":
                 with(_n) { event_user(0); }
                 break;
             case "ADD RAW DATA":
-                var _n = instance_create_layer(mouse_x - 400, mouse_y + 20, "Layer_Nodes", obj_c64_node);
+                _n = instance_create_layer(mouse_x - 400, mouse_y + 20, "Layer_Nodes", obj_c64_node);
                 _n.node_title   = "RAW DATA";
                 _n.node_type    = "RAW_DATA";
                 _n.instructions = [["raw", "FF,FF,FF"]];
@@ -2132,7 +2141,7 @@ case "TOGGLE AUTOSAVE MODE":
                 with(_n) { event_user(0); }
                 break;
             case "ADD HEX TABLE":
-                var _n = instance_create_layer(mouse_x - 400, mouse_y + 20, "Layer_Nodes", obj_c64_node);
+                _n = instance_create_layer(mouse_x - 400, mouse_y + 20, "Layer_Nodes", obj_c64_node);
                 _n.node_title   = "HEX TABLE";
                 _n.node_type    = "RAW_DATA";
                 _n.instructions = [["byte_row", "00,01,02"]];
@@ -2142,7 +2151,7 @@ case "TOGGLE AUTOSAVE MODE":
 			case "TOGGLE COMMENTS" : global.comments_visible = !global.comments_visible; break;
             case "RESET/CLEAR": game_restart(); break;
 			case "ADD SCROLL MACRO":
-			    var _n          = instance_create_layer(mouse_x - 400, mouse_y + 20, "Layer_Nodes", obj_c64_node);
+			    _n          = instance_create_layer(mouse_x - 400, mouse_y + 20, "Layer_Nodes", obj_c64_node);
 			    _n.node_title   = "MAP H SCROLL";
 			    _n.node_type    = "MACRO_SCROLL";
 			    _n.instructions = [["MACRO_SCROLL", 0, 25, 1, 1, 1, "", 0]];
@@ -2150,7 +2159,7 @@ case "TOGGLE AUTOSAVE MODE":
 			    with(_n) { event_user(0); }
 			    break;
 			case "ADD VWAIT":
-			    var _n          = instance_create_layer(mouse_x - 400, mouse_y + 20, "Layer_Nodes", obj_c64_node);
+			    _n          = instance_create_layer(mouse_x - 400, mouse_y + 20, "Layer_Nodes", obj_c64_node);
 			    _n.node_title   = "VWAIT";
 			    _n.node_type    = "MACRO_VWAIT";
 			    _n.instructions = [["macro_vwait", 0xFB]];

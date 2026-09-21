@@ -1019,6 +1019,10 @@ case "MACRO_SID_SOUND": {
         }
     }
 
+    var _off_word = false;
+    var _nzp_lo = _zp;
+    var _nzp_hi = _zp + 2;
+    var _nzp_gt = _zp + 4;
     if (_use_asset) {
         // A byte index can only reach 256 entries; a word index reaches the
         // whole table. Clamp to whichever the chosen index actually addresses
@@ -1063,7 +1067,7 @@ case "MACRO_SID_SOUND": {
         // ZP bytes and ~36 bytes of setup, and lifts the ceiling to the whole
         // table. The var's declared size decides — no extra node field.
         var _off_addr = 0;
-        var _off_word = false;
+        _off_word = false;
         if (_off_mode == 1 && _off_var != "") {
             _off_addr = scr_resolve_var_addr(_off_var);
             if (_off_addr != 0) {
@@ -1078,9 +1082,9 @@ case "MACRO_SID_SOUND": {
 
         // ZP pointer trio for the word path. Derived from the node's ZP slot so
         // the user can move them off anything else living down there.
-        var _nzp_lo = _zp;
-        var _nzp_hi = _zp + 2;
-        var _nzp_gt = _zp + 4;
+        _nzp_lo = _zp;
+        _nzp_hi = _zp + 2;
+        _nzp_gt = _zp + 4;
         if (_off_word && _zp > 0xFA) {
             show_debug_message("MACRO_SID_SOUND: ZP $" + string_upper(decimal_to_hex(_zp))
                 + " leaves no room for the 6-byte word-index pointers; using $F2.");
@@ -2128,7 +2132,7 @@ case "MACRO_METAMAP": {
         array_push(_list, ["org", _base_addr]);
 
         var _vid_save = _id;
-        var _id = noone; // suppress node tagging on org-bracketed data
+        _id = noone; // suppress node tagging on org-bracketed data
 
         // 1) STAMP-DEF cell tables: per stamp, _cells_pr * (char, colour).
         //    One label per stamp so the pointer table can reference it.
@@ -2268,7 +2272,7 @@ case "MACRO_METAMAP": {
         }
 
         array_push(_list, ["org", -3]); // restore spine PC
-        var _id = _vid_save;
+        _id = _vid_save;
 
         // ── Ensure COLL_ROW_LO/HI exist (stamper indexes them by screen row) ──
         if (!variable_global_exists("coll_row_luts_emitted") || global.coll_row_luts_emitted == false) {
@@ -2610,11 +2614,11 @@ array_push(_list, ["cli", 0, _id]);
     array_push(_list, ["org", _char_src]);
     array_push(_list, ["label", _mm_pfx + "chardata"]);
     var _mm_id_save = _id;
-    var _id = noone; // suppress node tagging on raw plane data
+    _id = noone; // suppress node tagging on raw plane data
     for (var _bi = 0; _bi < 1000; _bi++) array_push(_list, ["byte", _char_plane[_bi]]);
     for (var _bi = 0; _bi < 1000; _bi++) array_push(_list, ["byte", _col_plane[_bi]]);
     array_push(_list, ["org", -3]); // restore spine PC
-    var _id = _mm_id_save;
+    _id = _mm_id_save;
 
     // ── Resolve screen destination from MACRO_VIC (same as MACRO_MAP) ──
     var _scr_dest = 0x0400;
@@ -3025,6 +3029,8 @@ case "MACRO_SCROLL": {
             show_debug_message("MACRO_SCROLL(META): tileset '" + _mm_tileset_name + "' has per-stamp colour overrides — IGNORED during scroll (colour follows char_lut only)");
         }
 
+        var _mm_map_bases = [];
+        var _mm_map_widths = [];
         if (_mm_map_idx_mode == 1) {
             // ── VAR MODE — bake EVERY map in the tileset, sequentially, and
             // build a small per-map base/width table the runtime switch
@@ -3038,8 +3044,6 @@ case "MACRO_SCROLL": {
                 break;
             }
 
-            var _mm_map_bases  = [];
-            var _mm_map_widths = [];
             var _mm_run_addr   = _mm_base_addr;
 
             for (var _mm_mi = 0; _mm_mi < _mm_tm.map_count; _mm_mi++) {
@@ -3095,12 +3099,12 @@ case "MACRO_SCROLL": {
                 array_push(_list, ["org", -2]);
                 array_push(_list, ["org", _mm_run_addr]);
                 var _mm_id_save_v = _id;
-                var _id = noone;
+                _id = noone;
                 for (var _mm_bi = 0; _mm_bi < array_length(_mm_plane_v); _mm_bi++) {
                     array_push(_list, ["byte", _mm_plane_v[_mm_bi] & 0xFF]);
                 }
                 array_push(_list, ["org", -3]);
-                var _id = _mm_id_save_v;
+                _id = _mm_id_save_v;
 
                 _mm_run_addr += array_length(_mm_plane_v);
 
@@ -3173,12 +3177,12 @@ case "MACRO_SCROLL": {
             array_push(_list, ["org", -2]);
             array_push(_list, ["org", _map_base]);
             var _mm_id_save = _id;
-            var _id = noone;
+            _id = noone;
             for (var _mm_bi = 0; _mm_bi < array_length(_mm_char_plane); _mm_bi++) {
                 array_push(_list, ["byte", _mm_char_plane[_mm_bi] & 0xFF]);
             }
             array_push(_list, ["org", -3]);
-            var _id = _mm_id_save;
+            _id = _mm_id_save;
         }
 
         // Emit the 256-byte char->colour LUT (nibble only, 0-15). Global
@@ -3817,7 +3821,7 @@ case "MACRO_SCROLL": {
         array_push(_lst, ["jmp_abs", _lbl_cols,   _p_id]);
         array_push(_lst, ["label",   _lbl_done]);
         if (_p_blankfn != noone) {
-            _p_blankfn(_lst, _lbl_entry, _dest_base, _p_srow, _p_rows, _p_id);
+            script_execute_ext(_p_blankfn, [_lst, _lbl_entry, _dest_base, _p_srow, _p_rows, _p_id]);
         }
         array_push(_lst, ["rts",     0,           _p_id]);
     };
@@ -3940,7 +3944,7 @@ case "MACRO_SCROLL": {
         array_push(_lst, ["jmp_abs", _lbl_cols,   _p_id]);
         array_push(_lst, ["label",   _lbl_done]);
         if (_p_blankfn != noone) {
-            _p_blankfn(_lst, _lbl_entry, _dest_base, _p_srow, _p_rows, _p_id);
+            script_execute_ext(_p_blankfn, [_lst, _lbl_entry, _dest_base, _p_srow, _p_rows, _p_id]);
         }
         array_push(_lst, ["rts",     0,           _p_id]);
     };
@@ -4690,7 +4694,7 @@ case "MACRO_VSCROLL": {
     // Write blank char to col 0 and col 39 for all 25 rows — permanent edge blank
     // Use X as row index 0..24, write _scr + row*40 + 0 and _scr + row*40 + 39
     array_push(_list, ["lda_imm", 0x00,            _id]);
-    var _lbl_blank_cols = _p + "blkcols";
+    _lbl_blank_cols = _p + "blkcols";
     array_push(_list, ["ldx_imm", 0x00,            _id]);
     array_push(_list, ["label",   _lbl_blank_cols]);
     // Write left edge col 0 and right edge col 39 for this row via abs,X
@@ -6247,7 +6251,7 @@ array_push(_list, ["label",   _v_dd00]);   array_push(_list, ["byte", 0x02,    _
     array_push(_list, ["org",   _txt_addr]);
     array_push(_list, ["label", _p + "dat"]);
     var _id_save = _id;
-    var _id = noone;  // suppress node tagging for text data bytes
+    _id = noone;  // suppress node tagging for text data bytes
 
 	_txt_str = string_replace_all(_txt_str, "\n", "");
 	_txt_str = string_replace_all(_txt_str, "\r", "");
@@ -6314,7 +6318,7 @@ array_push(_list, ["label",   _v_dd00]);   array_push(_list, ["byte", 0x02,    _
     }
     array_push(_list, ["byte", 0x00]);  // no node tag
     array_push(_list, ["org",  -3]);
-    var _id = _id_save;  // restore
+    _id = _id_save;  // restore
 
 } break;
 
@@ -6851,6 +6855,7 @@ case "MACRO_LOADER": {
 
 
 case "MACRO_LOAD_GAME": scr_compile_macro_load_game(_list, _curr); break;
+case "MACRO_UCI_REU": scr_compile_macro_uci_reu(_list, _curr); break;
 case "MACRO_SAVE_GAME": scr_compile_macro_save_game(_list, _curr); break;
 
 // --------------------------------------------------------
@@ -8627,28 +8632,8 @@ case "COND_IF": {
         array_push(_list, ["cmp_imm", _cmp_val, _id]);
     }
 
-    // 4. Calculate if target is within 6502 relative branch range (-128 to 127)
-    // We estimate from the current PC plus the size of LDA/CMP
-    var _branch_from  = _curr.pc_address + 5; 
-    var _offset       = _target_addr - _branch_from;
-    var _in_range     = (_offset >= -126 && _offset <= 126) && (_target_addr != 0);
-    
-    // We force a springboard for complex multi-check logic (GT/LTE) 
-    // or if the target is too far for a BXX instruction.
-    var _is_complex = (_mode == "gt" || _mode == "lte");
-
-    if (false && _in_range && !_is_complex && !global.compile_sizing_pass) {
-        // --- SHORT BRANCH (Direct) ---
-        var _branch = "beq";
-        switch (_mode) {
-            case "eq":  _branch = "beq"; break;
-            case "ne":  _branch = "bne"; break;
-            case "lt":  _branch = "bcc"; break;
-            case "gte": _branch = "bcs"; break;
-        }
-        array_push(_list, [_branch, _target, _id]);
-    } 
-    else {
+    // Always emit the existing springboard path; stable size across compiler passes.
+    {
         // --- SPRINGBOARD / COMPLEX BRANCH ---
         var _skip_lbl = "cif_skip_" + string(real(_id));
 
@@ -9334,6 +9319,17 @@ case "MACRO_REU": {
         var _tbl_c64hi = array_create(_tn, 0);
         var _tbl_lenlo = array_create(_tn, 0);
         var _tbl_lenhi = array_create(_tn, 0);
+        // MCBITMAP sends the colour block straight to $D800 in a SECOND REU
+        // transfer instead of landing it in RAM for the CPU to shuffle across.
+        // Colour RAM cannot be double-buffered - the VIC always reads $D800 -
+        // so it must be recopied every frame, and REU DMA does 1000 bytes in
+        // ~1000 cycles where a CPU loop needs 9000-14000. That is the
+        // difference between the colour lagging the pixels by most of a frame
+        // and it arriving inside vertical blank.
+        var _tbl_cbank = array_create(_tn, 0);
+        var _tbl_clo   = array_create(_tn, 0);
+        var _tbl_chi   = array_create(_tn, 0);
+        var _col_split = false;
         for (var _i = 0; _i < _tn; _i++) {
             var _reu_at = real(_links[_i].reu_address);
             _tbl_bank[_i] = (_reu_at >> 16) & 0xFF;
@@ -9354,10 +9350,16 @@ case "MACRO_REU": {
                 var _br = scr_bmp_regions(_c64at);
                 _sz = (_br.scr_addr + _br.scr_size - _br.bmp_addr) & 0xFFFF;
             } else {
-                // MCBITMAP — full three-region span (bitmap + screen + colour).
-                var _payload = scr_reu_asset_payload(_asset);
-                _sz = _payload.size & 0xFFFF;
-                if (buffer_exists(_payload.buffer)) buffer_delete(_payload.buffer);
+                // MCBITMAP - transfer 1 carries bitmap + screen to the bitmap
+                // base. The colour block is split into its own transfer to
+                // $D800, so its REU source address is recorded here.
+                var _brm  = scr_bmp_regions(_c64at);
+                _sz = ((_brm.scr_addr + 1000) - _brm.bmp_addr) & 0xFFFF;
+                var _cat  = _reu_at + (_brm.col_addr - _brm.bmp_addr);
+                _tbl_cbank[_i] = (_cat >> 16) & 0xFF;
+                _tbl_clo[_i]   = _cat & 0xFF;
+                _tbl_chi[_i]   = (_cat >> 8) & 0xFF;
+                _col_split = true;
             }
             _tbl_lenlo[_i] = _sz & 0xFF;
             _tbl_lenhi[_i] = (_sz >> 8) & 0xFF;
@@ -9365,6 +9367,9 @@ case "MACRO_REU": {
 
         var _pfx       = "reut" + string(real(_id)) + "_";
         var _lbl_skip  = _pfx + "skip";
+        var _lbl_cbank = _pfx + "cbank";
+        var _lbl_clo   = _pfx + "clo";
+        var _lbl_chi   = _pfx + "chi";
         var _lbl_bank  = _pfx + "bank";
         var _lbl_lo    = _pfx + "lo";
         var _lbl_hi    = _pfx + "hi";
@@ -9381,6 +9386,9 @@ case "MACRO_REU": {
         };
 
         array_push(_list, ["jmp_abs", _lbl_skip, _id]);
+        _emit_table(_list, _lbl_cbank, _tbl_cbank, _id);
+        _emit_table(_list, _lbl_clo,   _tbl_clo,   _id);
+        _emit_table(_list, _lbl_chi,   _tbl_chi,   _id);
         _emit_table(_list, _lbl_bank,  _tbl_bank,  _id);
         _emit_table(_list, _lbl_lo,    _tbl_lo,    _id);
         _emit_table(_list, _lbl_hi,    _tbl_hi,    _id);
@@ -9399,33 +9407,97 @@ case "MACRO_REU": {
         if (_reu_fixc == 1) { _reu_ctrl2 |= 0x80; }
         if (_reu_fixr == 1) { _reu_ctrl2 |= 0x40; }
 
+        // ZP scratch for the 16-bit indirect path, and the lookup emitter
+        // itself, are hoisted above both transfer blocks so the two can be
+        // emitted in either order. Needs 2 ZP scratch bytes, configurable
+        // per node (slot 14) since any macro reserving ZP must let the user
+        // resolve conflicts — default $03.
+        var _zp_base = (array_length(_curr.instructions[0]) > 14 && is_real(_curr.instructions[0][14])) ? real(_curr.instructions[0][14]) & 0xFF : 0x03;
+        var _ptr_lo  = _zp_base;
+        var _ptr_hi  = _zp_base + 1;
+
+        // 16-bit indirect lookup: for each table, point a ZP pointer at
+        // the table's compile-time base, add the runtime 16-bit index to
+        // it, then LDA (ptr),Y with Y=0 to fetch the byte.
+        var _emit_word_lookup = function(_lst, _tbl_lbl, _idx_addr, _plo, _phi, _dest_reg, _tid) {
+            array_push(_lst, ["lda_lab_lo", _tbl_lbl, _tid]);
+            array_push(_lst, ["sta_zp",     _plo,     _tid]);
+            array_push(_lst, ["lda_lab_hi", _tbl_lbl, _tid]);
+            array_push(_lst, ["sta_zp",     _phi,     _tid]);
+            array_push(_lst, ["clc",        0,        _tid]);
+            array_push(_lst, ["lda_zp",     _plo,     _tid]);
+            array_push(_lst, ["adc_abs",    _idx_addr, _tid]);
+            array_push(_lst, ["sta_zp",     _plo,     _tid]);
+            array_push(_lst, ["lda_zp",     _phi,     _tid]);
+            array_push(_lst, ["adc_abs",    _idx_addr + 1, _tid]);
+            array_push(_lst, ["sta_zp",     _phi,     _tid]);
+            array_push(_lst, ["ldy_imm",    0,        _tid]);
+            array_push(_lst, ["lda_izy",    _plo,     _tid]);
+            array_push(_lst, ["sta_abs",    _dest_reg, _tid]);
+        };
+
+        // ---- TRANSFER ORDER: COLOUR FIRST, THEN BITMAP -----------------
+        // REU DMA halts the CPU for the duration of a transfer, so these two
+        // run back to back from wherever the loop reaches them. On PAL that
+        // is 19656 cycles a frame, 63 per raster line, and the transfers cost
+        // roughly one cycle a byte:
+        //
+        //   colour  1000 bytes ->  ~16 raster lines
+        //   bitmap  9192 bytes -> ~146 raster lines
+        //
+        // A loop that raster-syncs resumes at the bottom border, around line
+        // 250. Emitting the bitmap first spent those 146 lines before the
+        // colour transfer even started, so colour landed around line 90 —
+        // a third of the way down the VISIBLE screen. Every row above the
+        // split still showed the previous frame's colour RAM for that frame,
+        // which is the colour bleed you can see even with the Ultimate on
+        // turbo: it is a raster race, so a faster CPU does not touch it.
+        //
+        // Colour first fits entirely in the border (250 -> 266) and is done
+        // before the display window opens. The bitmap transfer then runs
+        // 266 -> line 100 of the next frame, but it writes 63 bytes a line
+        // while the display consumes 40, so it stays permanently ahead of
+        // the raster and never tears. Both blocks describe the same frame
+        // by the time any of it is on screen.
+        //
+        // $D800 cannot be double-buffered, so this ordering — not a faster
+        // machine — is what makes single-buffered colour clean.
+
+        // ---- COLOUR BLOCK -> $D800 (MCBITMAP only) ---------------------
+        // Destination and length are constant ($D800, 1000 bytes), so only
+        // the REU source needs a per-frame lookup.
+        if (_col_split) {
+            if (_idx_is_word) {
+                _emit_word_lookup(_list, _lbl_cbank, _index_addr, _ptr_lo, _ptr_hi, 0xDF06, _id);
+                _emit_word_lookup(_list, _lbl_clo,   _index_addr, _ptr_lo, _ptr_hi, 0xDF04, _id);
+                _emit_word_lookup(_list, _lbl_chi,   _index_addr, _ptr_lo, _ptr_hi, 0xDF05, _id);
+            } else {
+                array_push(_list, ["ldx_abs", _index_addr, _id]);
+                array_push(_list, ["lda_abx", _lbl_cbank,  _id]);
+                array_push(_list, ["sta_abs", 0xDF06,      _id]);
+                array_push(_list, ["lda_abx", _lbl_clo,    _id]);
+                array_push(_list, ["sta_abs", 0xDF04,      _id]);
+                array_push(_list, ["lda_abx", _lbl_chi,    _id]);
+                array_push(_list, ["sta_abs", 0xDF05,      _id]);
+            }
+            array_push(_list, ["lda_imm", 0x00,   _id]);   // $D800 low
+            array_push(_list, ["sta_abs", 0xDF02, _id]);
+            array_push(_list, ["lda_imm", 0xD8,   _id]);   // $D800 high
+            array_push(_list, ["sta_abs", 0xDF03, _id]);
+            array_push(_list, ["lda_imm", 0xE8,   _id]);   // 1000 = $03E8
+            array_push(_list, ["sta_abs", 0xDF07, _id]);
+            array_push(_list, ["lda_imm", 0x03,   _id]);
+            array_push(_list, ["sta_abs", 0xDF08, _id]);
+            array_push(_list, ["lda_imm", _reu_ctrl2, _id]);
+            array_push(_list, ["sta_abs", 0xDF0A,     _id]);
+            array_push(_list, ["lda_imm", _reu_cmd2,  _id]);
+            array_push(_list, ["sta_abs", 0xDF01,     _id]);
+        }
+
+        // ---- MAIN BLOCK -> bitmap base ---------------------------------
+        // CUSTOM and HRBITMAP send the whole declared span here; MCBITMAP
+        // sends bitmap + screen only, its colour having gone out above.
         if (_idx_is_word) {
-            // 16-bit indirect lookup: for each table, point a ZP pointer at
-            // the table's compile-time base, add the runtime 16-bit index to
-            // it, then LDA (ptr),Y with Y=0 to fetch the byte. Needs 2 ZP
-            // scratch bytes, configurable per node (slot 14) since any macro
-            // reserving ZP must let the user resolve conflicts — default $03.
-            var _zp_base = (array_length(_curr.instructions[0]) > 14 && is_real(_curr.instructions[0][14])) ? real(_curr.instructions[0][14]) & 0xFF : 0x03;
-            var _ptr_lo  = _zp_base;
-            var _ptr_hi  = _zp_base + 1;
-
-            var _emit_word_lookup = function(_lst, _tbl_lbl, _idx_addr, _plo, _phi, _dest_reg, _tid) {
-                array_push(_lst, ["lda_lab_lo", _tbl_lbl, _tid]);
-                array_push(_lst, ["sta_zp",     _plo,     _tid]);
-                array_push(_lst, ["lda_lab_hi", _tbl_lbl, _tid]);
-                array_push(_lst, ["sta_zp",     _phi,     _tid]);
-                array_push(_lst, ["clc",        0,        _tid]);
-                array_push(_lst, ["lda_zp",     _plo,     _tid]);
-                array_push(_lst, ["adc_abs",    _idx_addr, _tid]);
-                array_push(_lst, ["sta_zp",     _plo,     _tid]);
-                array_push(_lst, ["lda_zp",     _phi,     _tid]);
-                array_push(_lst, ["adc_abs",    _idx_addr + 1, _tid]);
-                array_push(_lst, ["sta_zp",     _phi,     _tid]);
-                array_push(_lst, ["ldy_imm",    0,        _tid]);
-                array_push(_lst, ["lda_izy",    _plo,     _tid]);
-                array_push(_lst, ["sta_abs",    _dest_reg, _tid]);
-            };
-
             _emit_word_lookup(_list, _lbl_bank,  _index_addr, _ptr_lo, _ptr_hi, 0xDF06, _id);
             _emit_word_lookup(_list, _lbl_lo,    _index_addr, _ptr_lo, _ptr_hi, 0xDF04, _id);
             _emit_word_lookup(_list, _lbl_hi,    _index_addr, _ptr_lo, _ptr_hi, 0xDF05, _id);
@@ -20198,8 +20270,8 @@ if (_a.type == "BITMAP" || _a.type == "BITMAP_KLA") {
 			    }
 			}
 		}
+        ds_map_destroy(_load_org_linked);
 	}
-	ds_map_destroy(_load_org_linked);
 
 	// ================================================================
     // FALLBACK: INJECT NULLSID.SID IF REQUIRED

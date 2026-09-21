@@ -49,6 +49,25 @@ item_h          = 36;
 hover_idx       = -1;
 hover_pos       = -1;
 asset_sort_mode = "ADDR"; // "NAME", "TYPE", or "ADDR" (insertion order)
+// Cached display order, plus the signature it was built from. The panel asks
+// for the sorted order every frame, and re-sorting a few hundred assets every
+// frame with a comparator that upper-cases two names per comparison is the
+// most expensive thing the editor does. The order only actually changes when
+// a name, type or address changes, an asset is added or removed, or the sort
+// mode is switched - so that is exactly what the signature records.
+// Declared here so scr_asset_sorted_indices never has to test for them.
+// asset name -> asset struct, rebuilt at most once a frame. scr_reu_find_asset
+// used to answer every lookup with a linear scan of the whole list, and the
+// MACRO_REU node draw asks it once per linked asset, per node, per frame.
+asset_name_map        = ds_map_create();
+asset_name_map_tick   = -1;
+asset_name_map_size   = -1;
+
+asset_sort_cache      = [];
+asset_sort_cache_mode = "";
+asset_sort_sig_name   = [];
+asset_sort_sig_type   = [];
+asset_sort_sig_addr   = [];
 // -------------------------------------------------------
 // ADD ASSET DROPDOWN
 // -------------------------------------------------------
@@ -247,8 +266,41 @@ sfx_picker_field = "asset";
 	load_reu_picker_open  = false;
 	load_reu_picker_asset = -1;
 	load_reu_picker_hover = -1;
+	// Asset groups. A group name present in this map is OPEN; absent is
+	// closed, so a newly imported group starts folded with nothing to set.
+	asset_group_open      = ds_map_create();
+	// Registered group names. Groups live here, never in asset_list, so the
+	// compile chain, memory bar and asset pickers never see them.
+	asset_groups          = [];
+	// asset name -> "LOAD_ORG" / "LOAD_REU", rebuilt once per Draw. The
+	// membership badge used to be worked out by rescanning every manifest's
+	// linked_assets for EVERY visible row, which on a project with a few
+	// hundred linked bitmaps is tens of thousands of string compares a frame.
+	// Declared here so the draw event never has to test for its existence.
+	tag_member_map        = ds_map_create();
+	// Drag an asset row by its grip to move it between groups.
+	asset_drag_idx        = -1;
+	asset_drag_armed      = false;
+	asset_drag_x          = 0;
+	asset_drag_y          = 0;
+	asset_drag_over_group = "";
+	asset_drag_over_loose = false;
+	asset_group_rows      = [];
+
 	load_reu_rows_y       = 0;
 	load_reu_add_y        = 0;
+
+	// LOAD_REU manifest scrolling. A REU image can hold hundreds of frames, so
+	// the row list is windowed and the ADD / AUTO PACK buttons are pinned below
+	// it instead of being pushed off the bottom of the viewer panel.
+	load_reu_scroll       = 0;
+	load_reu_scroll_max   = 0;
+	load_reu_rows_visible = 1;
+	load_reu_list_y1      = 0;
+	load_reu_list_y2      = 0;
+	load_reu_sb_x1        = 0;
+	load_reu_sb_x2        = 0;
+	load_reu_sb_drag      = false;
 
 	// LOAD_REU manifest drag-to-reorder — only allowed between rows whose
 	// asset type matches the row being dragged, since MACRO_REU INDEXED

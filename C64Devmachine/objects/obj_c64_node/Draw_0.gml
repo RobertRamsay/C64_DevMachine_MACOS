@@ -262,6 +262,7 @@ if (height_dirty) {
 	case "COND_IF_WORD":     height = _G * 4;  break;
     case "BANK_SWITCH":      height = _G * 6;  break;
     case "MACRO_REU":        height = _G * 9; break;
+    case "MACRO_UCI_REU":    height = _G * 5; break;
     case "MACRO_COLLISION":  height = _G * 10;  break;
 	case "MACRO_COLL_ADV":   height = _G * 19;  break;    
 	case "MACRO_COLL_LINE":  height = _G * 7;   break;
@@ -778,7 +779,7 @@ var _show_gutter = (node_type == "INIT" || node_type == "ORG") ? _lod_addresses 
 if (_show_gutter && node_type != "EXECUTE" && node_type != "COMMENT" && 
     node_type != "NAMED_LOC" && node_type != "NEW_STR" && node_title != "VARIABLES" && 
     x > 160 && proxy) {
-    var _is_data = (string_pos("DATA", node_type) > 0 || node_type == "SPR64" || node_type == "BITMAP_KLA");
+    _is_data = (string_pos("DATA", node_type) > 0 || node_type == "SPR64" || node_type == "BITMAP_KLA");
     
     // --- SYNCED CONFLICT COLOR ---
     var _use_col = (is_connected || _is_data || node_type == "ORG") ? c_aqua : c_gray;
@@ -992,6 +993,7 @@ switch (node_type) {
 	case "COND_IF_WORD": _head_col = is_connected ? make_color_rgb(180,  90,  40) : make_color_rgb( 90, 45,  20);  break;
 	case "BANK_SWITCH": _head_col = is_connected ? make_color_rgb(120, 80, 200) : make_color_rgb( 60, 40, 100);  break;
 	case "MACRO_REU":   _head_col = is_connected ? make_color_rgb(120, 80, 200) : make_color_rgb( 60, 40, 100);  break;
+	case "MACRO_UCI_REU": _head_col = is_connected ? make_color_rgb(90, 130, 200) : make_color_rgb( 45, 65, 100);  break;
 	case "GET_VAR":     _head_col = is_connected ? make_color_rgb( 40,120,  80) : make_color_rgb( 20, 60,  40); break;
     case "SET_VAR":     _head_col = is_connected ? make_color_rgb(140, 60,  40) : make_color_rgb( 70, 30,  20); break;
     case "INC_VAR":     _head_col = is_connected ? make_color_rgb( 30,100,  50) : make_color_rgb( 15, 50,  25); break;
@@ -1141,7 +1143,7 @@ if (node_type == "ORG" && node_title != "VARIABLES" && node_title != "HW REGISTE
                 // Soft glow ring
                 draw_set_color(_glow_col);
                 draw_set_alpha(0.3);
-                draw_circle(_cx, _cy, 6, false);;
+                draw_circle(_cx, _cy, 6, false);
             }
             draw_set_alpha(1.0);
             } // end idle pulse gate
@@ -1466,6 +1468,7 @@ if (_lod_body) switch (node_type) {
 	case "COND_IF_WORD":      scr_node_draw_cond_if_word(draw_x, y); break;
 	case "BANK_SWITCH":       scr_node_draw_bank_switch(draw_x, y); break;
 	case "MACRO_REU":         scr_node_draw_macro_reu(draw_x, y);   break;
+	case "MACRO_UCI_REU":     scr_node_draw_macro_uci_reu(draw_x, y); break;
 	case "MACRO_COLLISION":   scr_node_draw_macro_collision(draw_x); break;
 	case "MACRO_COLL_ADV":    scr_node_draw_macro_coll_adv(draw_x);  break;
 	case "MACRO_COLL_LINE":   scr_node_draw_macro_coll_line(draw_x, y); break;

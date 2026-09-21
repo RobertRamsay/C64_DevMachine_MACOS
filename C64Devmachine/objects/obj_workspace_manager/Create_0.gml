@@ -1,3 +1,4 @@
+global.text_prompt = undefined;
 // Language first: every text wrapper below depends on it.
 scr_lang_init();
 lang_checked = false;
@@ -11,7 +12,25 @@ editor_layout_refresh_requested = false;
 
 /// @desc Setup Workspace, Palette & C64 Environment
 global.lite=0;
-global.build_date = "September 16th, 2026"; // edit this string for each release
+global.build_date = "September 19th, 2026"; // edit this string for each release
+
+// Frame counter. Incremented once in Begin Step, and used as the validity
+// stamp for per-frame lookup caches (see scr_reu_asset_map). Anything keyed
+// on it can be at most one frame stale, which is invisible for drawing and
+// far cheaper than rebuilding a lookup per call.
+global.frame_tick = 0;
+
+// Per-frame memo of "how many BITMAP assets does this LOAD_REU link?", keyed
+// by manifest name. Every visible MACRO_REU node in INDEXED mode wants that
+// number, and they all want the same one.
+global.reu_slot_map  = ds_map_create();
+global.reu_slot_tick = -1;
+
+// Deferred bitmap previews. Declared here so every consumer can read them
+// unconditionally - no struct/variable existence probing at the call sites.
+global.bmp_preview_queue = [];
+global.bmp_preview_done  = 0;
+global.bmp_preview_total = 0;
 
 // --- GLOBAL CRASH HANDLER ---
 exception_unhandled_handler(function(_ex) {
@@ -110,9 +129,8 @@ welcome_open           = false;
 welcome_hide_checked   = false;
 welcome_credits_y      = 0;
 welcome_whats_new = [
-	"TWEAKED - Map editor to support the *Zyrons Escape project* (*PRO ONLY)",
-	"TWEAKED - Music editor now pre-compiles for better playback, buttons added.",
-	"IN PROGRESS - HUD Asset editor",
+	"NEW - CHINESE SIMPLIFIED Launguage added - Toggle via Options",
+	"NEW - HUD Asset editor",
     "",
     "SHARE your Custom Code blocks like a PRO in the Discord user-code-blocks channel.",
     "SUPPORT the development by leaving a review on ITCH and buying the PRO version.",
@@ -637,6 +655,7 @@ common_assets = [];
 // Build is triggered via F5 or the workspace manager Step event.
 var spawn_x = floor(((room_width / 2) - (global.node_display_width / 2)) / 20) * 20;
 
+global.next_stable_uid = 100000;
 var n_init = instance_create_layer(spawn_x, 60, "Layer_Nodes", obj_c64_node);
 n_init.node_title   = "SYSTEM INIT";
 n_init.node_type    = "INIT";
@@ -783,7 +802,7 @@ global.named_loc_meta_dirty = true;
 global.named_loc_packed = false;
 global.any_picker_open    = false;
 global.next_org_uid       = 1;
-global.next_stable_uid    = 100000;
+// Stable UID allocator is initialized before SYSTEM INIT is spawned.
 global.wire_drag_node     = noone;
 global.wire_drag_is_out   = false;
 scr_init_named_locations();
