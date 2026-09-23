@@ -1,5 +1,10 @@
 /// @desc obj_asset_manager Draw GUI
 
+// Deferred charset preview rebuild (see scr_chr_preview_request)
+scr_chr_preview_service();
+
+
+
 if obj_workspace_manager.code_editor_open or obj_workspace_manager.hideui exit;
 
 // OLD (nothing here)
@@ -7743,6 +7748,148 @@ case "SID_MUSIC": {
             draw_set_color(c_ltgray);  draw_text_l(_vx1 + 140, _cy, "END:");
             draw_set_color(c_aqua);    draw_text_l(_vx1 + 190, _cy, "$" + _end_hex);
             _cy += 20;
+
+            // ── RELOCATE ─────────────────────────────────────────────
+            // Moves the tune to another page: every address byte inside the
+            // player is found by emulating it (scr_sid_relocate), patched, and
+            // the result is verified against the original before the asset is
+            // touched. MACRO_SID / IRQ HANDLER / memory bar all read the asset,
+            // so they follow automatically.
+            if (sid_reloc_asset != _asset.name) {
+                sid_reloc_asset  = _asset.name;
+                sid_reloc_target = _asset.address;
+                sid_reloc_msg    = "";
+                sid_reloc_ok     = false;
+                sid_reloc_job    = noone;
+            }
+            var _rl_busy = false;
+            if (is_struct(sid_reloc_job)) {
+                if (sid_reloc_job.phase < 2) { _rl_busy = true; }
+            }
+            draw_set_color(make_color_rgb(40, 40, 60));
+            draw_line(_vx1 + 10, _cy, _vx2 - 10, _cy);
+            _cy += 8;
+            draw_set_color(c_ltgray);
+            draw_text_l(_vx1 + 10, _cy + 2, "RELOCATE TO:");
+
+            // [-] $XXXX [+]  - whole pages, low byte kept
+            var _rl_x   = _vx1 + 104;
+            var _rl_bw  = 16;
+            var _rl_mh  = point_in_rectangle(_mx, _my, _rl_x, _cy, _rl_x + _rl_bw, _cy + 16);
+            draw_set_color(make_color_rgb(40, 60, 90));
+            if (_rl_mh) { draw_set_color(make_color_rgb(70, 100, 150)); }
+            draw_rectangle(_rl_x, _cy, _rl_x + _rl_bw, _cy + 16, false);
+            draw_set_color(c_white);
+            draw_text_l(_rl_x + 5, _cy + 2, "-");
+            var _rl_tx  = _rl_x + _rl_bw + 6;
+            var _rl_hex = string_upper(decimal_to_hex(sid_reloc_target));
+            while (string_length(_rl_hex) < 4) { _rl_hex = "0" + _rl_hex; }
+            draw_set_color(c_yellow);
+            if (sid_reloc_target == _asset.address) { draw_set_color(make_color_rgb(140, 140, 140)); }
+            draw_text_l(_rl_tx, _cy + 2, "$" + _rl_hex);
+            var _rl_px  = _rl_tx + string_width_l("$0000") + 6;
+            var _rl_ph  = point_in_rectangle(_mx, _my, _rl_px, _cy, _rl_px + _rl_bw, _cy + 16);
+            draw_set_color(make_color_rgb(40, 60, 90));
+            if (_rl_ph) { draw_set_color(make_color_rgb(70, 100, 150)); }
+            draw_rectangle(_rl_px, _cy, _rl_px + _rl_bw, _cy + 16, false);
+            draw_set_color(c_white);
+            draw_text_l(_rl_px + 4, _cy + 2, "+");
+            if (!_rl_busy && mouse_check_button_pressed(mb_left)) {
+                if (_rl_mh) { sid_reloc_target = max(0x0200 | (_asset.address & 0xFF), sid_reloc_target - 0x100); sid_reloc_msg = ""; }
+                if (_rl_ph) { sid_reloc_target = min(0xFF00 | (_asset.address & 0xFF), sid_reloc_target + 0x100); sid_reloc_msg = ""; }
+            }
+
+            // Test length: how long the tune is emulated for (per sub-song)
+            var _rl_fx  = _rl_px + _rl_bw + 12;
+            var _rl_ftxt = "TEST " + string(round(sid_reloc_frames / 3000)) + " MIN";
+            var _rl_fw  = string_width_l("TEST 10 MIN") + 10;
+            var _rl_fh  = point_in_rectangle(_mx, _my, _rl_fx, _cy, _rl_fx + _rl_fw, _cy + 16);
+            draw_set_color(make_color_rgb(30, 30, 45));
+            if (_rl_fh) { draw_set_color(make_color_rgb(55, 55, 80)); }
+            draw_rectangle(_rl_fx, _cy, _rl_fx + _rl_fw, _cy + 16, false);
+            draw_set_color(make_color_rgb(150, 150, 200));
+            draw_set_halign(fa_center);
+            draw_text_l(_rl_fx + _rl_fw * 0.5, _cy + 2, _rl_ftxt);
+            draw_set_halign(fa_left);
+            if (!_rl_busy && _rl_fh && mouse_check_button_pressed(mb_left)) {
+                if (sid_reloc_frames == 3000) {
+                    sid_reloc_frames = 15000;
+                } else if (sid_reloc_frames == 15000) {
+                    sid_reloc_frames = 30000;
+                } else {
+                    sid_reloc_frames = 3000;
+                }
+            }
+
+            // [RELOCATE] / [CANCEL]
+            var _rl_gx  = _rl_fx + _rl_fw + 8;
+            var _rl_gw  = string_width_l("RELOCATE") + 14;
+            var _rl_gh  = point_in_rectangle(_mx, _my, _rl_gx, _cy, _rl_gx + _rl_gw, _cy + 16);
+            var _rl_glb = "RELOCATE";
+            if (_rl_busy) { _rl_glb = "CANCEL"; }
+            draw_set_color(make_color_rgb(90, 35, 70));
+            if (_rl_gh) { draw_set_color(make_color_rgb(160, 60, 120)); }
+            draw_rectangle(_rl_gx, _cy, _rl_gx + _rl_gw, _cy + 16, false);
+            draw_set_color(make_color_rgb(230, 60, 170));
+            draw_rectangle(_rl_gx, _cy, _rl_gx + _rl_gw, _cy + 16, true);
+            draw_set_color(c_white);
+            draw_set_halign(fa_center);
+            draw_text_l(_rl_gx + _rl_gw * 0.5, _cy + 2, _rl_glb);
+            draw_set_halign(fa_left);
+            if (_rl_gh && mouse_check_button_pressed(mb_left)) {
+                if (_rl_busy) {
+                    sid_reloc_job = noone;
+                    sid_reloc_msg = "CANCELLED - NOTHING CHANGED";
+                    sid_reloc_ok  = false;
+                } else {
+                    var _rl_new = scr_srel_job_create(_asset, sid_reloc_target, sid_reloc_frames);
+                    if (is_string(_rl_new)) {
+                        sid_reloc_job = noone;
+                        sid_reloc_msg = _rl_new;
+                        sid_reloc_ok  = false;
+                    } else {
+                        sid_reloc_job = _rl_new;
+                        sid_reloc_msg = "";
+                    }
+                }
+            }
+            _cy += 22;
+
+            // Run the job a slice per frame, apply it when it verifies
+            if (is_struct(sid_reloc_job)) {
+                if (sid_reloc_job.phase < 2) {
+                    var _rl_fin = scr_srel_job_step(sid_reloc_job, 12000);
+                    if (_rl_fin) {
+                        sid_reloc_ok  = sid_reloc_job.ok;
+                        sid_reloc_msg = sid_reloc_job.msg;
+                        if (sid_reloc_job.ok) {
+                            scr_srel_apply(sid_reloc_job);
+                            sid_reloc_msg = sid_reloc_msg + "  ZP: " + scr_srel_zp_text(sid_reloc_job);
+                            sid_reloc_target = _asset.address;
+                        }
+                    }
+                }
+            }
+            if (is_struct(sid_reloc_job)) {
+                if (sid_reloc_job.phase < 2) {
+                    var _rl_bx2 = _vx2 - 10;
+                    draw_set_color(make_color_rgb(25, 25, 35));
+                    draw_rectangle(_vx1 + 10, _cy, _rl_bx2, _cy + 10, false);
+                    draw_set_color(make_color_rgb(230, 60, 170));
+                    draw_rectangle(_vx1 + 10, _cy, _vx1 + 10 + (_rl_bx2 - _vx1 - 10) * sid_reloc_job.progress, _cy + 10, false);
+                    var _rl_ph_txt = "ANALYSING";
+                    if (sid_reloc_job.phase == 1) { _rl_ph_txt = "VERIFYING"; }
+                    draw_set_color(c_white);
+                    draw_text_l(_vx1 + 10, _cy + 12, _rl_ph_txt + "  " + string(floor(sid_reloc_job.progress * 100)) + "%");
+                    _cy += 28;
+                }
+            }
+            if (sid_reloc_msg != "") {
+                draw_set_color(make_color_rgb(255, 110, 90));
+                if (sid_reloc_ok) { draw_set_color(c_lime); }
+                draw_text_ext_l(_vx1 + 10, _cy, sid_reloc_msg, 12, _vx2 - _vx1 - 20);
+                _cy += 30;
+            }
         } break;
 	
 case "LOAD_REU": {
@@ -8227,6 +8374,19 @@ case "META_TILESET": {
         if (_ch < array_length(_mm.char_lut)) return (_mm.char_lut[_ch] >> 4) & 0x01;
         return 0;
     };
+    // Helper: make _ch the active char (char editor + strip selection), adopt
+    // its baked colour into the paint swatch, and scroll the strip to it.
+    // Strip is 32 chars per row, 4 rows visible, 8 rows total.
+    var _mts_pick_char = function(_mm, _ch) {
+        _mm.active_char = _ch;
+        if (_ch < array_length(_mm.char_lut)) {
+            _mm.active_colour = _mm.char_lut[_ch] & 0x0F;
+        }
+        var _sel_row = _ch div 32;
+        if (_sel_row < _mm.char_strip_scroll_row || _sel_row >= _mm.char_strip_scroll_row + 4) {
+            _mm.char_strip_scroll_row = clamp(_sel_row, 0, 4);
+        }
+    };
 
     // Write the live edit grid back into the selected stamp's stamp_data slot.
     // 1 byte/cell: just the char index. Colour/mode live in char_lut.
@@ -8595,9 +8755,235 @@ case "META_TILESET": {
         (_ts_chr_ref != noone && variable_struct_exists(_ts_chr_ref.meta, "ecm_bg3")) ? _ts_chr_ref.meta.ecm_bg3 : 3
     ];
 
+    // ---- GLYPH ATLAS ----
+    // Every char is pre-rendered once into white mask layers (HR + 3 MC
+    // layers) and blitted tinted, instead of one draw_rectangle per pixel.
+    // Only chars whose bytes changed are re-rendered; while a mouse button is
+    // held that check runs at most every 100ms, then immediately on release.
+    scr_mts_atlas_update(_ts_chr_ref);
+    var _mts_atlas_ok = mts_atlas_ok;
+    var _mts_mc1_idx  = 1;
+    var _mts_mc2_idx  = 2;
+    if (_m.map_mc_col1 >= 0) { _mts_mc1_idx = _m.map_mc_col1; }
+    if (_m.map_mc_col2 >= 0) { _mts_mc2_idx = _m.map_mc_col2; }
+    var _mts_mc1_col  = scr_c64_pepto_colour(_mts_mc1_idx);
+    var _mts_mc2_col  = scr_c64_pepto_colour(_mts_mc2_idx);
+
 // ---- GLOBAL MODE BUTTON ----
     var _ts_global_mixed = obj_workspace_manager.map_global_mixed;
     if (!variable_struct_exists(_m, "active_mode")) _m.active_mode = 0;
+
+    // ---- RUN VIEW: colour cells exactly as the connected METASCROLL will ----
+    // FIXED paints every cell with one colour-RAM nibble; ROW BANDS gives
+    // each map row one nibble. Per-char colours only survive in SHIFT C64U,
+    // so for FIXED / ROW BANDS the editor shows the result instead of the
+    // per-char colours (toggle with RUN VIEW). The tally / bands are
+    // scr_mts_colour_plan, the same numbers the compiler uses, cached in
+    // mts_plan and recounted with the byte count below.
+    var _run_node    = scr_mts_find_scroller(_asset.name);
+    var _run_mode    = -1;
+    var _run_nib_set = -1;
+    var _run_map     = -1;
+    if (_run_node != noone) {
+        var _rn_ins = _run_node.instructions[0];
+        _run_mode = 0;
+        if (array_length(_rn_ins) > 6) {
+            if (is_real(_rn_ins[6])) { _run_mode = real(_rn_ins[6]); }
+        }
+        if (_run_mode == 1) { _run_mode = 0; }
+        if (array_length(_rn_ins) > 7) {
+            if (is_real(_rn_ins[7])) { _run_nib_set = real(_rn_ins[7]); }
+        }
+        _run_map = 0;
+        if (array_length(_rn_ins) > 2) {
+            if (is_real(_rn_ins[2])) { _run_map = real(_rn_ins[2]); }
+        }
+    }
+    var _run_mixed    = (_ts_global_mixed == 1);
+    var _run_has_plan = false;
+    if (is_struct(mts_plan)) {
+        if (mts_plan_owner == _asset.name && mts_plan_map == _run_map) { _run_has_plan = true; }
+    }
+    var _run_nib = 0;
+    if (_run_nib_set >= 0) {
+        _run_nib = _run_nib_set & 0x0F;
+    } else if (_run_has_plan) {
+        _run_nib = scr_mts_plan_auto_nib(mts_plan);
+    }
+    var _run_fx_on   = false;
+    var _run_rows_on = false;
+    if (mts_run_view && _run_mode == 0) { _run_fx_on = true; }
+    if (mts_run_view && _run_mode == 3 && _run_has_plan && _m.active_map == _run_map) { _run_rows_on = true; }
+    var _run_fx_mc = scr_mts_co_is_mc(_run_nib, _run_mixed, _ecm_mode);
+    var _run_fx_fg = scr_mts_co_fg(_run_nib, _run_mixed, _ecm_mode);
+
+    // ---- RUN VIEW panel ----
+    // Framed block between CHARSET and MODE, 3 rows of 16px, everything
+    // measured from the text so nothing overlaps. Width stops short of the
+    // STAMPS / byte stats that sit to its right.
+    //   no scroller  -> one grey line saying what's needed
+    //   scroller     -> row 1  [RUN VIEW: ON/OFF] [FIXED / ROW BANDS / SHIFT C64U]
+    //                   row 2  (sw) NIB AUTO $xx / band note     [ALL > MC]
+    //                   row 3  OFF-COLOUR n / total
+    draw_set_font_l(fnt_c64_tiny);
+    var _rv_bx1 = _vx1 + 8;
+    var _rv_bx2 = _vx1 + 204;
+    var _rv_x1  = _rv_bx1 + 4;
+    var _rv_x2r = _rv_bx2 - 4;              // right edge for right-aligned items
+    var _rv_rh  = 16;                       // row height
+    var _rv_th  = string_height("X");     // text height, for vertical centring
+    if (_run_node == noone) {
+        draw_set_color(make_color_rgb(110, 110, 130));
+        draw_text_l(_rv_x1, _cy + 1, "RUN VIEW: CONNECT A METASCROLL");
+        _cy += 18;
+    } else {
+        var _rv_top = _cy;
+        var _rv_bot = _cy + _rv_rh * 3 + 6;
+        draw_set_color(make_color_rgb(16, 22, 30));
+        draw_rectangle(_rv_bx1, _rv_top, _rv_bx2, _rv_bot, false);
+        draw_set_color(make_color_rgb(45, 70, 80));
+        draw_rectangle(_rv_bx1, _rv_top, _rv_bx2, _rv_bot, true);
+
+        // Row 1: [RUN VIEW ON/OFF]  [MODE]
+        var _rv_y1  = _rv_top + 3;
+        var _rv_y2  = _rv_y1 + _rv_rh - 2;
+        var _rv_ty  = _rv_y1 + floor((_rv_rh - 2 - _rv_th) * 0.5);
+        var _rv_lbl = "RUN VIEW: OFF";
+        if (mts_run_view) { _rv_lbl = "RUN VIEW: ON"; }
+        var _rv_x2  = _rv_x1 + string_width_l("RUN VIEW: OFF") + 10;
+        var _rv_hov = point_in_rectangle(_mx, _my, _rv_x1, _rv_y1, _rv_x2, _rv_y2);
+        if (mts_run_view) {
+            draw_set_color(make_color_rgb(20, 70, 50));
+        } else {
+            draw_set_color(make_color_rgb(35, 35, 45));
+        }
+        if (_rv_hov) { draw_set_color(make_color_rgb(40, 110, 80)); }
+        draw_rectangle(_rv_x1, _rv_y1, _rv_x2, _rv_y2, false);
+        draw_set_color(make_color_rgb(80, 200, 140));
+        draw_rectangle(_rv_x1, _rv_y1, _rv_x2, _rv_y2, true);
+        draw_set_color(c_white);
+        draw_set_halign(fa_center);
+        draw_text_l((_rv_x1 + _rv_x2) * 0.5, _rv_ty, _rv_lbl);
+        draw_set_halign(fa_left);
+        if (_rv_hov && mouse_check_button_pressed(mb_left)) {
+            mts_run_view = !mts_run_view;
+        }
+
+        // Colour mode of the node - click cycles it (same order as the node)
+        var _md_x1  = _rv_x2 + 6;
+        var _md_x2  = _rv_x2r;
+        var _md_hov = point_in_rectangle(_mx, _my, _md_x1, _rv_y1, _md_x2, _rv_y2);
+        var _md_txt = "FIXED";
+        var _md_col = c_lime;
+        if (_run_mode == 3) {
+            _md_txt = "ROW BANDS";
+            _md_col = c_aqua;
+        }
+        if (_run_mode == 2) {
+            _md_txt = "SHIFT C64U";
+            _md_col = make_color_rgb(255, 90, 90);
+        }
+        if (_run_mode == 4) {
+            _md_txt = "SHIFT STOCK";
+            _md_col = c_orange;
+        }
+        draw_set_color(make_color_rgb(25, 25, 40));
+        if (_md_hov) { draw_set_color(make_color_rgb(50, 50, 80)); }
+        draw_rectangle(_md_x1, _rv_y1, _md_x2, _rv_y2, false);
+        draw_set_color(_md_col);
+        draw_rectangle(_md_x1, _rv_y1, _md_x2, _rv_y2, true);
+        draw_set_halign(fa_center);
+        draw_text_l((_md_x1 + _md_x2) * 0.5, _rv_ty, _md_txt);
+        draw_set_halign(fa_left);
+        if (_md_hov && mouse_check_button_pressed(mb_left)) {
+            while (array_length(_run_node.instructions[0]) < 8) { array_push(_run_node.instructions[0], 0); }
+            var _md_next = 3;
+            if (_run_mode == 3) { _md_next = 4; }
+            if (_run_mode == 4) { _md_next = 2; }
+            if (_run_mode == 2) { _md_next = 0; }
+            _run_node.instructions[0][6] = _md_next;
+            global.addresses_dirty = true;
+            global.undo_dirty      = true;
+        }
+
+        // Row 2: FIXED nibble / what the mode does, and ALL > MC on the right
+        var _rv_y3  = _rv_y1 + _rv_rh;
+        var _rv_y3b = _rv_y3 + _rv_rh - 2;
+        var _rv_ty3 = _rv_y3 + floor((_rv_rh - 2 - _rv_th) * 0.5);
+        var _mc_x1  = _rv_x2r;                  // left edge of ALL > MC (none = full width)
+        if (_run_mixed && !_ecm_mode) {
+            _mc_x1 = _rv_x2r - (string_width_l("ALL > MC") + 10);
+            var _mc_hov = point_in_rectangle(_mx, _my, _mc_x1, _rv_y3, _rv_x2r, _rv_y3b);
+            draw_set_color(make_color_rgb(70, 35, 5));
+            if (_mc_hov) { draw_set_color(make_color_rgb(140, 70, 10)); }
+            draw_rectangle(_mc_x1, _rv_y3, _rv_x2r, _rv_y3b, false);
+            draw_set_color(make_color_rgb(255, 160, 60));
+            draw_rectangle(_mc_x1, _rv_y3, _rv_x2r, _rv_y3b, true);
+            draw_set_halign(fa_center);
+            draw_text_l((_mc_x1 + _rv_x2r) * 0.5, _rv_ty3, "ALL > MC");
+            draw_set_halign(fa_left);
+            // Every char in the tileset becomes multicolour (char_lut bit 4)
+            if (_mc_hov && mouse_check_button_pressed(mb_left)) {
+                for (var _amc = 0; _amc < array_length(_m.char_lut); _amc++) {
+                    _m.char_lut[_amc] = _m.char_lut[_amc] | 0x10;
+                }
+                _m.is_dirty       = true;
+                global.undo_dirty = true;
+                mts_bytes_next_ms = 0;   // recount the tally now
+            }
+        }
+
+        if (_run_mode == 0) {
+            var _rv_ntxt = "NIB $" + string_upper(decimal_to_hex(_run_nib)) + " SET";
+            if (_run_nib_set < 0) { _rv_ntxt = "NIB AUTO $" + string_upper(decimal_to_hex(_run_nib)); }
+            var _rv_nw   = string_width_l(_rv_ntxt);
+            var _rv_nhov = point_in_rectangle(_mx, _my, _rv_x1, _rv_y3, _rv_x1 + 14 + _rv_nw, _rv_y3b);
+            draw_set_color(scr_c64_pepto_colour(_run_fx_fg));
+            draw_rectangle(_rv_x1, _rv_y3 + 2, _rv_x1 + 8, _rv_y3b - 2, false);
+            draw_set_color(make_color_rgb(120, 120, 140));
+            draw_rectangle(_rv_x1, _rv_y3 + 2, _rv_x1 + 8, _rv_y3b - 2, true);
+            draw_set_color(c_lime);
+            if (_rv_nhov) { draw_set_color(c_white); }
+            draw_text_l(_rv_x1 + 14, _rv_ty3, _rv_ntxt);
+            // The colour itself is picked on the COLOUR strip below. Clicking
+            // here only toggles AUTO (commonest colour in the map) <-> the
+            // COLOUR strip's current colour, keeping the MC bit in MIXED.
+            if (_rv_nhov && mouse_check_button_pressed(mb_left)) {
+                var _rv_next = -1;
+                if (_run_nib_set < 0) {
+                    _rv_next = _m.active_colour & 0x0F;
+                    if (_run_mixed && !_ecm_mode) { _rv_next = (_m.active_colour & 0x07) | (_run_nib & 0x08); }
+                }
+                _run_node.instructions[0][7] = real(_rv_next);
+                global.undo_dirty = true;
+            }
+        } else if (_run_mode == 3) {
+            draw_set_color(c_aqua);
+            var _rv_btxt = "BAND PER MAP ROW";
+            if (_m.active_map != _run_map) { _rv_btxt = "BANDS ON MAP " + string(_run_map); }
+            draw_text_l(_rv_x1, _rv_ty3, _rv_btxt);
+        } else {
+            draw_set_color(make_color_rgb(140, 140, 160));
+            draw_text_l(_rv_x1, _rv_ty3, "PER-CHAR, AS SHOWN");
+        }
+
+        // Row 3: placed cells that won't show their per-char colour
+        var _rv_ty4  = _rv_y3 + _rv_rh + floor((_rv_rh - 2 - _rv_th) * 0.5);
+        var _rv_miss = 0;
+        var _rv_tot  = 0;
+        if (_run_has_plan) {
+            _rv_tot = mts_plan.total;
+            if (_run_mode == 0) { _rv_miss = mts_plan.total - mts_plan.tally[_run_nib]; }
+            if (_run_mode == 3) { _rv_miss = mts_plan.band_miss; }
+        }
+        if (_rv_miss == 0) {
+            draw_set_color(c_lime);
+        } else {
+            draw_set_color(make_color_rgb(255, 120, 80));
+        }
+        draw_text_l(_rv_x1, _rv_ty4, "OFF-COLOUR: " + string(_rv_miss) + " / " + string(_rv_tot));
+        _cy = _rv_bot + 6;
+    }
 
     draw_set_font_l(fnt_c64_tiny);
     draw_set_color(make_color_rgb(80, 80, 100));
@@ -8956,6 +9342,7 @@ case "META_TILESET": {
         ceil((_list_x2 - _list_x1) * _lsx), ceil(_list_area_h * _lsy)
     );
 
+    scr_mts_glyph_begin();
     for (var _si = 0; _si <= _m.stamp_count; _si++) {
         var _is_ghost = (_si == _m.stamp_count);
         var _scol3 = _si mod _cols3;
@@ -9031,41 +9418,18 @@ case "META_TILESET": {
                 var _px         = _sx2 + 4 + _col * _slot_tpx;
                 var _py         = _sy2 + 4 + _row * _slot_tpx;
                 var _prev_is_mc = (_ts_global_mixed == 1) && (_clut_mc(_m, _char_v) == 1);
-                if (_ts_chr_ref != noone && buffer_exists(_ts_chr_ref.buffer) && _slot_tpx >= 4) {
-                    draw_set_color(_sl_bg);
-                    draw_rectangle(_px, _py, _px + _slot_tpx - 1, _py + _slot_tpx - 1, false);
+                if (_run_fx_on) {
+                    _prev_is_mc = _run_fx_mc;
+                    _col_v      = _run_fx_fg;
+                }
+                if (_mts_atlas_ok && _slot_tpx >= 4) {
+                    // Glyph atlas: one tinted blit per colour layer instead of a rect per pixel
                     if (_prev_is_mc) {
-                        var _prev_col1 = (_m.map_mc_col1 >= 0) ? _m.map_mc_col1 : 1;
-                        var _prev_col2 = (_m.map_mc_col2 >= 0) ? _m.map_mc_col2 : 2;
-                        var _prev_pal  = [_sl_bg, scr_c64_pepto_colour(_prev_col1), scr_c64_pepto_colour(_prev_col2), scr_c64_pepto_colour(_col_v & 0x07)];
-                        var _ppw       = max(1, _slot_tpx / 4);
-                        var _pph       = max(1, _slot_tpx / 8);
-                        for (var _pr = 0; _pr < 8; _pr++) {
-                            var _pboff = (_sl_rc * 8) + _pr;
-                            if (_pboff >= buffer_get_size(_ts_chr_ref.buffer)) break;
-                            var _pbyte = buffer_peek(_ts_chr_ref.buffer, _pboff, buffer_u8);
-                            for (var _pb = 0; _pb < 4; _pb++) {
-                                var _pbits = (_pbyte >> (6 - _pb * 2)) & 0x03;
-                                if (_pbits == 0) continue;
-                                draw_set_color(_prev_pal[_pbits]);
-                                draw_rectangle(_px + _pb * _ppw, _py + _pr * _pph, _px + _pb * _ppw + _ppw, _py + _pr * _pph + _pph, false);
-                            }
-                        }
+                        scr_mts_draw_glyph(_sl_rc, _px, _py, _slot_tpx, _slot_tpx, true, _sl_bg, scr_c64_pepto_colour(_col_v & 0x07), _mts_mc1_col, _mts_mc2_col);
                     } else {
-                        var _ppw    = max(1, _slot_tpx / 8);
-                        var _pph    = max(1, _slot_tpx / 8);
-                        var _hr_col = (!_eff_mixed) ? (_col_v & 0x0F) : (_col_v & 0x07);
-                        draw_set_color(scr_c64_pepto_colour(_hr_col));
-                        for (var _pr = 0; _pr < 8; _pr++) {
-                            var _pboff = (_sl_rc * 8) + _pr;
-                            if (_pboff >= buffer_get_size(_ts_chr_ref.buffer)) break;
-                            var _pbyte = buffer_peek(_ts_chr_ref.buffer, _pboff, buffer_u8);
-                            for (var _pb = 0; _pb < 8; _pb++) {
-                                if (_pbyte & (0x80 >> _pb)) {
-                                    draw_rectangle(_px + _pb * _ppw, _py + _pr * _pph, _px + _pb * _ppw + _ppw, _py + _pr * _pph + _pph, false);
-                                }
-                            }
-                        }
+                        var _hr_col = _col_v & 0x07;
+                        if (!_eff_mixed) { _hr_col = _col_v & 0x0F; }
+                        scr_mts_draw_glyph(_sl_rc, _px, _py, _slot_tpx, _slot_tpx, false, _sl_bg, scr_c64_pepto_colour(_hr_col), _mts_mc1_col, _mts_mc2_col);
                     }
                 } else {
                     var _fb_col = (!_eff_mixed) ? (_col_v & 0x0F) : (_col_v & 0x07);
@@ -9134,6 +9498,7 @@ case "META_TILESET": {
             }
         }
     }
+    scr_mts_glyph_end();
 
     gpu_set_scissor(0, 0, window_get_width(), window_get_height());
 
@@ -9227,15 +9592,27 @@ case "META_TILESET": {
     var _clut_table_bytes = (_m.char_lut_len > 0) ? _m.char_lut_len : 0;
     if (array_length(_m.map_bytes) != _m.map_count) {
         _m.map_bytes = array_create(_m.map_count, 0);
+        mts_bytes_next_ms = 0;   // map added/removed: recount this frame
     }
+    // Recount placements only every 250ms while a button is held (painting),
+    // at once on release / asset switch; otherwise reuse the cached counts.
+    var _mts_recount = false;
+    if (mts_bytes_owner != _asset.name) { _mts_recount = true; }
+    if (_run_node != noone) {
+        if (mts_plan_owner != _asset.name || mts_plan_map != _run_map) { _mts_recount = true; }
+    }
+    if (current_time >= mts_bytes_next_ms) { _mts_recount = true; }
+    if (mouse_check_button_released(mb_left) || mouse_check_button_released(mb_right)) { _mts_recount = true; }
     var _all_map_bytes = 0;
     for (var _mci = 0; _mci < _m.map_count; _mci++) {
-        var _mgrid  = _m.maps[_mci];
-        var _placed = 0;
-        for (var _mgi = 0; _mgi < array_length(_mgrid); _mgi++) {
-            if (_mgrid[_mgi] != -1) _placed++;
+        if (_mts_recount) {
+            var _mgrid  = _m.maps[_mci];
+            var _placed = 0;
+            for (var _mgi = 0; _mgi < array_length(_mgrid); _mgi++) {
+                if (_mgrid[_mgi] != -1) _placed++;
+            }
+            _m.map_bytes[_mci] = 1 + (_placed * 3);
         }
-        _m.map_bytes[_mci] = 1 + (_placed * 3);
         _all_map_bytes += _m.map_bytes[_mci];
     }
     var _mt_total_bytes = _mt_size_bytes + _mt_data_bytes + _clut_table_bytes + _all_map_bytes;
@@ -9244,11 +9621,21 @@ case "META_TILESET": {
     _m.clut_bytes_disp    = _clut_table_bytes;                  // char_lut table, paid once
     _m.mt_data_bytes_disp = _mt_size_bytes + _mt_data_bytes;    // stamp-def only (2 header + 1b/cell)
     _m.map_bytes_disp     = _all_map_bytes;
-    var _cur_placed = 0;
-    for (var _cpi = 0; _cpi < array_length(_active_grid); _cpi++) {
-        if (_active_grid[_cpi] != -1) _cur_placed++;
+    if (_mts_recount) {
+        var _cur_placed = 0;
+        for (var _cpi = 0; _cpi < array_length(_active_grid); _cpi++) {
+            if (_active_grid[_cpi] != -1) _cur_placed++;
+        }
+        _m.cur_map_bytes_disp = 1 + (_cur_placed * 3);
+        mts_bytes_owner   = _asset.name;
+        mts_bytes_next_ms = current_time + 250;
+        // RUN VIEW tally / row bands for the scroller's map
+        if (_run_node != noone) {
+            mts_plan       = scr_mts_colour_plan(_m, _run_map, _run_mixed, _ecm_mode);
+            mts_plan_owner = _asset.name;
+            mts_plan_map   = _run_map;
+        }
     }
-    _m.cur_map_bytes_disp = 1 + (_cur_placed * 3);
 
     var _has_paint = false;
     var _cells2    = _grid_cells;
@@ -9305,6 +9692,7 @@ case "META_TILESET": {
     var _grid_ox   = floor(_canvas_x1 + ((_canvas_x2 - _canvas_x1) - _grid_px_w) * 0.5);
     var _grid_oy   = floor(_canvas_y1 + ((_canvas_y2 - _canvas_y1) - _grid_px_h) * 0.5);
 
+    scr_mts_glyph_begin();
 for (var _row = 0; _row < _m.stamp_h; _row++) {
         for (var _col = 0; _col < _m.stamp_w; _col++) {
             var _cidx   = _row * _m.stamp_w + _col;
@@ -9319,48 +9707,24 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
             var _cx2    = _grid_ox + _col * _cell_sz;
             var _cy3    = _grid_oy + _row * _cell_sz;
 
-            draw_set_color(_ec_bg);
-            draw_rectangle(_cx2, _cy3, _cx2 + _cell_sz - 1, _cy3 + _cell_sz - 1, false);
+            if (!_mts_atlas_ok) {
+                draw_set_color(_ec_bg);
+                draw_rectangle(_cx2, _cy3, _cx2 + _cell_sz - 1, _cy3 + _cell_sz - 1, false);
+            }
 
             var _cell_is_mc = (_ts_global_mixed == 1) && (_clut_mc(_m, _char_v) == 1);
+            if (_run_fx_on) {
+                _cell_is_mc = _run_fx_mc;
+                _col_v      = _run_fx_fg;
+            }
 
-            if (_ts_chr_ref != noone && buffer_exists(_ts_chr_ref.buffer)) {
+            if (_mts_atlas_ok) {
                 if (_cell_is_mc) {
-                    var _mc_col1 = (_m.map_mc_col1 >= 0) ? _m.map_mc_col1 : 1;
-                    var _mc_col2 = (_m.map_mc_col2 >= 0) ? _m.map_mc_col2 : 2;
-                    var _mc_pal  = [_ec_bg, scr_c64_pepto_colour(_mc_col1), scr_c64_pepto_colour(_mc_col2), scr_c64_pepto_colour(_col_v & 0x07)];
-                    var _mc_pxw  = max(1, _cell_sz / 4);
-                    var _mc_pxh  = max(1, _cell_sz / 8);
-                    draw_set_color(_mc_pal[0]);
-                    draw_rectangle(_cx2, _cy3, _cx2 + _cell_sz - 1, _cy3 + _cell_sz - 1, false);
-                    for (var _brow = 0; _brow < 8; _brow++) {
-                        var _boff = (_ec_rc * 8) + _brow;
-                        if (_boff >= buffer_get_size(_ts_chr_ref.buffer)) break;
-                        var _byte = buffer_peek(_ts_chr_ref.buffer, _boff, buffer_u8);
-                        for (var _pair = 0; _pair < 4; _pair++) {
-                            var _bits = (_byte >> (6 - _pair * 2)) & 0x03;
-                            if (_bits == 0) continue;
-                            draw_set_color(_mc_pal[_bits]);
-                            draw_rectangle(_cx2 + _pair * _mc_pxw, _cy3 + _brow * _mc_pxh, _cx2 + _pair * _mc_pxw + _mc_pxw, _cy3 + _brow * _mc_pxh + _mc_pxh, false);
-                        }
-                    }
+                    scr_mts_draw_glyph(_ec_rc, _cx2, _cy3, _cell_sz, _cell_sz, true, _ec_bg, scr_c64_pepto_colour(_col_v & 0x07), _mts_mc1_col, _mts_mc2_col);
                 } else {
-                    var _hr_pxw = max(1, _cell_sz / 8);
-                    var _hr_pxh = max(1, _cell_sz / 8);
-                    var _hr_col = (!_eff_mixed) ? (_col_v & 0x0F) : (_col_v & 0x07);
-                    draw_set_color(_ec_bg);
-                    draw_rectangle(_cx2, _cy3, _cx2 + _cell_sz - 1, _cy3 + _cell_sz - 1, false);
-                    draw_set_color(scr_c64_pepto_colour(_hr_col));
-                    for (var _brow = 0; _brow < 8; _brow++) {
-                        var _boff = (_ec_rc * 8) + _brow;
-                        if (_boff >= buffer_get_size(_ts_chr_ref.buffer)) break;
-                        var _byte = buffer_peek(_ts_chr_ref.buffer, _boff, buffer_u8);
-                        for (var _bit = 0; _bit < 8; _bit++) {
-                            if (_byte & (0x80 >> _bit)) {
-                                draw_rectangle(_cx2 + _bit * _hr_pxw, _cy3 + _brow * _hr_pxh, _cx2 + _bit * _hr_pxw + _hr_pxw, _cy3 + _brow * _hr_pxh + _hr_pxh, false);
-                            }
-                        }
-                    }
+                    var _hr_col = _col_v & 0x07;
+                    if (!_eff_mixed) { _hr_col = _col_v & 0x0F; }
+                    scr_mts_draw_glyph(_ec_rc, _cx2, _cy3, _cell_sz, _cell_sz, false, _ec_bg, scr_c64_pepto_colour(_hr_col), _mts_mc1_col, _mts_mc2_col);
                 }
             } else {
                 var _fb_col2 = (!_eff_mixed) ? (_col_v & 0x0F) : (_col_v & 0x07);
@@ -9372,6 +9736,7 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
             draw_rectangle(_cx2, _cy3, _cx2 + _cell_sz - 1, _cy3 + _cell_sz - 1, true);
         }
     }
+    scr_mts_glyph_end();
 
     // Paint interaction on canvas
     if (point_in_rectangle(_mx, _my, _canvas_x1, _canvas_y1, _canvas_x2, _canvas_y2)) {
@@ -9386,7 +9751,13 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
             draw_set_alpha(1.0);
             draw_rectangle(_hx2, _hy2, _hx2 + _cell_sz, _hy2 + _cell_sz, true);
             var _pidx2 = _hrow2 * _m.stamp_w + _hcol2;
-            if (mouse_check_button(mb_left)) {
+            if (keyboard_check(vk_alt)) {
+                // ALT + left-click: PICK this cell's char for editing (no paint)
+                if (mouse_check_button_pressed(mb_left)) {
+                    _mts_pick_char(_m, _m.active_stamp_grid_char[_pidx2]);
+                }
+            }
+            else if (mouse_check_button(mb_left)) {
                 // Place char in cell. Colour BAKES into char_lut[active_char]:
                 // sets that char's inherited colour everywhere, preserving its
                 // existing MC bit (bit 4). active_colour masked to the nibble.
@@ -9830,6 +10201,7 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
         );
     }
 
+    scr_mts_glyph_begin();
     for (var _trow = _draw_row0; _trow < _draw_row1; _trow++) {
         for (_tcol = _draw_col0; _tcol < _draw_col1; _tcol++) {
             var _tidx = _trow * _test_cols + _tcol;
@@ -9863,45 +10235,30 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
                         var _spx   = _tax + _scc2 * _test_cs;
                         var _spy   = _tay + _scr2 * _test_cs;
                         var _ts_mc = (_ts_global_mixed == 1) && (_clut_mc(_m, _tsc) == 1);
+                        if (_run_fx_on) {
+                            _ts_mc = _run_fx_mc;
+                            _tscol = _run_fx_fg;
+                        } else if (_run_rows_on) {
+                            // ROW BANDS: the band of this cell's MAP row
+                            var _rv_row = _trow * _m.stamp_h + _scr2;
+                            var _rv_co  = 0;
+                            if (_rv_row < array_length(mts_plan.bands)) { _rv_co = mts_plan.bands[_rv_row]; }
+                            _ts_mc = scr_mts_co_is_mc(_rv_co, _run_mixed, _ecm_mode);
+                            _tscol = scr_mts_co_fg(_rv_co, _run_mixed, _ecm_mode);
+                        }
 
-                        draw_set_color(_tt_bg);
-                        draw_rectangle(_spx, _spy, _spx + _test_cs - 1, _spy + _test_cs - 1, false);
+                        if (!_mts_atlas_ok) {
+                            draw_set_color(_tt_bg);
+                            draw_rectangle(_spx, _spy, _spx + _test_cs - 1, _spy + _test_cs - 1, false);
+                        }
 
-                        if (_ts_chr_ref != noone && buffer_exists(_ts_chr_ref.buffer)) {
+                        if (_mts_atlas_ok) {
                             if (_ts_mc) {
-                                var _tmc1 = (_m.map_mc_col1 >= 0) ? _m.map_mc_col1 : 1;
-                                var _tmc2 = (_m.map_mc_col2 >= 0) ? _m.map_mc_col2 : 2;
-                                var _tpal = [_tt_bg, scr_c64_pepto_colour(_tmc1), scr_c64_pepto_colour(_tmc2), scr_c64_pepto_colour(_tscol & 0x07)];
-                                var _tpxw = max(1, _test_cs / 4);
-                                var _tpxh = max(1, _test_cs / 8);
-                                draw_set_color(_tpal[0]);
-                                draw_rectangle(_spx, _spy, _spx + _test_cs - 1, _spy + _test_cs - 1, false);
-                                for (var _tbr = 0; _tbr < 8; _tbr++) {
-                                    var _tboff = (_tt_rc * 8) + _tbr;
-                                    if (_tboff >= buffer_get_size(_ts_chr_ref.buffer)) break;
-                                    var _tbyte = buffer_peek(_ts_chr_ref.buffer, _tboff, buffer_u8);
-                                    for (var _tpair = 0; _tpair < 4; _tpair++) {
-                                        var _tbits = (_tbyte >> (6 - _tpair * 2)) & 0x03;
-                                        if (_tbits == 0) continue;
-                                        draw_set_color(_tpal[_tbits]);
-                                        draw_rectangle(_spx + _tpair * _tpxw, _spy + _tbr * _tpxh, _spx + _tpair * _tpxw + _tpxw, _spy + _tbr * _tpxh + _tpxh, false);
-                                    }
-                                }
+                                scr_mts_draw_glyph(_tt_rc, _spx, _spy, _test_cs, _test_cs, true, _tt_bg, scr_c64_pepto_colour(_tscol & 0x07), _mts_mc1_col, _mts_mc2_col);
                             } else {
-                                var _thr_col = (!_eff_mixed) ? (_tscol & 0x0F) : (_tscol & 0x07);
-                                var _tpxw2   = max(1, _test_cs / 8);
-                                var _tpxh2   = max(1, _test_cs / 8);
-                                draw_set_color(scr_c64_pepto_colour(_thr_col));
-                                for (var _tbr = 0; _tbr < 8; _tbr++) {
-                                    var _tboff = (_tt_rc * 8) + _tbr;
-                                    if (_tboff >= buffer_get_size(_ts_chr_ref.buffer)) break;
-                                    var _tbyte = buffer_peek(_ts_chr_ref.buffer, _tboff, buffer_u8);
-                                    for (var _tbit = 0; _tbit < 8; _tbit++) {
-                                        if (_tbyte & (0x80 >> _tbit)) {
-                                            draw_rectangle(_spx + _tbit * _tpxw2, _spy + _tbr * _tpxh2, _spx + _tbit * _tpxw2 + _tpxw2, _spy + _tbr * _tpxh2 + _tpxh2, false);
-                                        }
-                                    }
-                                }
+                                var _thr_col = _tscol & 0x07;
+                                if (!_eff_mixed) { _thr_col = _tscol & 0x0F; }
+                                scr_mts_draw_glyph(_tt_rc, _spx, _spy, _test_cs, _test_cs, false, _tt_bg, scr_c64_pepto_colour(_thr_col), _mts_mc1_col, _mts_mc2_col);
                             }
                         } else {
                             var _tfb = (!_eff_mixed) ? (_tscol & 0x0F) : (_tscol & 0x07);
@@ -9953,6 +10310,7 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
             }
         }
     }
+    scr_mts_glyph_end();
 	gpu_set_scissor(0, 0, window_get_width(), window_get_height());
 
     // ---- MAP MODE SCROLLBARS (shown only when the map doesn't fit the panel) ----
@@ -10203,6 +10561,11 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
                             _m.active_stamp_grid_char[_pk] = _m.stamp_data[_pk_idx];
                         }
                     }
+                    // ...and the char under the cursor within it, for the char editor
+                    var _pk_sc = clamp(floor((_mx - _thx) / _test_cs), 0, _m.stamp_w - 1);
+                    var _pk_sr = clamp(floor((_my - _thy) / _test_cs), 0, _m.stamp_h - 1);
+                    var _pk_ci = _pk_sr * _m.stamp_w + _pk_sc;
+                    _mts_pick_char(_m, _m.active_stamp_grid_char[_pk_ci]);
                 }
             }
             else if (mouse_check_button(mb_left) && _m.edit_stamp >= 0) {
@@ -10313,6 +10676,12 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
         // ---- PER-CHAR HR/MC TOGGLE (writes char_lut bit 4, preserves colour) ----
         _m.char_lut_len = _ts_chr_ref.meta.char_count;
         var _clut_mode  = (_m.active_char < array_length(_m.char_lut)) ? ((_m.char_lut[_m.active_char] >> 4) & 0x01) : 0;
+        // FIXED run view: every cell shares the node's nibble, so HR/MC is
+        // universal - bit 3 of that nibble - not per char.
+        if (_run_fx_on) {
+            _clut_mode = 0;
+            if (_run_fx_mc) { _clut_mode = 1; }
+        }
         var _clbx1      = _ced_x + 138;
         var _clby1      = _ced_y - 40;
         var _clbx2      = _clbx1 + 64;
@@ -10326,7 +10695,15 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
         draw_set_halign(fa_center);
         draw_text_l(_clbx1 + 30, _clby1 +8, (_clut_mode == 1) ? "CHAR: MC" : "CHAR: HR");
         draw_set_halign(fa_left);
-        if (_clbhov && mouse_check_button_pressed(mb_left) && _m.active_char < array_length(_m.char_lut)) {
+        if (_run_fx_on) {
+            if (_clbhov && mouse_check_button_pressed(mb_left) && _run_mixed && !_ecm_mode) {
+                // Flip the shared nibble's MC bit for the whole screen
+                while (array_length(_run_node.instructions[0]) < 8) { array_push(_run_node.instructions[0], 0); }
+                _run_node.instructions[0][7] = real(_run_nib ^ 0x08);
+                global.undo_dirty = true;
+            }
+        }
+        else if (_clbhov && mouse_check_button_pressed(mb_left) && _m.active_char < array_length(_m.char_lut)) {
             // Flip bit 4, keep the colour nibble intact
             var _cur_col = _m.char_lut[_m.active_char] & 0x0F;
             _m.char_lut[_m.active_char] = ((_clut_mode == 1) ? 0x00 : 0x10) | _cur_col;
@@ -10352,6 +10729,7 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
             _ts_chr_ref.meta.mc_col1 = _eff_col1;
             _ts_chr_ref.meta.mc_col2 = _eff_col2;
             _ts_chr_ref.meta.mc_fg   = _m.active_colour;
+            if (_run_fx_on) { _ts_chr_ref.meta.mc_fg = _run_fx_fg; }
 
             chr_edit_idx = _m.active_char;
             scr_chr_editor_draw(_ts_chr_ref, _ced_x, _ced_y, (_ts_global_mixed == 1) ? _clut_mode : 0);
@@ -10386,19 +10764,38 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
     draw_set_font_l(fnt_c64_code);
     draw_set_color(make_color_rgb(200, 255, 255));
     draw_text_l(_strip_x1, _pal_y2, "COLOUR");
+    // Swatches start after the label as actually measured (it's wider than
+    // the old fixed 60px in this font, so the first swatches covered it)
+    var _pal_x0   = _strip_x1 + max(60, string_width_l("COLOUR") + 10);
+    var _pal_xend = _pal_x0 + 16 * (_psw + 2);
     for (var _pi2 = 0; _pi2 < 16; _pi2++) {
-        var _ppx1   = _strip_x1 + 60 + _pi2 * (_psw + 2);
+        var _ppx1   = _pal_x0 + _pi2 * (_psw + 2);
         var _pphov  = point_in_rectangle(_mx, _my, _ppx1, _pal_y2, _ppx1 + _psw, _pal_y2 + _psh);
         var _locked = (!_ecm_mode) && (_ts_global_mixed == 1) && (_pi2 >= 8);
         draw_set_color(scr_c64_pepto_colour(_pi2));
         draw_set_alpha(_locked ? 0.2 : 1.0);
         draw_rectangle(_ppx1, _pal_y2, _ppx1 + _psw, _pal_y2 + _psh, false);
         draw_set_alpha(1.0);
-        if (_m.active_colour == _pi2) {
+        var _pal_cur = _m.active_colour;
+        if (_run_fx_on) { _pal_cur = _run_fx_fg; }
+        if (_pal_cur == _pi2) {
             draw_set_color(c_white);
             draw_rectangle(_ppx1, _pal_y2, _ppx1 + _psw, _pal_y2 + _psh, true);
         }
-        if (_pphov && !_locked && mouse_check_button_pressed(mb_left)) {
+        if (_run_fx_on) {
+            // FIXED run view: the colour is universal - it sets the METASCROLL
+            // node's nibble (keeping its MC bit in MIXED) for every cell at once.
+            if (_pphov && !_locked && mouse_check_button_pressed(mb_left)) {
+                while (array_length(_run_node.instructions[0]) < 8) { array_push(_run_node.instructions[0], 0); }
+                var _pal_nib = _pi2 & 0x0F;
+                if (_run_mixed && !_ecm_mode) { _pal_nib = (_pi2 & 0x07) | (_run_nib & 0x08); }
+                _run_node.instructions[0][7] = real(_pal_nib);   // real(): bit ops give int64, and is_real() rejects int64
+                _m.active_colour     = _pi2;
+                chr_active_mc_colour = 3;
+                global.undo_dirty    = true;
+            }
+        }
+        else if (_pphov && !_locked && mouse_check_button_pressed(mb_left)) {
             _m.active_colour = _pi2;
             // The PAINT colour feeds FG into the char editor, so picking it
             // also selects the FG bit-pair (3) for painting.
@@ -10411,6 +10808,54 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
                 _m.is_dirty = true;
             }
         }
+    }
+
+    // ---- SET ALL: bake one colour into every char's char_lut ----
+    // Normal view: the PAINT colour, each char keeps its own HR/MC bit.
+    // FIXED run view: the node's nibble - colour AND HR/MC - so the per-char
+    // data matches what runs (OFF-COLOUR drops to 0, SHIFT looks the same).
+    // Sits in the gap under the palette (the map's help text is to its right).
+    var _sa_y1  = _pal_y2 + _psh + 4;
+    var _sa_y2  = _sa_y1 + 13;
+    draw_set_font_l(fnt_c64_tiny);
+    var _sa_x1  = _pal_x0;
+    var _sa_x2  = _sa_x1 + string_width_l("SET ALL") + 8;
+    var _sa_hov = point_in_rectangle(_mx, _my, _sa_x1, _sa_y1, _sa_x2, _sa_y2);
+    draw_set_font_l(fnt_c64_tiny);
+    draw_set_color(make_color_rgb(30, 45, 70));
+    if (_sa_hov) { draw_set_color(make_color_rgb(60, 90, 140)); }
+    draw_rectangle(_sa_x1, _sa_y1, _sa_x2, _sa_y2, false);
+    draw_set_color(make_color_rgb(120, 180, 255));
+    draw_rectangle(_sa_x1, _sa_y1, _sa_x2, _sa_y2, true);
+    draw_text_l(_sa_x1 + 4, _sa_y1, "SET ALL");
+    // What a colour pick does right now. Kept within the palette's width -
+    // the map's help text sits directly to the right on these rows.
+    var _hint_txt = "COLOUR SETS THE SELECTED CHAR";
+    var _hint_col = make_color_rgb(110, 130, 150);
+    if (_run_fx_on) {
+        _hint_txt = "FIXED $" + string_upper(decimal_to_hex(_run_nib)) + ": COLOUR + HR/MC SET ALL CELLS";
+        _hint_col = make_color_rgb(255, 170, 60);
+    }
+    var _hint_max = _pal_xend - (_sa_x2 + 8);
+    if (string_width_l(_hint_txt) > _hint_max) {
+        _hint_txt = "ALL CELLS";
+        if (!_run_fx_on) { _hint_txt = "SELECTED CHAR"; }
+    }
+    draw_set_color(_hint_col);
+    draw_text_l(_sa_x2 + 8, _sa_y1, _hint_txt);
+    if (_sa_hov && mouse_check_button_pressed(mb_left)) {
+        for (var _sai = 0; _sai < array_length(_m.char_lut); _sai++) {
+            if (_run_fx_on) {
+                var _sa_mc = 0x00;
+                if (_run_fx_mc) { _sa_mc = 0x10; }
+                _m.char_lut[_sai] = _sa_mc | (_run_fx_fg & 0x0F);
+            } else {
+                _m.char_lut[_sai] = (_m.char_lut[_sai] & 0x10) | (_m.active_colour & 0x0F);
+            }
+        }
+        _m.is_dirty       = true;
+        global.undo_dirty = true;
+        mts_bytes_next_ms = 0;   // recount OFF-COLOUR now
     }
 
     // ---- CHAR STRIP ----
@@ -10431,6 +10876,7 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
     var _ssx2 = window_get_width()  / global.gui_w;
     var _ssy2 = window_get_height() / display_get_gui_height();
 
+    scr_mts_glyph_begin();
     for (var _crow = 0; _crow < _cp_rows; _crow++) {
         for (var _pi2 = 0; _pi2 < _cp_cnt2; _pi2++) {
             var _ci2       = (_cp_start_row + _crow) * _cp_cnt2 + _pi2;
@@ -10447,57 +10893,33 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
             draw_set_color(_cpsel ? make_color_rgb(60, 120, 80) : _strip_bg_col);
             draw_rectangle(_cpx1, _cp_y2_row, _cpx1 + _cp_sz2, _cp_y2_row + _cp_sz2, false);
 
-            if (_ts_chr_ref != noone && buffer_exists(_ts_chr_ref.buffer)) {
+            if (_mts_atlas_ok) {
                 // Strip shows each char in its OWN char_lut mode + baked colour.
-                var _strip_char_mc  = (_ci2 < array_length(_m.char_lut)) ? (((_m.char_lut[_ci2] >> 4) & 0x01) == 1) : false;
-                var _strip_char_col = (_ci2 < array_length(_m.char_lut)) ? (_m.char_lut[_ci2] & 0x0F) : (_m.active_colour & 0x0F);
+                var _strip_char_mc  = false;
+                var _strip_char_col = _m.active_colour & 0x0F;
+                if (_ci2 < array_length(_m.char_lut)) {
+                    _strip_char_mc  = (((_m.char_lut[_ci2] >> 4) & 0x01) == 1);
+                    _strip_char_col = _m.char_lut[_ci2] & 0x0F;
+                }
+                if (_run_fx_on) {
+                    _strip_char_mc  = _run_fx_mc;
+                    _strip_char_col = _run_fx_fg;
+                }
+                var _st_gsz = _cp_sz2 - 3;
                 if (_ts_global_mixed == 1 && _strip_char_mc) {
-                    var _strip_col1 = (_m.map_mc_col1 >= 0) ? _m.map_mc_col1 : 1;
-                    var _strip_col2 = (_m.map_mc_col2 >= 0) ? _m.map_mc_col2 : 2;
-                    var _strip_pal  = [scr_c64_pepto_colour(_ts_bg), scr_c64_pepto_colour(_strip_col1), scr_c64_pepto_colour(_strip_col2), scr_c64_pepto_colour(_strip_char_col & 0x07)];
-                    var _st_pxw2    = max(1, (_cp_sz2 - 4) / 4);
-                    var _st_pxh2    = max(1, (_cp_sz2 - 4) / 8);
-                    draw_set_color(_strip_pal[0]);
-                    draw_rectangle(_cpx1 + 2, _cp_y2_row + 2, _cpx1 + _cp_sz2 - 2, _cp_y2_row + _cp_sz2 - 2, false);
-                    for (var _str2 = 0; _str2 < 8; _str2++) {
-                        var _stboff2 = (_strip_real_char * 8) + _str2;
-                        if (_stboff2 >= buffer_get_size(_ts_chr_ref.buffer)) break;
-                        var _stbyte2 = buffer_peek(_ts_chr_ref.buffer, _stboff2, buffer_u8);
-                        for (var _stbit2 = 0; _stbit2 < 4; _stbit2++) {
-                            var _stbits = (_stbyte2 >> (6 - _stbit2 * 2)) & 0x03;
-                            if (_stbits == 0) continue;
-                            draw_set_color(_strip_pal[_stbits]);
-                            draw_rectangle(
-                                _cpx1 + 2 + _stbit2 * _st_pxw2, _cp_y2_row + 2 + _str2 * _st_pxh2,
-                                _cpx1 + 2 + _stbit2 * _st_pxw2 + _st_pxw2, _cp_y2_row + 2 + _str2 * _st_pxh2 + _st_pxh2,
-                                false);
-                        }
-                    }
+                    scr_mts_draw_glyph(_strip_real_char, _cpx1 + 2, _cp_y2_row + 2, _st_gsz, _st_gsz, true, scr_c64_pepto_colour(_ts_bg), scr_c64_pepto_colour(_strip_char_col & 0x07), _mts_mc1_col, _mts_mc2_col);
                 } else {
-                    var _st_pxw2    = max(1, (_cp_sz2 - 4) / 8);
-                    var _st_pxh2    = max(1, (_cp_sz2 - 4) / 8);
-                    var _strip_hcol = (!_eff_mixed) ? (_strip_char_col & 0x0F) : (_strip_char_col & 0x07);
+                    var _strip_hcol = _strip_char_col & 0x07;
+                    if (!_eff_mixed) { _strip_hcol = _strip_char_col & 0x0F; }
                     // ECM: compare against THIS row's actual background, not
                     // band 0's (_ts_bg) — otherwise a char whose colour matches
                     // a non-zero band's real BG slips through invisible/blended.
-                    var _strip_bg_idx = _ecm_mode ? _ecm_bg_cols[_strip_band] : _ts_bg;
-                    if (_strip_hcol == _strip_bg_idx) _strip_hcol = (_strip_bg_idx == 0) ? 1 : 0;
-                    draw_set_color(_strip_bg_col);
-                    draw_rectangle(_cpx1 + 2, _cp_y2_row + 2, _cpx1 + _cp_sz2 - 2, _cp_y2_row + _cp_sz2 - 2, false);
-                    draw_set_color(scr_c64_pepto_colour(_strip_hcol));
-                    for (var _str2 = 0; _str2 < 8; _str2++) {
-                        var _stboff2 = (_strip_real_char * 8) + _str2;
-                        if (_stboff2 >= buffer_get_size(_ts_chr_ref.buffer)) break;
-                        var _stbyte2 = buffer_peek(_ts_chr_ref.buffer, _stboff2, buffer_u8);
-                        for (var _stbit2 = 0; _stbit2 < 8; _stbit2++) {
-                            if (_stbyte2 & (0x80 >> _stbit2)) {
-                                draw_rectangle(
-                                    _cpx1 + 2 + _stbit2 * _st_pxw2, _cp_y2_row + 2 + _str2 * _st_pxh2,
-                                    _cpx1 + 2 + _stbit2 * _st_pxw2 + _st_pxw2, _cp_y2_row + 2 + _str2 * _st_pxh2 + _st_pxh2,
-                                    false);
-                            }
-                        }
+                    var _strip_bg_idx = _ts_bg;
+                    if (_ecm_mode) { _strip_bg_idx = _ecm_bg_cols[_strip_band]; }
+                    if (_strip_hcol == _strip_bg_idx) {
+                        if (_strip_bg_idx == 0) { _strip_hcol = 1; } else { _strip_hcol = 0; }
                     }
+                    scr_mts_draw_glyph(_strip_real_char, _cpx1 + 2, _cp_y2_row + 2, _st_gsz, _st_gsz, false, _strip_bg_col, scr_c64_pepto_colour(_strip_hcol), _mts_mc1_col, _mts_mc2_col);
                 }
             } else {
                 draw_set_font_l(fnt_c64_tiny);
@@ -10575,6 +10997,7 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
             }
         }
     }
+    scr_mts_glyph_end();
 
     gpu_set_scissor(0, 0, window_get_width(), window_get_height());
 

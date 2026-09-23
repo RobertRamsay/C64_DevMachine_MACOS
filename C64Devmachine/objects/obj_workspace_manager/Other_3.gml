@@ -30,9 +30,10 @@ ini_close();
 // File write only - no dialogs, so it is safe inside macOS terminate.
 scr_lang_dump_missing();
 
-// Silent save on quit ONLY if we have an existing path.
+// Silent save on quit ONLY if we have an existing path and the project
+// really differs from what was saved (md5 compare, scr_workspace_has_changes).
 // No dialog, no Save As (file picker would re-enter the run loop).
-if (!global.manual_saved) {
+if (scr_workspace_has_changes()) {
     if (global.workspace_path != "") {
         scr_save_workspace_as_path(global.workspace_path);
 		alarm[9]=100;
