@@ -14,7 +14,7 @@ showcode_refresh_requested = false;
 editor_layout_refresh_requested = false;
 
 
-global.build_date = "September 21st, 2026"; // edit this string for each release
+global.build_date = "September 23rd, 2026"; // edit this string for each release
 
 // Frame counter. Incremented once in Begin Step, and used as the validity
 // stamp for per-frame lookup caches (see scr_reu_asset_map). Anything keyed
