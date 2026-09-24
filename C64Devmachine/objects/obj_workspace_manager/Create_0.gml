@@ -768,8 +768,6 @@ global.show_map_nav = false;
 global.map_nav_x = 0;
 global.map_nav_y = 0;
 
-
-
 box_drag_start_x       = 0;
 box_drag_start_y       = 0;
 box_drag_live          = false;
