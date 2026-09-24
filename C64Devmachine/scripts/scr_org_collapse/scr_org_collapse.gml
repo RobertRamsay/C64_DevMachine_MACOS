@@ -33,6 +33,9 @@
 function scr_node_is_hidden(_n) {
     if (!instance_exists(_n))       { return false; }
 
+    // Never swallow the active drag before its mouse release can be handled.
+    if (_n.is_dragging && global.active_drag_node == _n) return false;
+
     // Headers never hide themselves.
     if (_n.node_type == "INIT")     { return false; }
     if (_n.node_type == "ORG")      { return false; }
@@ -68,17 +71,9 @@ function scr_node_is_hidden(_n) {
     // scr_org_collapse_hit refreshes it once each Begin Step.
     if (!global.init_collapsed) { return false; }
 
-    // A COMMENT is the one node the detached test above cannot judge. It is
-    // is_connected == false BY DESIGN — there is no such thing as a connected
-    // comment — so the flag says nothing about whether it belongs to the spine.
-    // Position is all there is, and it is what the eye uses too: a comment
-    // sitting in the spine column is annotating the block and folds with it,
-    // one dragged off to the side is parked and stays put. The band is the
-    // column's own node width, so it tracks the node display width setting.
-    if (_n.node_type == "COMMENT") {
-        if (global.init_spine_x <= -999999) { return false; }
-        return (abs(_n.x - global.init_spine_x) <= global.init_spine_w);
-    }
+    // Proximity is not attachment. A parked comment must remain visible
+    // even when it occupies the same column as a folded INIT.
+    if (_n.node_type == "COMMENT") return _n.is_connected;
 
     return true;
 }
@@ -276,7 +271,7 @@ function scr_org_collapse_hit() {
     if (_hot == noone) { exit; }
 
     if (scr_org_collapse_primary_pressed()) {
-        _hot.collapsed = !_hot.collapsed;
+        scr_org_set_collapsed(_hot, !_hot.collapsed);
 
         // Positions are owned by the layout pass, so ask for one rather than
         // shuffling y here — that is also what keeps a fold from ever touching
@@ -296,4 +291,94 @@ function scr_org_collapse_hit() {
         // is the guard — the nodes and the workspace both check it, exactly
         // the way they check global.showcode_mouse_over.
     }
+}
+
+// INIT is the movable anchor of the main spine, independent of room centre.
+function scr_init_anchor() {
+    var _anchor = noone;
+    with (obj_c64_node) if (node_type == "INIT") { _anchor = id; break; }
+    return _anchor;
+}
+
+function scr_init_move(_anchor, _x, _y) {
+    var _dx = _x - _anchor.x;
+    var _dy = _y - _anchor.y;
+    if (_dx == 0 && _dy == 0) return;
+    with (obj_c64_node) {
+        var _on_spine = is_connected && org_parent == noone && node_type != "ORG";
+        if (instance_exists(macro_owner)) {
+            _on_spine = macro_owner.is_connected && macro_owner.org_parent == noone;
+        }
+        if (id == _anchor || _on_spine) {
+            x += _dx; y += _dy;
+            if (wedge_y_stored >= 0) wedge_y_stored += _dy;
+            overlap_check_dirty = true;
+            last_overlap_check = false;
+        }
+    }
+    global.addresses_dirty = true;
+    global.undo_dirty = true;
+    global.autosave_dirty = true;
+    with (obj_workspace_manager) { flow_overlay_dirty = true; }
+}
+
+function scr_init_drag_update(_anchor) {
+    with (_anchor) {
+        var _init_x = mouse_x + drag_offset_x;
+        var _init_y = mouse_y + drag_offset_y;
+        if (_init_x != x || _init_y != y) was_dragged = true;
+        scr_init_move(id, _init_x, _init_y);
+        if (mouse_check_button_released(mb_left)) {
+            if (was_dragged) scr_init_move(id, round(x / 20) * 20, round(y / 20) * 20);
+            is_dragging = false;
+            depth = pre_click_depth;
+            global.active_drag_node = noone;
+            if (was_dragged) {
+                scr_c64_update_addresses();
+                with (obj_workspace_manager) { alarm[1] = 1; alarm[3] = 6; }
+            }
+        }
+    }
+}
+
+function scr_focus_init() {
+    var _anchor = scr_init_anchor();
+    if (!instance_exists(_anchor)) return;
+    with (obj_workspace_manager) {
+        cam_zoom_target = 1;
+        cam_zoom = 1;
+        cam_x = _anchor.x + _anchor.width * 0.5 - 960;
+        cam_y = _anchor.y - 160;
+        global.undo_dirty = true;
+        alarm[3] = 6;
+    }
+}
+
+/// Folding changes which cached bodies participate in the visible layout.
+function scr_org_set_collapsed(_anchor, _collapsed) {
+    _anchor.collapsed = _collapsed;
+    if (_anchor.node_type == "INIT") global.init_collapsed = _collapsed;
+    with (obj_c64_node) {
+        var _belongs = id == _anchor || org_parent == _anchor;
+        if (_anchor.node_type == "INIT" && is_connected && org_parent == noone && node_type != "ORG") _belongs = true;
+        if (instance_exists(macro_owner)) {
+            if (macro_owner.org_parent == _anchor) _belongs = true;
+            if (_anchor.node_type == "INIT" && macro_owner.is_connected && macro_owner.org_parent == noone) _belongs = true;
+        }
+        if (!_belongs) continue;
+        height_dirty = true;
+        draw_cache_dirty = true;
+        overlap_check_dirty = true;
+        last_overlap_check = false;
+        if (!_collapsed) {
+            // Re-measure bodies on their next draw, including mode-dependent rows.
+            macro_layout_type = "";
+            scr_macro_sync_height(id);
+            if (node_type == "COMMENT") scr_comment_sync_layout(id);
+            if (node_type == "MACRO_PRINT") scr_print_sync_height(id);
+        }
+    }
+    global.addresses_dirty = true;
+    global.autosave_dirty = true;
+    obj_workspace_manager.flow_overlay_dirty = true;
 }

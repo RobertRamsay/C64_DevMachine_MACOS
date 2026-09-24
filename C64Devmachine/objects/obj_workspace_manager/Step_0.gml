@@ -1,3 +1,4 @@
+scr_template_step();
 // First frame only: offer back an emergency save if the last run crashed.
 // In Step rather than Create so everything the loader touches already exists.
 // First run only: ask for a language. The crash-recovery offer waits until
@@ -244,6 +245,15 @@ if (scr_code_import_step()) {
     
 
 
+// Sprite history must run before ordinary workspace shortcuts.
+if (instance_exists(obj_asset_manager) && obj_asset_manager.viewer_open
+    && obj_asset_manager.spred64_v2.active && !global.is_any_text_active && scr_cmd_held()) {
+    if (keyboard_check_pressed(ord("Z")) || keyboard_check_pressed(ord("Y"))) {
+        scr_spred64_v2_history_step(keyboard_check_pressed(ord("Y")) || keyboard_check(vk_shift));
+        keyboard_clear(ord("Z")); keyboard_clear(ord("Y"));
+        exit;
+    }
+}
 if (instance_exists(obj_asset_manager) && obj_asset_manager.editing_name) exit;
 
 if ( (keyboard_check_pressed(223)) or (keyboard_check_pressed(ord("I")))) and !opcode_finder_active and !is_entering_text and !box_popup_open and !keyboard_check(vk_shift) and !global.any_picker_open {
@@ -1559,10 +1569,7 @@ if (keyboard_check_pressed(ord("B")) && !is_entering_text && !global.is_any_text
 
 
 if (keyboard_check_pressed(vk_home)) {
-    cam_zoom_target = 1.0;
-    cam_zoom        = 1.0;
-    cam_x           = (room_width / 2) - (1920 / 2);
-    cam_y           = 0;
+    scr_focus_init();
     global.undo_dirty = true;
     alarm[3] = 6;
 }
@@ -1737,7 +1744,7 @@ if (!is_entering_text && !global.is_any_text_active and !obj_asset_manager.viewe
     // Canvas utility nodes - keyboard shortcuts
 if (keyboard_check_pressed(ord("A")) && !_hover_blocks_spawn) { scr_node_spawn("LABEL",   mouse_x, mouse_y); global.undo_dirty = true; alarm[3] = 6; }
 if (keyboard_check_pressed(ord("C")) && global.comments_visible && !keyboard_check(vk_alt) && !keyboard_check(vk_shift) && !scr_cmd_held() && !_hover_blocks_spawn) { scr_node_spawn("COMMENT", mouse_x, mouse_y); global.undo_dirty = true; alarm[3] = 6; }
-if (keyboard_check_pressed(ord("C")) && keyboard_check(vk_alt) && !keyboard_check(vk_shift) && !scr_cmd_held() && !global.lite && !_hover_blocks_spawn) {
+if (keyboard_check_pressed(ord("C")) && keyboard_check(vk_alt) && !keyboard_check(vk_shift) && !scr_cmd_held() && !_hover_blocks_spawn) {
 	scr_node_spawn("MACRO_CODE", mouse_x, mouse_y); 
     global.undo_dirty = true; 
     alarm[3] = 6;
@@ -2299,13 +2306,14 @@ if (global.relayout_frames > 0) {
 if (global.addresses_dirty) {
     global.addresses_dirty = false;
 
-    var _spine_x   = (room_width / 2) - (global.node_display_width / 2);
+    var _init_anchor = scr_init_anchor();
+    var _spine_x = instance_exists(_init_anchor) ? _init_anchor.x : 0;
     var current_nest = 0;
     ds_list_clear(global.node_chain);
 
     var _curr = noone;
     with(obj_c64_node) {
-        if (node_type == "INIT" && x > 160) _curr = id;
+        if (node_type == "INIT") _curr = id;
     }
 
     var loop_guard = 0;
@@ -2532,7 +2540,7 @@ if (build_trigger && !global.asset_reload_in_progress && !_editor_released) {
                 } else if ((_cmnem == "jmp" || _cmnem == "jmp_abs" || _cmnem == "jmp_ind")
                         && array_length(instructions[0]) > 1) {
                     array_push(_loop_jmps, { target: string(instructions[0][1]), node: id, y: y, org_parent: org_parent, sub: 0 });
-                } else if (_cmnem == "code_block" && array_length(instructions[0]) > 1) {
+                } else if ((node_type == "MACRO_CODE" || _cmnem == "code_block") && array_length(instructions[0]) > 1) {
                     var _cc_text = string(instructions[0][1]);
                     if (_cc_text != "") {
                         var _cc_parsed = scr_parse_asm_text(_cc_text);
@@ -2578,7 +2586,7 @@ if (build_trigger && !global.asset_reload_in_progress && !_editor_released) {
             // If the tail node is a Code Block, its own last real
             // instruction decides this instead — walking back past any
             // trailing labels/comments/directives to find it.
-            if (_tail_mnem == "code_block" && array_length(_tail_node.instructions[0]) > 1) {
+            if ((_tail_node.node_type == "MACRO_CODE" || _tail_mnem == "code_block") && array_length(_tail_node.instructions[0]) > 1) {
                 var _tail_code_text = string(_tail_node.instructions[0][1]);
                 if (_tail_code_text != "") {
                     var _tail_parsed = scr_parse_asm_text(_tail_code_text);
@@ -2795,9 +2803,8 @@ if (build_trigger && !global.asset_reload_in_progress && !_editor_released) {
     // ---------------------------
 	
 
-    // --- PREMIUM FEATURE CHECK ---
-    if (scr_check_premium_block("BUILDING")) exit;
-    // -----------------------------
+
+    // LITE builds every node type; only code text editing is restricted.
 
     // Blind kill immediately to ensure VICE releases any file locks on the .prg
        
@@ -4100,9 +4107,7 @@ if (export_trigger) {
         exit;
     }
 
-    // --- PREMIUM FEATURE CHECK ---
-    if (scr_check_premium_block("EXPORTING")) exit;
-    // -----------------------------
+    // LITE builds every node type; only code text editing is restricted.
 
     if (ds_list_empty(global.node_chain)) {
         scr_show_message("EXPORT FAILED: Spine is empty");

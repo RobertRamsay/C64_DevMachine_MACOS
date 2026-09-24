@@ -1,8 +1,10 @@
 /// @desc Render Node (Unified Gutter, Stats, Out-dent, ORG & Comment Nodes)
 if obj_workspace_manager.code_editor_open or obj_asset_manager.viewer_open exit;
+if (scr_node_is_hidden(id)) exit;
 if (node_type == "COMMENT") scr_comment_sync_layout(id);
 if (node_type == "MACRO_PRINT") scr_print_sync_height(id);
-scr_macro_sync_height(id);
+// Step restores macro heights, including hidden/off-screen nodes.
+// Draw must not repeat the HUD asset scan or cached-height writes.
 
 global.ui_click_consumed = (global.ui_click_block_timer > 0);
 // =============================================================
@@ -25,7 +27,7 @@ if (node_type == "COMMENT" && !global.comments_visible) exit;
 
 // Inside a folded ORG block — draw nothing. The fold is visual only, so this
 // node still compiles and still owns its address; it just is not on screen.
-if (scr_node_is_hidden(id)) exit;
+
 
 // Skip drawing if node is too small on screen to be useful
 var _screen_h = height / _cam_zoom;
@@ -290,7 +292,7 @@ var _raw_h = header_h + (array_length(instructions) * _line_gap) + _bottom_pad +
         height = (ceil(_raw_h / _G)+obj_workspace_manager.opcode_extra_height) * _G;
         break;
     } // end switch
-    if (variable_instance_exists(id, "macro_layout_height") && macro_layout_type == node_type)
+    if (macro_layout_type == node_type)
         height = macro_layout_height;
     cached_height = height;
 } else {
@@ -781,7 +783,7 @@ var _is_data = (string_pos("DATA", node_type) > 0 || node_type == "SPR64" || nod
 var _show_gutter = (node_type == "INIT" || node_type == "ORG") ? _lod_addresses : (_lod_full && _near_centre);
 if (_show_gutter && node_type != "EXECUTE" && node_type != "COMMENT" && 
     node_type != "NAMED_LOC" && node_type != "NEW_STR" && node_title != "VARIABLES" && 
-    x > 160 && proxy) {
+    proxy) {
     _is_data = (string_pos("DATA", node_type) > 0 || node_type == "SPR64" || node_type == "BITMAP_KLA");
     
     // --- SYNCED CONFLICT COLOR ---
@@ -1198,15 +1200,17 @@ if (_lod_header) {
     }
 
     if (_show_title) {
+        var _comment_fold_hover = node_type == "COMMENT" && !collapsed && !is_dragging
+            && point_in_rectangle(mouse_x, mouse_y, draw_x, y, draw_x + width - 40, y + 20);
         var _hdr_first = (array_length(instructions) > 0) ? string(instructions[0][0]) : "";
         var _hdr_sig   = string(custom_title) + "|" + string(node_title) + "|" + _hdr_first +
                          "|" + string(_is_opcode_node) + "|" + string(obj_workspace_manager.opcode_headers_on) +
-                         "|" + string(width);
+                         "|" + string(width) + "|" + string(_comment_fold_hover);
 
         if (draw_cache_dirty || hdr_cache_sig != _hdr_sig) {
             hdr_cache_sig = _hdr_sig;
 
-            var _disp_title = (custom_title != "") ? custom_title : string(node_title);
+            var _disp_title = _comment_fold_hover ? "[COLLAPSE]" : ((custom_title != "") ? custom_title : string(node_title));
             hdr_cache_opcode = false;
 
             if (_is_opcode_node && array_length(instructions) > 0 && obj_workspace_manager.opcode_headers_on) {
@@ -1294,7 +1298,7 @@ if (_lod_full && (is_connected || string_pos("DATA", node_type) > 0 || node_type
     var _stats_x = draw_x + width - 60;
 
     if (node_type != "EXECUTE" && node_type != "ORG" && node_type != "COMMENT" &&
-        node_type != "NAMED_LOC" && node_type != "NEW_STR" && node_type != "LABEL" && x > 160) {
+        node_type != "NAMED_LOC" && node_type != "NEW_STR" && node_type != "LABEL") {
 
         // --- rebuild cache on Shift press ---
         if (stats_cache_dirty) {
@@ -1922,7 +1926,7 @@ if (node_type == "LABEL") {
 if (macro_measure_active && macro_content_bottom > 24) {
     // Grid rounding supplies the remaining space; a large fixed pad adds a whole row.
     var _body_h = max(40, ceil((macro_content_bottom + 2) / 20) * 20);
-    if (!variable_instance_exists(id, "macro_layout_height") || macro_layout_type != node_type
+    if (macro_layout_type != node_type
     || macro_layout_height != _body_h) {
         macro_layout_type = node_type;
         macro_layout_height = _body_h;
@@ -2120,7 +2124,8 @@ if (array_length(global.selected_nodes) > 1 && instance_exists(global.group_drag
 // Wedge preview insertion line
 if (global.wedge_preview_y >= 0 && global.any_node_dragging) {
     var _wpy     = global.wedge_preview_y;
-    var _spine_x  = floor(((room_width / 2) - (global.node_display_width / 2)) / 20) * 20;
+    var _init_anchor = scr_init_anchor();
+    var _spine_x = instance_exists(_init_anchor) ? _init_anchor.x : x;
     var _wpx1    = _spine_x - 10;
     var _wpx2    = _spine_x + global.node_display_width + 10;
 
@@ -2201,7 +2206,7 @@ with (obj_c64_node) {
 
 if (_any_dragging) {
 // Main spine drop zone
-    if (is_connected && org_parent == noone && !is_dragging &&
+    if (!global.init_collapsed && is_connected && org_parent == noone && !is_dragging &&
         node_type != "ORG" && node_type != "EXECUTE" && node_type != "COMMENT") {
         var _is_bottom = true;
         var _my_id = id;

@@ -662,7 +662,7 @@ global.next_stable_uid = 100000;
 var n_init = instance_create_layer(spawn_x, 60, "Layer_Nodes", obj_c64_node);
 n_init.node_title   = "SYSTEM INIT";
 n_init.node_type    = "INIT";
-n_init.is_draggable = false;
+n_init.is_draggable = true;
 n_init.is_connected = true;
 n_init.pc_address   = global.start_pc;
 n_init.instructions = [
@@ -1256,3 +1256,8 @@ alarm[5] = 50;
 
 box_body_dbl_timer = 0;
 box_body_dbl_target = noone;
+
+// Bundled projects and cached palette search.
+template_pending = -1;
+template_waiting = -1;
+opcode_finder_cached_text = undefined;

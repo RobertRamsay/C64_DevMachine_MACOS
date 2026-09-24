@@ -1,5 +1,9 @@
 // Restore cached macro sizes before hit-testing and layout, even off-screen.
-scr_macro_sync_height(id);
+if (node_type == "MACRO_VWAIT" || node_type == "MACRO_JOY" || node_type == "MACRO_HUD" || (node_type == "MACRO_SFX" && height_dirty) || (macro_layout_type == node_type
+&& (height != macro_layout_height || cached_height != macro_layout_height)))
+    scr_macro_sync_height(id);
+// Finish INIT drags even when released over a toolbar or panel.
+if (node_type == "INIT" && is_dragging) { scr_init_drag_update(id); exit; }
 // Update off-screen PRINT nodes too, so their spines repack after a mode change.
 if (node_type == "MACRO_PRINT") scr_print_sync_height(id);
 /// @desc Node Step Event - Input, Dragging, Wedge Insertion & ORG Child Dragging
@@ -165,7 +169,7 @@ if (!obj_workspace_manager.expert_mode && is_dragging && mouse_check_button_rele
     var _screen_x  = (x - _cam_x) / _cam_zoom;
     var _node_mid_x = _screen_x + (width / _cam_zoom / 2);
   
-    if (_node_mid_x < obj_workspace_manager.shelf_width + (width / _cam_zoom / 2)) {
+    if (node_type != "INIT" && _node_mid_x < obj_workspace_manager.shelf_width + (width / _cam_zoom / 2)) {
         if (node_type == "INIT") {  exit; }
         if (node_type == "ORG" && node_title == "VARIABLES") { exit; }
        
@@ -367,7 +371,8 @@ if (rmb_flash > 0) rmb_flash--;
 
 var _cam_x    = obj_workspace_manager.cam_x;
 var _cam_zoom = obj_workspace_manager.cam_zoom;
-var _spine_x  = floor(((room_width / 2) - (global.node_display_width / 2)) / 20) * 20;
+var _init_anchor = scr_init_anchor();
+var _spine_x = instance_exists(_init_anchor) ? _init_anchor.x : floor(((room_width / 2) - (global.node_display_width / 2)) / 20) * 20;
 var draw_x    = x + x_indent;
 var _latch_h  = 120;
 var _sticky_h = 300;
@@ -1132,55 +1137,56 @@ if ((mouse_check_button_pressed(mb_left) or scr_opt_pressed()) && !is_dragging &
 		
 		
 		
-case "COMMENT":
-        if (!global.comments_visible) break;
-        // Body only, from y + 24 down: the header band (y .. y + 24) belongs to
-        // the drag start further down this event, and it used to overlap this
-        // rectangle by 4px so a header click both opened the editor and
-        // started a drag.
-        if (point_in_rectangle(mouse_x, mouse_y, draw_x, y + 24, draw_x + width, y + height)) {
-            // Not if another node is drawn on top of this spot - a comment
-            // parked over this one, say. The click belongs to whatever is in
-            // front (its drag or its own editor), not to the body underneath.
-            var _cm_covered = false;
-            var _cm_self    = id;
-            with (obj_c64_node) {
-                if (id == _cm_self) continue;
-                if (depth >= _cm_self.depth) continue;
-                if (scr_node_is_hidden(id)) continue;
-                var _cm_ox = x + x_indent;
-                if (point_in_rectangle(mouse_x, mouse_y, _cm_ox, y, _cm_ox + width, y + height)) {
-                    _cm_covered = true;
-                    break;
-                }
-            }
-            if (_cm_covered) break;
-            // Clicked, so it comes to the front: one below the frontmost
-            // comment (dragged nodes park at -500, so never above that).
-            var _cm_rz = -500;
-            with (obj_c64_node) {
-                if (node_type == "COMMENT" && id != _cm_self && !is_dragging && depth < _cm_rz) _cm_rz = depth;
-            }
-            _cm_rz -= 1;
-            if (_cm_rz < -15000) _cm_rz = -15000;
-            depth = _cm_rz;
-            // Edited in place on the node, not in the centre-screen modal.
-            // is_entering_text still goes up, because every keyboard shortcut
-            // in the workspace is guarded on it - the difference is that
-            // nothing draws the modal and the node owns the caret.
-            var _cm_caret = scr_comment_caret_at(id, draw_x + 10, y + 28, mouse_x, mouse_y);
-            with (obj_workspace_manager) {
-                is_entering_text     = true;
-                input_target_node    = other.id;
-                input_target_index   = 0;
-                current_input_string = string(other.instructions[0][1]);
-                keyboard_string      = "";
-                cursor_pos           = _cm_caret;
-                input_sel_start      = -1;
-                input_sel_end        = -1;
-            }
-        }
-        break;
+	case "COMMENT":
+	    if (!global.comments_visible) break;
+	    // Body only, from y + 24 down: the header band (y .. y + 24) belongs to
+	    // the drag start further down this event, and it used to overlap this
+	    // rectangle by 4px so a header click both opened the editor and
+	    // started a drag.
+	    if (point_in_rectangle(mouse_x, mouse_y, draw_x, y + 24, draw_x + width, y + height)) {
+	        // Not if another node is drawn on top of this spot - a comment
+	        // parked over this one, say. The click belongs to whatever is in
+	        // front (its drag or its own editor), not to the body underneath.
+	        var _cm_covered = false;
+	        var _cm_self    = id;
+	        with (obj_c64_node) {
+	            if (id == _cm_self) continue;
+	            if (depth >= _cm_self.depth) continue;
+	            if (scr_node_is_hidden(id)) continue;
+	            var _cm_ox = x + x_indent;
+	            if (point_in_rectangle(mouse_x, mouse_y, _cm_ox, y, _cm_ox + width, y + height)) {
+	                _cm_covered = true;
+	                break;
+	            }
+	        }
+	        if (_cm_covered) break;
+            if (collapsed) { scr_comment_toggle(id); exit; }
+	        // Clicked, so it comes to the front: one below the frontmost
+	        // comment (dragged nodes park at -500, so never above that).
+	        var _cm_rz = -500;
+	        with (obj_c64_node) {
+	            if (node_type == "COMMENT" && id != _cm_self && !is_dragging && depth < _cm_rz) _cm_rz = depth;
+	        }
+	        _cm_rz -= 1;
+	        if (_cm_rz < -15000) _cm_rz = -15000;
+	        depth = _cm_rz;
+	        // Edited in place on the node, not in the centre-screen modal.
+	        // is_entering_text still goes up, because every keyboard shortcut
+	        // in the workspace is guarded on it - the difference is that
+	        // nothing draws the modal and the node owns the caret.
+	        var _cm_caret = scr_comment_caret_at(id, draw_x + 10, y + 28, mouse_x, mouse_y);
+	        with (obj_workspace_manager) {
+	            is_entering_text     = true;
+	            input_target_node    = other.id;
+	            input_target_index   = 0;
+	            current_input_string = string(other.instructions[0][1]);
+	            keyboard_string      = "";
+	            cursor_pos           = _cm_caret;
+	            input_sel_start      = -1;
+	            input_sel_end        = -1;
+	        }
+	    }
+	    break;
     
 
             case "ORG": {
@@ -1917,10 +1923,35 @@ if (mouse_check_button_released(mb_left) && instance_exists(global.wire_drag_nod
 // D. NODE POSITIONING
 /////////////////////////////////////////////////////////////////
 if (node_type == "INIT") {
-    x            = _spine_x;
-    y            = 60;
     is_connected = true;
-
+    if (mouse_check_button_pressed(mb_left) && !_mouse_in_gui &&
+        !obj_workspace_manager.is_panning && !instance_exists(obj_ui_color_picker) &&
+        _cam_zoom < 3.55 && !label_picker_open && !global.any_picker_open &&
+        !global.drag_claim_taken &&
+        point_in_rectangle(mouse_x, mouse_y, draw_x, y, draw_x + width, y + 24)) {
+        var _init_blocked = false;
+        var _init_self = id;
+        with (obj_c64_node) {
+            if (id == _init_self || scr_node_is_hidden(id)) continue;
+            if (is_dragging || (depth < _init_self.depth &&
+                point_in_rectangle(mouse_x, mouse_y, x + x_indent, y,
+                    x + x_indent + width, y + (node_type == "COMMENT" ? height : 24)))) {
+                _init_blocked = true; break;
+            }
+        }
+        if (!_init_blocked) {
+            scr_undo_snapshot();
+            global.drag_claim_taken = true;
+            global.active_drag_node = id;
+            is_dragging = true;
+            was_dragged = false;
+            pre_click_depth = depth;
+            depth = -2000;
+            drag_offset_x = x - mouse_x;
+            drag_offset_y = y - mouse_y;
+        }
+    }
+    if (is_dragging) scr_init_drag_update(id);
 
 } else if (node_type == "EXECUTE") {
     instance_destroy();
@@ -2189,7 +2220,7 @@ if (is_dragging && !_is_group_follower) {
                 if (is_connected && org_parent == noone && x_indent > _max_ind_prev)
                     _max_ind_prev = x_indent;
             }
-            if (abs(_this_cx - _spine_cx) <= global.node_display_width * 0.5 + 10 + _max_ind_prev) {
+            if (!global.init_collapsed && abs(_this_cx - _spine_cx) <= global.node_display_width * 0.5 + 10 + _max_ind_prev) {
                 // Main spine preview
                 var _pa = noone; var _pb = noone;
                 var _bay = -999999; var _bby = 999999;
@@ -2299,7 +2330,10 @@ if (global.wedge_preview_y >= 0) {
                 // Pure click (no movement) — restore the stashed indent so the node
                 // stays exactly where it was. A real drag leaves indent at 0 here and
                 // re-inherits it from neighbours in the D2/D3 wedge logic.
-                if (!was_dragged) { x_indent = drag_indent_stash; }
+                if (!was_dragged) {
+                    x_indent = drag_indent_stash;
+                    if (node_type == "COMMENT") scr_comment_toggle(id);
+                }
 
 				is_dragging            = false;
 				depth                  = (was_dragged && node_type != "COMMENT") ? -500 : pre_click_depth;
@@ -2402,7 +2436,7 @@ if (global.wedge_preview_y >= 0) {
                     }
                 }
 
-                if (was_dragged && !is_free_node && org_parent == noone && node_type != "NAMED_LOC" && node_type != "ORG") {
+                if (was_dragged && !global.init_collapsed && !is_free_node && org_parent == noone && node_type != "NAMED_LOC" && node_type != "ORG") {
                     var _node_cx      = x + width * 0.5;
                     var _spine_cx     = _spine_x + global.node_display_width * 0.5;
 					var _spine_bottom = -1;
@@ -2456,7 +2490,7 @@ if (global.wedge_preview_y >= 0) {
     /////////////////////////////////////////////////////////////////
 
 if (!_is_group_follower && mouse_check_button_released(mb_left) && was_dragged &&
-        !_is_macro_child && org_parent == noone && !global.box_drag_active &&
+        !_is_macro_child && org_parent == noone && !global.box_drag_active && !global.init_collapsed &&
         node_type != "ORG" && node_type != "INIT" && !is_free_node) {
 
         if (id != global.active_drag_node) exit;
@@ -2568,7 +2602,7 @@ var _init_top = 0;
 				if (_spine_folded) {
 					with (obj_c64_node) {
 						if (node_type == "INIT") {
-							collapsed = false;
+							scr_org_set_collapsed(id, false);
 							break;
 						}
 					}
@@ -2703,7 +2737,7 @@ var _is_var_node = (node_type == "NAMED_LOC" || node_type == "NEW_STR");
             // below, so the y computed above while the block was shut corrects
             // itself on the same frame.
             if (_org_anchor.collapsed) {
-                _org_anchor.collapsed = false;
+                scr_org_set_collapsed(_org_anchor, false);
             }
 
             last_overlap_check = false;

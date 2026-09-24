@@ -175,6 +175,7 @@ function scr_load_workspace_from_path(_path, _mcp = false) {
         }
 
         if (_n.node_type == "COMMENT") {
+            _n.collapsed = variable_struct_exists(d, "collapsed") ? d.collapsed : false;
             draw_set_font_l(fnt_c64_code);
             var _comment_raw = (array_length(_n.instructions) > 0) ? string(_n.instructions[0][1]) : "";
             var _text_w      = global.node_display_width - 20;
@@ -196,7 +197,10 @@ function scr_load_workspace_from_path(_path, _mcp = false) {
         }
 
         if (_n.node_type == "MACRO_PRINT") scr_print_sync_height(_n);
-        if (_n.node_type == "INIT") _n.is_draggable = false;
+        if (_n.node_type == "INIT") {
+            _n.is_draggable = true;
+            _n.collapsed = variable_struct_exists(d, "collapsed") ? d.collapsed : false;
+        }
         if (_n.node_type == "ORG") {
             _n.is_draggable = true;
             _n.is_connected = false;
@@ -663,6 +667,8 @@ function scr_load_workspace_from_path(_path, _mcp = false) {
             }
 				if (_ad.type == "META_TILESET") {
 	            scr_asset_meta_tileset_create(_new_asset);
+                // Creation defaults must not replace the saved asset address.
+                _new_asset.address = _ad.address;
 	            var _tsm = variable_struct_exists(_ad, "meta") ? _ad.meta : {};
 	            _new_asset.meta.stamp_w               = variable_struct_exists(_tsm, "stamp_w")      ? _tsm.stamp_w      : 2;
 	            _new_asset.meta.stamp_h               = variable_struct_exists(_tsm, "stamp_h")      ? _tsm.stamp_h      : 2;
@@ -747,11 +753,10 @@ function scr_load_workspace_from_path(_path, _mcp = false) {
 	            } else {
 	                _new_asset.meta.map_h = [];
 	            }
-	            if (variable_struct_exists(_tsm, "map_size_key")) {
-	                _new_asset.meta.map_size_key = _tsm.map_size_key;
-	            } else {
-	                _new_asset.meta.map_size_key = string(_new_asset.meta.stamp_w) + "x" + string(_new_asset.meta.stamp_h);
-	            }
+                // This is a runtime resize guard, not map data. Seed it from
+                // the dimensions just loaded; a stale saved key must never
+                // masquerade as a user resize and erase the restored maps.
+                _new_asset.meta.map_size_key = string(_new_asset.meta.stamp_w) + "x" + string(_new_asset.meta.stamp_h);
 
 	            // Backfill per-map dim arrays to map_count so the viewer never
 	            // indexes past a short or empty array (old saves store no map_w/map_h).
@@ -892,9 +897,11 @@ function scr_load_workspace_from_path(_path, _mcp = false) {
 	            }
 	            scr_hud_flush(_new_asset);
 	        }
-	        if (_ad.type == "MUSIC_MAKER") {
+	        if ((_ad.type == "MUSIC_MAKER" || _ad.type == "SFX_MAKER")) {
 	            scr_sound_editor_create(_new_asset);
 	            var _sem = variable_struct_exists(_ad, "meta") ? _ad.meta : {};
+                _new_asset.meta.voice_mask = variable_struct_exists(_sem,"voice_mask") ? _sem.voice_mask : 7;
+                _new_asset.meta.sfx_chip = variable_struct_exists(_sem,"sfx_chip") ? _sem.sfx_chip : 0;
 	            if (variable_struct_exists(_sem, "instruments"))      _new_asset.meta.instruments      = _sem.instruments;
 	            _new_asset.meta.sel_instr        = variable_struct_exists(_sem, "sel_instr")        ? _sem.sel_instr        : -1;
 	            if (variable_struct_exists(_sem, "patterns"))         _new_asset.meta.patterns         = _sem.patterns;
@@ -919,6 +926,7 @@ function scr_load_workspace_from_path(_path, _mcp = false) {
 	            _new_asset.meta.view_mode        = variable_struct_exists(_sem, "view_mode")        ? _sem.view_mode        : "VERTICAL";
 	            _new_asset.meta.step_zoom        = variable_struct_exists(_sem, "step_zoom")        ? _sem.step_zoom        : 1;
 	            _new_asset.meta.list_scroll      = variable_struct_exists(_sem, "list_scroll")      ? _sem.list_scroll      : 0;
+                if (_ad.type=="SFX_MAKER") scr_sfx_maker_defaults(_new_asset);
 	        }
         }
     }
