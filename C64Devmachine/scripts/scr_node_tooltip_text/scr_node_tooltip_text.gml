@@ -253,83 +253,49 @@ function scr_node_tooltip_text(_node_type) {
             ]
         },
 
-        "MACRO_METASCROLL": {
-            title: "METASCROLL",
+        "MACRO_HUD": {
+            title: "HUD - QUICK GUIDE",
             lines: [
-                "Four-way pixel-smooth camera over a META_TILESET",
-                "room. The room is flattened at compile time into a",
-                "char plane and a colour plane, so nothing decodes",
-                "stamps at runtime.",
+                "SETUP: Create a HUD asset, paint its panel and add fields in the asset editor. Pick that asset here. Its position and size determine where it appears.",
                 "",
-                "JSR MSC_L / MSC_R / MSC_U / MSC_D to move one pixel,",
-                "and JSR MSC_Update every frame so a coarse step",
-                "still finishes when nothing is moving. Click any of",
-                "them on the node to drop a JSR node for it.",
+                "SCR / COL: Set the destination screen and colour-memory bases (normally $0400 / $D800). COLOUR enables colour writes; turn it off to preserve existing colours.",
                 "",
-                "Window is cols 0-38, rows 0-24 - the outer cells",
-                "scroll too. New content loads into the cell the",
-                "border is covering, so it fine scrolls in instead",
-                "of appearing a whole character wide.",
+                "DRAW: AUTO DRAW stamps the panel when execution reaches this macro. With it off, call the hud<ID>_draw routine shown on the node after setting up the screen. Redraw if the panel is overwritten.",
                 "",
-                "Right and down reveal perfectly, 0 to 7 pixels.",
-                "Left and up pop one pixel: the left cover is 7 and",
-                "a char is 8, so that one is hardware. Hide it with",
-                "a sprite if it shows.",
+                "FIELDS: For DIGITS or BAR fields, load the value into A, then JSR the field routine shown on the node. DIGITS displays a decimal byte value (0-255); BAR uses the field settings.",
                 "",
-                "COLOUR has three modes. FIXED writes one nibble at init",
-                "and never touches $D800 again - the multicolour set",
-                "lives in $D021/$D022/$D023, so on a stock C64 you",
-                "lose nothing and the coarse step is one frame with",
-                "no colour plane in memory. SHIFT C64U scrolls colour",
-                "cell by cell in the same frame as the chars: clean",
-                "on a C64 Ultimate in turbo, runs into the display on",
-                "a stock 1 MHz machine. ROW BANDS gives every MAP row",
-                "one nibble (its commonest colour): horizontal steps",
-                "never touch $D800, vertical steps rewrite only the",
-                "screen rows whose band changed - stock-C64 safe for",
-                "sky / ground style maps. SHIFT STOCK is per-char",
-                "colour on a stock C64: two screens (click BUF to",
-                "move the second one) - the next view is built into",
-                "the hidden screen a frame early, then the screens",
-                "flip in the border and colour RAM is redrawn top",
-                "down ahead of the beam. Call MSC_Update every frame.",
-                "The tileset editor's RUN",
-                "VIEW shows FIXED and ROW BANDS as they will run.",
+                "TEXT: These fields mark screen positions, not callable routines. Use the address shown on the node to write your own text.",
                 "",
-                "The old 2-frame SHIFT is gone. It moved colour a",
-                "frame behind the chars, so one frame in eight every",
-                "cell wore its neighbour's colour - that was the",
-                "sequencing, not the cycles, so no machine could fix",
-                "it. Projects saved with it load as FIXED.",
+                "SCROLLING: Reserve HUD rows using the scroller's omit controls. Vertical fine scrolling still moves a character HUD; use a raster split or sprites to keep it steady."
+            ]
+        },
+
+        "MACRO_METASCROLL": {
+            title: "METASCROLL - QUICK GUIDE",
+            lines: [
+                "SETUP: Four-way smooth scrolling over a META_TILESET room. Pick TILESET and MAP. CLAMP ON stops the camera at the map edges.",
                 "",
-                "BLANK CH fills the screen at init and stays in col",
-                "39, which is never visible. Char 0, not $20: $20 is",
-                "a space only in the ROM charset.",
+                "MOVE: Click MSC_L / MSC_R / MSC_U / MSC_D to create JSR nodes. Each call moves one pixel. Call MSC_Update once EVERY frame, after movement calls, even when standing still.",
                 "",
-                "OMIT TOP / OMIT BOTTOM shrink the scroll window by",
-                "up to 8 rows at each end. The omitted rows keep the",
-                "blank char and are never touched again, so they are",
-                "free space for a HUD - and the coarse step no longer",
-                "copies them.",
+                "COLOUR: Click to cycle through FOUR modes:",
                 "",
-                "Top rows are worth more than bottom rows. Dropping",
-                "one from the top removes the same work AND gives the",
-                "raster 8 more lines to travel before it reaches the",
-                "first row that scrolls, so the copy gets a later",
-                "deadline too: about 13.9 raster lines of headroom",
-                "per top row against 5.9 per bottom row. The",
-                "top-right tear needs roughly 41 back, so three off",
-                "the top usually clears it on its own. The node shows",
-                "the cost against the budget in lines, red when the",
-                "step still overruns.",
+                "FIXED - Fastest and smallest. One colour-RAM value for the whole room. NIB AUTO chooses the most common value; choose a manual NIB to override it.",
                 "",
-                "Two things to expect. The first row that scrolls is",
-                "fully visible, so a vertical coarse step pops a",
-                "whole character at that seam - the hidden-cell trick",
-                "only works at rows 0 and 24. And $D011 YSCROLL moves",
-                "the whole screen, so a char-based HUD rides up and",
-                "down with the vertical fine scroll unless you split",
-                "the raster over it or draw it with sprites."
+                "ROW BANDS - One colour per map row. Useful for sky/ground layouts on a stock C64; horizontal scrolling needs no colour-RAM shift.",
+                "",
+                "SHIFT STOCK - Per-character colour on a stock C64 using two screens. Reserve an extra 1K; click BUF to change its address (default $3800). Keep it clear of code, charset and map data.",
+                "",
+                "SHIFT C64U - Per-character colour for a C64 Ultimate in turbo mode. Too slow for clean scrolling on a stock C64.",
+                "",
+                "PREVIEW: Use RUN VIEW in the tileset editor to check the selected colour mode. In FIXED, use NIB AUTO or pick a colour from the COLOUR strip.",
+                "",
+                "SPACE: PLANES sets the map-data address. ZP BASE reserves 10 zero-page bytes. Check the memory bar for overlaps, including the SHIFT STOCK buffer.",
+                "",
+                "EDGES / HUD: BLANK CH must be a blank tile in your charset. OMIT TOP / OMIT BOT remove 0-8 rows each from scrolling, leaving space for a HUD and reducing work.",
+                "",
+                "PERFORMANCE: Omitting top rows also gives extra raster time. The LINES estimate turns red when work exceeds the budget; verify timing on your target machine.",
+                "",
+                "LIMITS: Left/up edges can show a one-pixel pop. Vertical scrolling can pop at an omitted-row seam and also moves a character HUD; use a raster split or sprites for a steady HUD."
             ]
         },
 
@@ -942,4 +908,127 @@ function scr_node_tooltip_text(_node_type) {
         return _map[$ _node_type];
     }
     return undefined;
+}
+
+/// Wrap translated help paragraphs, including long tokens and CJK text.
+function scr_node_info_wrap(_paragraphs, _width) {
+    var _rows = [];
+    for (var _p = 0; _p < array_length(_paragraphs); _p++) {
+        if (_p > 0) array_push(_rows, "");
+        var _line = "";
+        var _text = _paragraphs[_p];
+        for (var _i = 1; _i <= string_length(_text); _i++) {
+            var _ch = string_char_at(_text, _i);
+            if (_line != "" && string_width(_line + _ch) > _width) {
+                var _space = string_last_pos(" ", _line);
+                if (_space > 0 && _ch != " " && ord(_ch) < 128) {
+                    array_push(_rows, string_copy(_line, 1, _space - 1));
+                    _line = string_delete(_line, 1, _space);
+                } else {
+                    array_push(_rows, _line);
+                    _line = "";
+                }
+            }
+            if (_line != "" || _ch != " ") _line += _ch;
+        }
+        if (_line != "") array_push(_rows, _line);
+    }
+    return _rows;
+}
+
+/// Cached, screen-bounded help. Read down each column, then across.
+function scr_node_info_panel_draw(_type, _gw, _gh) {
+    var _info = scr_node_tooltip_text(_type);
+    if (is_undefined(_info)) return;
+    var _old_font = draw_get_font();
+    var _old_ha = draw_get_halign();
+    var _old_va = draw_get_valign();
+    draw_set_font_l(fnt_c64_code);
+    draw_set_halign(fa_left);
+    draw_set_valign(fa_top);
+
+    var _preferred_w = (array_length(_info.lines) <= 14) ? 800 : 1440;
+    var _w = max(1, min(_preferred_w, _gw - 48, (_gh - 48) * 16 / 9));
+    var _h = _w * 9 / 16;
+    var _x = (_gw - _w) / 2;
+    var _y = (_gh - _h) / 2;
+    var _pad = min(24, _w * 0.025);
+    var _scale = (_w >= 1000) ? 1.2 : 1.0;
+    var _lh = max(16, string_height("Ag")) * _scale;
+    var _cols = clamp(floor(_w / 500), 1, 3);
+    var _gap = 28;
+    var _cw = (_w - 2 * _pad - (_cols - 1) * _gap) / _cols;
+    var _rows_per_col = max(1, floor((_h - 2 * _pad - _lh * 3) / _lh));
+    var _key = _type + ":" + string(global.lang) + ":" + string(_w) + ":" + string(draw_get_font());
+    if (!variable_instance_exists(id, "node_info_layout_key") || node_info_layout_key != _key) {
+        // The help source uses manual line breaks. Join each paragraph before
+        // wrapping so wide panels use the space instead of retaining narrow lines.
+        var _paragraphs = [];
+        var _paragraph = "";
+        for (var _i = 0; _i < array_length(_info.lines); _i++) {
+            var _parts = string_split(L(_info.lines[_i]), "\n");
+            for (var _j = 0; _j < array_length(_parts); _j++) {
+                var _part = string_trim(_parts[_j]);
+                if (_part == "") {
+                    if (_paragraph != "") array_push(_paragraphs, _paragraph);
+                    _paragraph = "";
+                } else {
+                    if (_paragraph != "") _paragraph += " ";
+                    _paragraph += _part;
+                }
+            }
+        }
+        if (_paragraph != "") array_push(_paragraphs, _paragraph);
+        node_info_rows = scr_node_info_wrap(_paragraphs, _cw / _scale);
+        node_info_layout_key = _key;
+        node_info_page = 0;
+    }
+    if (!variable_instance_exists(id, "node_info_active_type") || node_info_active_type != _type) {
+        node_info_page = 0;
+        node_info_active_type = _type;
+    }
+    var _capacity = _cols * _rows_per_col;
+    var _pages = max(1, ceil(array_length(node_info_rows) / _capacity));
+    node_info_page = clamp(node_info_page + mouse_wheel_down() - mouse_wheel_up(), 0, _pages - 1);
+
+    draw_set_alpha(0.98);
+    draw_set_color(make_color_rgb(12, 12, 22));
+    draw_rectangle(_x, _y, _x + _w, _y + _h, false);
+    draw_set_alpha(1);
+    draw_set_color(make_color_rgb(80, 140, 220));
+    draw_rectangle(_x, _y, _x + _w, _y + _h, true);
+    draw_set_color(c_yellow);
+    // Separate columns with a quiet rule, inset 5% from each panel edge.
+    draw_set_color(make_color_rgb(45, 65, 90));
+    for (var _divider = 1; _divider < _cols; _divider++) {
+        var _divider_x = _x + _pad + _divider * (_cw + _gap) - _gap / 2;
+        draw_line(_divider_x, _y + _h * 0.05, _divider_x, _y + _h * 0.95);
+    }
+    draw_set_color(c_yellow);
+    var _title = L(_info.title);
+    var _title_scale = min(_scale * 1.15, (_w - 2 * _pad) / max(1, string_width(_title)));
+    draw_text_transformed(_x + _pad, _y + _pad, _title, _title_scale, _title_scale, 0);
+    var _top = _y + _pad + _lh * 2;
+    var _first = node_info_page * _capacity;
+    var _count = min(_capacity, array_length(node_info_rows) - _first);
+    var _balanced_rows = max(1, ceil(_count / _cols));
+    draw_set_color(c_white);
+    for (var _i = 0; _i < _count; _i++) {
+        var _col = _i div _balanced_rows;
+        var _row = _i mod _balanced_rows;
+        draw_text_transformed(_x + _pad + _col * (_cw + _gap),
+            _top + _row * _lh - scr_lang_lift() * _scale,
+            node_info_rows[_first + _i], _scale, _scale, 0);
+    }
+    draw_set_color(make_color_rgb(140, 170, 205));
+    draw_set_halign(fa_right);
+    var _footer = (_pages > 1)
+        ? L("Mouse wheel: pages") + "   " + string(node_info_page + 1) + " / " + string(_pages)
+        : "";
+    var _footer_scale = min(1, (_w - 2 * _pad) / max(1, string_width(_footer)));
+    draw_text_transformed(_x + _w - _pad, _y + _h - _pad - _lh,
+        _footer, _footer_scale, _footer_scale, 0);
+    draw_set_font(_old_font);
+    draw_set_halign(_old_ha);
+    draw_set_valign(_old_va);
 }
