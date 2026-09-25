@@ -14,7 +14,7 @@ showcode_refresh_requested = false;
 editor_layout_refresh_requested = false;
 
 
-global.build_date = "September 23rd, 2026"; // edit this string for each release
+global.build_date = "September 25th, 2026"; // edit this string for each release
 
 // Frame counter. Incremented once in Begin Step, and used as the validity
 // stamp for per-frame lookup caches (see scr_reu_asset_map). Anything keyed
@@ -131,9 +131,10 @@ welcome_open           = false;
 welcome_hide_checked   = false;
 welcome_credits_y      = 0;
 welcome_whats_new = [
-    "NEW - SID RELOCATOR - Move your SID to another place in memory.",
-    "FIXED - KLA Export",
-    "UPDATED - METATILE Scroller now more robust for various modes and stock C64",
+    "NEW - Templates and Ports with 1 project in each: SHMUP.V and ZYRONS ESCAPE.",
+    "REFINED - REU ORG asset layout improved and preview of the asset when you hover.",
+    "REFINED - MEMORY Bar now can ZOOM into sections via the ALL / SEG / ONE button.",
+    "LITE ACCESS EXPANDED - LITE users can now build with PRO Features present.",
     "",
     "SHARE your Custom Code blocks like a PRO in the Discord user-code-blocks channel.",
     "SUPPORT the development by leaving a review on ITCH and buying the PRO version.",
