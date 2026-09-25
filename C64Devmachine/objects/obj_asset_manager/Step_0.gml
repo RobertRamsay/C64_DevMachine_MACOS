@@ -53,6 +53,32 @@ var _vy2 = 972;
 var _mouse_in_viewer = viewer_open && point_in_rectangle(_mx, _my, _vx1, _vy1, _vx2, _vy2);
 
 // -------------------------------------------------------
+// Manifest name divider. Capture the press before row buttons/reordering,
+// and keep dragging outside the viewer until the mouse is released.
+if (!viewer_open || viewer_asset != manifest_split_owner || !window_has_focus()) manifest_split_drag = false;
+if (viewer_open && viewer_asset == manifest_split_owner && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list)) {
+    var _split_asset = ds_list_find_value(asset_list, viewer_asset);
+    var _split_valid = (_split_asset.type == manifest_split_type)
+        && (_split_asset.type == "LOAD_REU" || _split_asset.type == "LOAD_ORG");
+    if (!_split_valid) manifest_split_drag = false;
+    if (_split_valid && !load_reu_picker_open && !load_org_picker_open && reu_drag_row < 0 && !load_reu_sb_drag) {
+        if (mouse_check_button_pressed(mb_left)
+        && point_in_rectangle(_mx, _my, manifest_split_x-5, manifest_split_y1, manifest_split_x+5, manifest_split_y2)) {
+            manifest_split_drag = true;
+            manifest_split_grab = _mx - manifest_split_x;
+        }
+        if (manifest_split_drag) {
+            var _split_reu = (_split_asset.type == "LOAD_REU");
+            var _split_max = max(100, _vx2 - _vx1 - (_split_reu ? 430 : 510));
+            var _split_offset = clamp(_mx - _vx1 - manifest_split_grab, 100, _split_max);
+            if (_split_reu) manifest_reu_split = _split_offset;
+            else manifest_disk_split = _split_offset;
+            if (!mouse_check_button(mb_left)) manifest_split_drag = false;
+            exit;
+        }
+    } else manifest_split_drag = false;
+}
+
 // LOAD_REU MANIFEST SCROLL
 // Sits with the viewer bounds so the wheel works whenever the pointer is over
 // the row list, not only while a row is being dragged. Bounds come from
@@ -2393,7 +2419,7 @@ if (_asset.type == "META_TILESET") {
         // LOAD_REU viewer clicks
         if (_asset.type == "LOAD_REU") {
             var _links=variable_struct_exists(_asset,"linked_assets")?_asset.linked_assets:[];
-            var _cm=_vx1+465;
+            var _cm=_vx1+clamp(manifest_reu_split,100,max(100,_vx2-_vx1-430))+283;
             // A click on the scrollbar is handled by the scroll block above and
             // must not fall through to a row.
             if (load_reu_sb_drag) exit;
