@@ -682,6 +682,9 @@ is_panning      = false;
 cam_target_x = cam_x;
 cam_target_y = cam_y;
 
+// Start with the same INIT-relative view as Home, without recording an edit.
+scr_focus_init(false);
+
 //  7. INPUT SYSTEM 
 // is_entering_text gates all keyboard input through the text modal,
 // preventing node shortcuts from firing while the user is typing
