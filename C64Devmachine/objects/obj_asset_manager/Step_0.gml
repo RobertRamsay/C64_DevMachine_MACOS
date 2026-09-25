@@ -2652,12 +2652,6 @@ if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list))
 // -------------------------------------------------------
 if (mouse_check_button_pressed(mb_right) && _mouse_in_panel && hover_idx >= 0) {
     var _asset = ds_list_find_value(asset_list, hover_idx);
-    // BYTE_DATA and TEXT_DATA aren't node-referenced — they're compiled
-    // straight into the build at their address. Deletion can quietly remove
-    // data that other code depends on, so confirm before proceeding.
-    // (confirmation removed - delete immediately)
-
-scr_undo_snapshot()
     // Check if referenced by any node
     var _is_referenced = false;
     _delete_block_title = "";
@@ -2755,6 +2749,12 @@ scr_undo_snapshot()
         delete_warn_name   = _asset.name;
         if (_delete_block_title != "") delete_warn_name += "  (used by " + _delete_block_title + ")";
     } else {
+        var _confirm_msg = "Delete asset \"" + _asset.name + "\"?\n\n"
+            + "This cannot be undone. You will need to reload or recreate this asset.";
+        if (_asset.type == "BYTE_DATA" || _asset.type == "TEXT_DATA")
+            _confirm_msg += "\n\nYour code may still use this data at runtime.";
+        // Mac returns Yes/No strings: use the existing OS-safe boolean wrapper.
+        if (!scr_show_question_bool(_confirm_msg)) exit;
         if (buffer_exists(_asset.buffer)) buffer_delete(_asset.buffer);
 
        if (_asset.type == "SPRITE_SET") {
@@ -2811,6 +2811,18 @@ scr_undo_snapshot()
             }
         }
         ds_list_delete(asset_list, hover_idx);
+        // Removal changes allocations and shifts every following asset index.
+        // Recompute conflicts from the remaining assets before the next draw.
+        global.addresses_dirty = true;
+        global.memory_bar_dirty = true;
+        global.memory_bar_hover_asset = -1;
+        global.autosave_dirty = true;
+        if (global.conflict_popup_asset_a == _asset.name || global.conflict_popup_asset_b == _asset.name) {
+            global.conflict_popup_open = false;
+            global.conflict_popup_asset_a = "";
+            global.conflict_popup_asset_b = "";
+        }
+
 
         if (viewer_asset == hover_idx || viewer_asset >= ds_list_size(asset_list)) {
             if (spred64_v2.active) scr_spred64_v2_close(false);
