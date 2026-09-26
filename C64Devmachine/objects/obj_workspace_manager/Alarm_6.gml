@@ -1,4 +1,8 @@
 /// @desc Deferred Autosave Check (Safe for Mac)
+// Coming back from a tour's clear-restart: don't offer the old autosave.
+if (tour_start_pending >= 0 || global.tour_active) {
+    exit;
+}
 if (welcome_open) {
     alarm[5] = 50; // wait for the welcome screen to close first
     exit;

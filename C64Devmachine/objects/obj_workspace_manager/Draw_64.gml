@@ -383,6 +383,10 @@ for (var i = 0; i < array_length(active_palette); i++) {
     var is_hover = (gui_mouse_x > btn_x && gui_mouse_x < btn_x + btn_w &&
                     gui_mouse_y > btn_y && gui_mouse_y < btn_y + btn_h);
 
+    if (global.tour_active) {
+        scr_tour_capture("PAL:" + item.title, btn_x, btn_y, btn_x + btn_w, btn_y + btn_h);
+    }
+
     // Check if this button is a finder match
     var _is_finder_match = false;
     if (opcode_finder_text != "") {
@@ -519,6 +523,9 @@ if (shelf_page > 0) {
     // Hover check needs to look at the full box around the center
     var l_hover = (gui_mouse_x >= lx - hw && gui_mouse_x < lx + hw &&
                    gui_mouse_y >= ly - hh && gui_mouse_y < ly + hh);
+    if (global.tour_active) {
+        scr_tour_capture("ARROW:L", lx - hw, ly - hh, lx + hw, ly + hh);
+    }
     
     var l_frame = 0;
 	if paletteStyle>1 l_frame=2
@@ -541,6 +548,9 @@ if (shelf_page < p_count - 1) {
     
     var r_hover = (gui_mouse_x >= rx - hw && gui_mouse_x < rx + hw &&
                    gui_mouse_y >= ry - hh && gui_mouse_y < ry + hh);
+    if (global.tour_active) {
+        scr_tour_capture("ARROW:R", rx - hw, ry - hh, rx + hw, ry + hh);
+    }
     
     var r_frame = 0;
 	if paletteStyle>1 r_frame=2
@@ -1131,6 +1141,9 @@ for (var _bi = 0; _bi < _menuitems; _bi++) {
     var _bhover = (!_bdisabled &&
                    gui_mouse_x >= _bx && gui_mouse_x < _bx + _mbar_btn_w &&
                    gui_mouse_y >= _by && gui_mouse_y < _by + _mbar_btn_h);
+    if (global.tour_active) {
+        scr_tour_capture("MENU:" + string(_bi), _bx, _by, _bx + _mbar_btn_w, _by + _mbar_btn_h);
+    }
     if (_bhover || _bopen) {
         var _menu_overlay_additive = (uiChromeStyle == 0);
         if (_menu_overlay_additive) gpu_set_blendmode(bm_add);
@@ -1440,7 +1453,8 @@ if (gui_menu_open == 5) {
         { title: "GLOSS DARK",      url: "https://drive.google.com/file/d/1k_OaDIK1II1-M7eJ2JJrWMJOVPGEmE_z/view?usp=drive_link" }, // link under here
         { title: "HELPER PAGE",            url: "https://robram78.github.io/C64_HELPER/" }, // link under here
         { title: "HELPER V2+C64U",            url: "https://robram78.github.io/C64_HELPER/u64_registers.html" }, // link under here
-        
+        { title: "-- GUIDED TOURS --", url: "HEADER" },
+        { title: "TAKE THE TOUR...",     url: "TOURS" },
     ];
 
     var _item_h_d   = 20;
@@ -1482,7 +1496,14 @@ if (gui_menu_open == 5) {
 
         if (_ihov && mouse_check_button_pressed(mb_left)) {
             gui_menu_open = -1;
-            if (_dp.url != "") {
+            if (_dp.url == "TOURS") {
+                // Open the welcome panel straight on its tour list.
+                welcome_open        = true;
+                welcome_mode        = 1;
+                welcome_tour_scroll = 0;
+            } else if (string_copy(_dp.url, 1, 5) == "TOUR:") {
+                scr_tour_request(real(string_delete(_dp.url, 1, 5)));
+            } else if (_dp.url != "") {
                 url_open(_dp.url);
             }
         }
@@ -1661,6 +1682,9 @@ if (gui_menu_open == 0) {
         if (_ihov) {
             hover_macro_type  = _mp.type;
             hover_macro_title = _mp.title;
+        }
+        if (global.tour_active) {
+            scr_tour_capture("MAC:" + _mp.type, _ix1, _iy, _ix2, _iy + _item_h);
         }
 
         // Keep macro menu rows clean: no button sprite behind menu entries.
@@ -1887,6 +1911,9 @@ for (var j = 0; j < array_length(shortcuts); j++) {
     var btn_hover = (gui_mouse_x > box_x1 && gui_mouse_x < box_x2 &&
                      gui_mouse_y > box_y1 && gui_mouse_y < box_y2);
     var btn_click = btn_hover && mouse_check_button(mb_left);
+    if (global.tour_active) {
+        scr_tour_capture("UI:" + shortcuts[j][1], box_x1, box_y1, box_x2, box_y2);
+    }
     var is_toggle = (shortcuts[j][1] == "TOGGLE HEX/DEC" || shortcuts[j][1] == "TOGGLE AUTOSAVE MODE");
 
     var body_col = is_toggle
@@ -2369,10 +2396,17 @@ scr_draw_memory_bar(_bar_x1, _bar_x2, gui_h - 40);
 /////////////////////////////////////////////////////////////////
 // A COMMENT is typed on the node itself now, so the centre-screen modal is
 // skipped entirely for one - obj_c64_node draws the live text and the caret.
+// PRINT's inline text row (index 5) does the same: the node already draws
+// the live string with its caret, so the modal only duplicated it.
 // Everything else still gets the modal.
 var _modal_is_comment = (is_entering_text && instance_exists(input_target_node)
                       && (input_target_node.node_type == "COMMENT"
                        || input_target_node.node_title == "COMMENT"));
+if (is_entering_text && instance_exists(input_target_node)
+    && input_target_node.node_type == "MACRO_PRINT" && input_target_index == 5) {
+    _modal_is_comment = true;
+}
+text_modal_visible = (is_entering_text && !_modal_is_comment);
 if (is_entering_text && !_modal_is_comment) {
     if (global.show_info_window) is_entering_text = false;
 
@@ -3919,83 +3953,170 @@ if (welcome_open) {
     draw_text_l(_px + _pw / 2, _py + 40, L("VERSION: ") + string(GM_version) + L("   DATE: ") + global.build_date);
     draw_set_halign(fa_left);
 
-    // What's New
-    var _wy = _py + 70;
-    draw_set_font_l(fnt_C64_Angled);
-    draw_set_color(make_color_rgb(220, 140, 40));
-    draw_text_l(_px + 20, _wy, "WHAT'S NEW?");
-    _wy += 22;
-    draw_set_font_l(fnt_c64_tiny);
-    draw_set_color(c_aqua);
-    for (var _wi = 0; _wi < array_length(welcome_whats_new); _wi++) {
-        // An empty entry is a spacer, not a bullet. Without this it drew a
-        // lone "- " on its own line above the SHARE note.
-        if (welcome_whats_new[_wi] == "") {
-            _wy += 16;
-            continue;
+    var _tg = scr_tour_welcome_geom(_px, _py, _pw, _ph);
+
+    if (welcome_mode == 1) {
+        // ---- GUIDED TOUR LIST ----
+        var _tours = scr_tour_list();
+        draw_set_font_l(fnt_C64_Angled);
+        draw_set_color(make_color_rgb(220, 140, 40));
+        draw_text_l(_px + 20, _py + 66, "GUIDED TOURS");
+        draw_set_font_l(fnt_c64_tiny);
+        draw_set_color(make_color_rgb(160, 160, 160));
+        draw_text_l(_px + 180, _py + 72, "Pick one. Each step waits for you to do it.");
+
+        for (var _tr = 0; _tr < _tg.rows; _tr++) {
+            var _ti = welcome_tour_scroll + _tr;
+            if (_ti >= array_length(_tours)) {
+                break;
+            }
+            var _ry  = _tg.list[1] + (_tr * _tg.row_h);
+            var _rx1 = _tg.list[0];
+            var _rx2 = _tg.list[2] - 12;
+            var _rhv = point_in_rectangle(_wmx, _wmy, _rx1, _ry, _rx2, _ry + _tg.row_h - 4);
+            var _rbg = make_color_rgb(40, 40, 52);
+            if (_rhv) {
+                _rbg = make_color_rgb(60, 60, 90);
+            }
+            draw_set_color(_rbg);
+            draw_rectangle(_rx1, _ry, _rx2, _ry + _tg.row_h - 4, false);
+            draw_set_color(make_color_rgb(90, 90, 120));
+            draw_rectangle(_rx1, _ry, _rx2, _ry + _tg.row_h - 4, true);
+
+            draw_set_font_l(fnt_c64_tiny);
+            draw_set_color(make_color_rgb(200, 160, 40));
+            draw_text(_rx1 + 10, _ry + 5, string(_ti + 1) + ".");
+            var _tc = c_white;
+            if (_rhv) {
+                _tc = c_yellow;
+            }
+            draw_set_color(_tc);
+            draw_text_l(_rx1 + 36, _ry + 4, _tours[_ti].title);
+            draw_set_color(make_color_rgb(140, 200, 200));
+            draw_text_l(_rx1 + 36, _ry + 19, _tours[_ti].blurb);
         }
-        draw_text_l(_px + 30, _wy, "- " + welcome_whats_new[_wi]);
-        _wy += 16;
-    }
 
-    // Credits header
-    _wy += 14;
-    draw_set_font_l(fnt_C64_Angled);
-    draw_set_color(make_color_rgb(220, 140, 40));
-    draw_set_halign(fa_center);
-    draw_text_l(_px + _pw / 2, _wy, "CREDITS");
-    draw_set_halign(fa_left);
-    _wy += 22;
-
-    // Scissored, auto-scrolling credits crawl
-    var _cr_x1 = _px + 20;
-    var _cr_y1 = _wy;
-    var _cr_x2 = _px + _pw - 20;
-    var _cr_y2 = _cr_y1 + 180;
-    var _cr_line_h = 16;
-
-    var _sx_sc = window_get_width()  / global.gui_w;
-    var _sy_sc = window_get_height() / display_get_gui_height();
-    gpu_set_scissor(
-        floor(_cr_x1 * _sx_sc),
-        floor(_cr_y1 * _sy_sc),
-        ceil((_cr_x2 - _cr_x1) * _sx_sc),
-        ceil((_cr_y2 - _cr_y1) * _sy_sc)
-    );
-
-    draw_set_font_l(fnt_c64_tiny);
-    var _cr_start_y = _cr_y2 - welcome_credits_y;
-    for (var _ci = 0; _ci < array_length(welcome_credits_lines); _ci++) {
-        var _cly = _cr_start_y + (_ci * _cr_line_h);
-        if (_cly > _cr_y1 - _cr_line_h && _cly < _cr_y2 + _cr_line_h) {
-            var _ctxt      = welcome_credits_lines[_ci];
-            var _is_header = (_ctxt == "CODE and DESIGN" || _ctxt == "COMMUNITY INPUT" || _ctxt == "And...");
-            draw_set_color(_is_header ? make_color_rgb(220, 140, 40) : c_white);
-            draw_set_halign(fa_center);
-            draw_text_l(_px + _pw / 2, _cly, _ctxt);
-            draw_set_halign(fa_left);
-        }
-    }
-
-    gpu_set_scissor(0, 0, window_get_width(), window_get_height());
-
-    // Checkbox
-    var _chkx1   = _px + 20;
-    var _chky1   = _py + _ph - 40;
-    var _chkx2   = _chkx1 + 18;
-    var _chky2   = _chky1 + 18;
-    var _chk_hov = point_in_rectangle(_wmx, _wmy, _chkx1, _chky1, _chkx2, _chky2);
-    draw_set_color(_chk_hov ? make_color_rgb(200, 160, 40) : make_color_rgb(90, 90, 90));
-    draw_rectangle(_chkx1, _chky1, _chkx2, _chky2, true);
-    if (welcome_hide_checked) {
+        // Where to find this list again, bottom-left beside the BACK button
+        draw_set_font_l(fnt_c64_tiny);
+        draw_set_color(make_color_rgb(160, 160, 160));
+        draw_text_l(_px + 20, _py + _ph - 44, "You can also find the guided tours in");
         draw_set_color(make_color_rgb(200, 160, 40));
-        draw_text_l(_chkx1 + 3, _chky1 - 2, "X");
+        draw_text_l(_px + 20, _py + _ph - 30, "DOCUMENTS > TAKE THE TOUR...");
+
+        // Scrollbar, only when the list is longer than the panel
+        if (array_length(_tours) > _tg.rows) {
+            var _sb_x1 = _tg.list[2] - 6;
+            var _sb_y1 = _tg.list[1];
+            var _sb_h  = _tg.rows * _tg.row_h - 4;
+            var _th_h  = max(20, _sb_h * (_tg.rows / array_length(_tours)));
+            var _th_y  = _sb_y1 + (_sb_h - _th_h) * (welcome_tour_scroll / max(1, array_length(_tours) - _tg.rows));
+            draw_set_color(make_color_rgb(40, 40, 52));
+            draw_rectangle(_sb_x1, _sb_y1, _sb_x1 + 6, _sb_y1 + _sb_h, false);
+            draw_set_color(make_color_rgb(200, 160, 40));
+            draw_rectangle(_sb_x1, _th_y, _sb_x1 + 6, _th_y + _th_h, false);
+        }
+    } else {
+        // What's New
+        var _wy = _py + 70;
+        draw_set_font_l(fnt_C64_Angled);
+        draw_set_color(make_color_rgb(220, 140, 40));
+        draw_text_l(_px + 20, _wy, "WHAT'S NEW?");
+        _wy += 22;
+        draw_set_font_l(fnt_c64_tiny);
+        draw_set_color(c_aqua);
+        for (var _wi = 0; _wi < array_length(welcome_whats_new); _wi++) {
+            // An empty entry is a spacer, not a bullet. Without this it drew a
+            // lone "- " on its own line above the SHARE note.
+            if (welcome_whats_new[_wi] == "") {
+                _wy += 16;
+                continue;
+            }
+            draw_text_l(_px + 30, _wy, "- " + welcome_whats_new[_wi]);
+            _wy += 16;
+        }
+
+        // Credits header
+        _wy += 14;
+        draw_set_font_l(fnt_C64_Angled);
+        draw_set_color(make_color_rgb(220, 140, 40));
+        draw_set_halign(fa_center);
+        draw_text_l(_px + _pw / 2, _wy, "CREDITS");
+        draw_set_halign(fa_left);
+        _wy += 22;
+
+        // Scissored, auto-scrolling credits crawl
+        var _cr_x1 = _px + 20;
+        var _cr_y1 = _wy;
+        var _cr_x2 = _px + _pw - 20;
+        var _cr_y2 = _cr_y1 + 180;
+        var _cr_line_h = 16;
+
+        var _sx_sc = window_get_width()  / global.gui_w;
+        var _sy_sc = window_get_height() / display_get_gui_height();
+        gpu_set_scissor(
+            floor(_cr_x1 * _sx_sc),
+            floor(_cr_y1 * _sy_sc),
+            ceil((_cr_x2 - _cr_x1) * _sx_sc),
+            ceil((_cr_y2 - _cr_y1) * _sy_sc)
+        );
+
+        draw_set_font_l(fnt_c64_tiny);
+        var _cr_start_y = _cr_y2 - welcome_credits_y;
+        for (var _ci = 0; _ci < array_length(welcome_credits_lines); _ci++) {
+            var _cly = _cr_start_y + (_ci * _cr_line_h);
+            if (_cly > _cr_y1 - _cr_line_h && _cly < _cr_y2 + _cr_line_h) {
+                var _ctxt      = welcome_credits_lines[_ci];
+                var _is_header = (_ctxt == "CODE and DESIGN" || _ctxt == "COMMUNITY INPUT" || _ctxt == "And...");
+                draw_set_color(_is_header ? make_color_rgb(220, 140, 40) : c_white);
+                draw_set_halign(fa_center);
+                draw_text_l(_px + _pw / 2, _cly, _ctxt);
+                draw_set_halign(fa_left);
+            }
+        }
+
+        gpu_set_scissor(0, 0, window_get_width(), window_get_height());
+
+        // Checkbox
+        var _chkx1   = _px + 20;
+        var _chky1   = _py + _ph - 40;
+        var _chkx2   = _chkx1 + 18;
+        var _chky2   = _chky1 + 18;
+        var _chk_hov = point_in_rectangle(_wmx, _wmy, _chkx1, _chky1, _chkx2, _chky2);
+        draw_set_color(_chk_hov ? make_color_rgb(200, 160, 40) : make_color_rgb(90, 90, 90));
+        draw_rectangle(_chkx1, _chky1, _chkx2, _chky2, true);
+        if (welcome_hide_checked) {
+            draw_set_color(make_color_rgb(200, 160, 40));
+            draw_text_l(_chkx1 + 3, _chky1 - 2, "X");
+        }
+        draw_set_font_l(fnt_c64_tiny);
+        draw_set_color(c_white);
+        draw_text_l(_chkx2 + 8, _chky1, "DON'T SHOW ON STARTUP");
+        draw_set_color(make_color_rgb(140, 140, 140));
+        draw_text_l(_chkx2 + 8, _chky1 + 14, welcome_hide_checked ? L("(currently: hidden on startup)") : L("(currently: shows on startup)"));
+
     }
-    draw_set_font_l(fnt_c64_tiny);
+
+    // TAKE THE TOUR / BACK button
+    var _tb_hov = point_in_rectangle(_wmx, _wmy, _tg.btn[0], _tg.btn[1], _tg.btn[2], _tg.btn[3]);
+    var _tb_bg  = make_color_rgb(40, 110, 60);
+    if (_tb_hov) {
+        _tb_bg = make_color_rgb(60, 160, 90);
+    }
+    draw_set_color(_tb_bg);
+    draw_rectangle(_tg.btn[0], _tg.btn[1], _tg.btn[2], _tg.btn[3], false);
+    draw_set_color(make_color_rgb(120, 200, 140));
+    draw_rectangle(_tg.btn[0], _tg.btn[1], _tg.btn[2], _tg.btn[3], true);
+    var _tb_label = "TAKE THE TOUR";
+    if (welcome_mode == 1) {
+        _tb_label = "BACK";
+    }
+    draw_set_font_l(fnt_C64_Angled);
     draw_set_color(c_white);
-    draw_text_l(_chkx2 + 8, _chky1, "DON'T SHOW ON STARTUP");
-    draw_set_color(make_color_rgb(140, 140, 140));
-    draw_text_l(_chkx2 + 8, _chky1 + 14, welcome_hide_checked ? L("(currently: hidden on startup)") : L("(currently: shows on startup)"));
+    draw_set_halign(fa_center);
+    draw_set_valign(fa_middle);
+    draw_text_l((_tg.btn[0] + _tg.btn[2]) * 0.5, (_tg.btn[1] + _tg.btn[3]) * 0.5, _tb_label);
+    draw_set_halign(fa_left);
+    draw_set_valign(fa_top);
 
     // Close button
     var _cbx1   = _px + _pw - 36;

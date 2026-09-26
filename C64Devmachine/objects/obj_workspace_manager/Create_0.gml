@@ -130,6 +130,8 @@ version_banner_dismissed = false;
 welcome_open           = false;
 welcome_hide_checked   = false;
 welcome_credits_y      = 0;
+welcome_mode           = 0;      // 0 = welcome / what's new, 1 = guided tour list
+welcome_tour_scroll    = 0;      // first visible row in the tour list
 welcome_whats_new = [
     "NEW - STARLIGHT UI theme, tidied up other themes added bkg for cyberpunk theme.",
     "NEW - ROOMS node - for optimised room switching.",
@@ -421,6 +423,22 @@ silent_build = false;
 pending_dump = false;
 global.last_built = false;
 global.last_bytes = [];
+
+// Guided tours (scr_tour_guide / obj_tour_guide). The draw loops report the
+// rects of whatever the current tour step points at via scr_tour_capture.
+global.tour_active      = false;
+global.tour_keys        = [];
+global.tour_rects       = [];
+global.tour_stamps      = [];
+global.tour_frame       = 0;
+global.tour_build_count = 0;
+global.tour_waiting     = -1;   // tour id waiting on the clear/save question
+global.tour_default_hash = "";  // workspace hash of the fresh startup state
+tour_baseline_timer     = 30;   // frames before the startup hash is taken
+tour_start_pending      = -1;   // tour to start after a clear-restart
+// True while the centre-screen text entry modal is on screen (set in Draw GUI).
+// The tour hides its spotlight then so it does not cut across the modal.
+text_modal_visible      = false;
 global.sid_active = false;
 global.node_link_max_dist = 500;
 
@@ -1057,6 +1075,17 @@ flow_line_style        = ini_read_real("Settings", "flow_line_style",     1);
 var _hide_welcome = ini_read_real("Settings", "hide_welcome", 0);
 welcome_hide_checked = (_hide_welcome != 0);
 welcome_open          = !welcome_hide_checked;
+
+// A tour asked for a clean workspace and restarted the app: skip the welcome
+// panel and start that tour once the fresh workspace has settled.
+// The settings ini is already open here (closed further down), so no
+// ini_open/ini_close of our own - closing it early broke the reads below.
+var _tour_after_restart = ini_read_real("Tour", "pending", -1);
+if (_tour_after_restart >= 0) {
+    ini_write_real("Tour", "pending", -1);
+    tour_start_pending = _tour_after_restart;
+    welcome_open       = false;
+}
 
 // ---- SHOW CODE PANEL (floating live listing, left of the shortcuts column) ----
 // -1 on x is the "never positioned" marker; the draw script parks it beside the

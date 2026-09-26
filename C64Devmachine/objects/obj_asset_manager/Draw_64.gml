@@ -327,6 +327,9 @@ for (var _pos = 0; _pos < _disp_n; _pos++) {
 
     // EDIT zone
     var _edit_hover = point_in_rectangle(_mx-3, _my, _edit_x, _iy, _addr_x, _iy + item_h);
+    if (global.tour_active) {
+        scr_tour_capture("ASSET:EDIT:" + _asset.type, _edit_x, _iy, _addr_x, _iy + item_h);
+    }
     draw_set_color(_edit_hover ? make_color_rgb(50, 80, 60) : make_color_rgb(28, 28, 40));
     draw_rectangle(_edit_x + 1, _iy + 1, _addr_x - 1, _iy + item_h - 1, false);
     draw_set_font_l(fnt_c64_tiny);
@@ -828,11 +831,33 @@ if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list))
         _viewer_title = manifest_fit_name(_viewer_title, min(1070, _vx2 - _vx1 - 130));
     }
     draw_text_l(_vx1 + 10, _vy1 + 6, _viewer_title);
+    // CLOSE button, top right of every asset viewer. Same rect as the click
+    // handler in Step (VIEWER BUTTONS > Close button). ESC still works too.
+    var _cl_x1  = _vx2 - 80;
+    var _cl_y1  = _vy1 + 4;
+    var _cl_x2  = _vx2 - 4;
+    var _cl_y2  = _vy1 + 24;
+    var _cl_hov = point_in_rectangle(_mx, _my, _cl_x1, _cl_y1, _cl_x2, _cl_y2);
+    var _cl_bg  = make_color_rgb(30, 30, 42);
+    if (_cl_hov) {
+        _cl_bg = make_color_rgb(190, 60, 60);
+    }
+    draw_set_color(_cl_bg);
+    draw_rectangle(_cl_x1, _cl_y1, _cl_x2, _cl_y2, false);
+    var _cl_edge = make_color_rgb(110, 110, 140);
+    if (_cl_hov) {
+        _cl_edge = c_white;
+    }
+    draw_set_color(_cl_edge);
+    draw_rectangle(_cl_x1, _cl_y1, _cl_x2, _cl_y2, true);
     draw_set_font_l(fnt_c64_tiny);
-    draw_set_color(make_color_rgb(40, 30, 0));
-    draw_set_halign(fa_right);
-    draw_text_l(_vx2 - 8, _vy1 + 8, "ESC TO CLOSE");
+    draw_set_color(c_white);
+    draw_set_halign(fa_center);
+    draw_text_l((_cl_x1 + _cl_x2) * 0.5, _cl_y1 + 4, "CLOSE (ESC)");
     draw_set_halign(fa_left);
+    if (global.tour_active) {
+        scr_tour_capture("ASSET:CLOSE", _cl_x1, _cl_y1, _cl_x2, _cl_y2);
+    }
 
     var _cy = _vy1 + 38;
 
@@ -4146,6 +4171,9 @@ if (!variable_struct_exists(_asset.meta, "dirty_timer")) _asset.meta.dirty_timer
 	        var _ebx1 = _vx1 + 120;
 	        var _ebx2 = _ebx1 + 80;
 	        var _eb_hov = point_in_rectangle(_mx, _my, _ebx1, _btn_y, _ebx2, _btn_y + 20);
+	        if (global.tour_active) {
+	            scr_tour_capture("ASSET:BMP_EDIT", _ebx1, _btn_y, _ebx2, _btn_y + 20);
+	        }
 	        draw_set_color(_eb_hov ? make_color_rgb(60, 180, 200) : (_is_ed ? make_color_rgb(20, 70, 90) : make_color_rgb(20, 70, 90)));
 	        draw_rectangle(_ebx1, _btn_y, _ebx2, _btn_y + 20, false);
 	        draw_set_font_l(fnt_c64_tiny);

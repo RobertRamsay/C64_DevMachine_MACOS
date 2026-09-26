@@ -1,0 +1,1787 @@
+diff --git a/C64Devmachine/C64Devmachine_mac.yyp b/C64Devmachine/C64Devmachine_mac.yyp
+index 6cbc512..bcc87e7 100644
+--- a/C64Devmachine/C64Devmachine_mac.yyp
++++ b/C64Devmachine/C64Devmachine_mac.yyp
+@@ -967,6 +967,7 @@
+     {"id":{"name":"obj_opCodeManager","path":"objects/obj_opCodeManager/obj_opCodeManager.yy",},},
+     {"id":{"name":"obj_question_box","path":"objects/obj_question_box/obj_question_box.yy",},},
+     {"id":{"name":"obj_screenshot_button","path":"objects/obj_screenshot_button/obj_screenshot_button.yy",},},
++    {"id":{"name":"obj_tour_guide","path":"objects/obj_tour_guide/obj_tour_guide.yy",},},
+     {"id":{"name":"obj_ui_color_picker","path":"objects/obj_ui_color_picker/obj_ui_color_picker.yy",},},
+     {"id":{"name":"obj_workspace_manager","path":"objects/obj_workspace_manager/obj_workspace_manager.yy",},},
+     {"id":{"name":"MAIN_ROOM","path":"rooms/MAIN_ROOM/MAIN_ROOM.yy",},},
+@@ -1405,6 +1406,7 @@
+     {"id":{"name":"scr_strip_key_ghosts","path":"scripts/scr_strip_key_ghosts/scr_strip_key_ghosts.yy",},},
+     {"id":{"name":"scr_templates","path":"scripts/scr_templates/scr_templates.yy",},},
+     {"id":{"name":"scr_text_wrap_rows","path":"scripts/scr_text_wrap_rows/scr_text_wrap_rows.yy",},},
++    {"id":{"name":"scr_tour_guide","path":"scripts/scr_tour_guide/scr_tour_guide.yy",},},
+     {"id":{"name":"scr_trigger_latch_fx","path":"scripts/scr_trigger_latch_fx/scr_trigger_latch_fx.yy",},},
+     {"id":{"name":"scr_undo_restore","path":"scripts/scr_undo_restore/scr_undo_restore.yy",},},
+     {"id":{"name":"scr_undo_snapshot","path":"scripts/scr_undo_snapshot/scr_undo_snapshot.yy",},},
+diff --git a/C64Devmachine/objects/obj_asset_manager/Draw_64.gml b/C64Devmachine/objects/obj_asset_manager/Draw_64.gml
+index 5b14857..a395820 100644
+--- a/C64Devmachine/objects/obj_asset_manager/Draw_64.gml
++++ b/C64Devmachine/objects/obj_asset_manager/Draw_64.gml
+@@ -327,6 +327,9 @@ for (var _pos = 0; _pos < _disp_n; _pos++) {
+ 
+     // EDIT zone
+     var _edit_hover = point_in_rectangle(_mx-3, _my, _edit_x, _iy, _addr_x, _iy + item_h);
++    if (global.tour_active) {
++        scr_tour_capture("ASSET:EDIT:" + _asset.type, _edit_x, _iy, _addr_x, _iy + item_h);
++    }
+     draw_set_color(_edit_hover ? make_color_rgb(50, 80, 60) : make_color_rgb(28, 28, 40));
+     draw_rectangle(_edit_x + 1, _iy + 1, _addr_x - 1, _iy + item_h - 1, false);
+     draw_set_font_l(fnt_c64_tiny);
+@@ -828,11 +831,33 @@ if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list))
+         _viewer_title = manifest_fit_name(_viewer_title, min(1070, _vx2 - _vx1 - 130));
+     }
+     draw_text_l(_vx1 + 10, _vy1 + 6, _viewer_title);
++    // CLOSE button, top right of every asset viewer. Same rect as the click
++    // handler in Step (VIEWER BUTTONS > Close button). ESC still works too.
++    var _cl_x1  = _vx2 - 80;
++    var _cl_y1  = _vy1 + 4;
++    var _cl_x2  = _vx2 - 4;
++    var _cl_y2  = _vy1 + 24;
++    var _cl_hov = point_in_rectangle(_mx, _my, _cl_x1, _cl_y1, _cl_x2, _cl_y2);
++    var _cl_bg  = make_color_rgb(30, 30, 42);
++    if (_cl_hov) {
++        _cl_bg = make_color_rgb(190, 60, 60);
++    }
++    draw_set_color(_cl_bg);
++    draw_rectangle(_cl_x1, _cl_y1, _cl_x2, _cl_y2, false);
++    var _cl_edge = make_color_rgb(110, 110, 140);
++    if (_cl_hov) {
++        _cl_edge = c_white;
++    }
++    draw_set_color(_cl_edge);
++    draw_rectangle(_cl_x1, _cl_y1, _cl_x2, _cl_y2, true);
+     draw_set_font_l(fnt_c64_tiny);
+-    draw_set_color(make_color_rgb(40, 30, 0));
+-    draw_set_halign(fa_right);
+-    draw_text_l(_vx2 - 8, _vy1 + 8, "ESC TO CLOSE");
++    draw_set_color(c_white);
++    draw_set_halign(fa_center);
++    draw_text_l((_cl_x1 + _cl_x2) * 0.5, _cl_y1 + 4, "CLOSE (ESC)");
+     draw_set_halign(fa_left);
++    if (global.tour_active) {
++        scr_tour_capture("ASSET:CLOSE", _cl_x1, _cl_y1, _cl_x2, _cl_y2);
++    }
+ 
+     var _cy = _vy1 + 38;
+ 
+@@ -4146,6 +4171,9 @@ if (!variable_struct_exists(_asset.meta, "dirty_timer")) _asset.meta.dirty_timer
+ 	        var _ebx1 = _vx1 + 120;
+ 	        var _ebx2 = _ebx1 + 80;
+ 	        var _eb_hov = point_in_rectangle(_mx, _my, _ebx1, _btn_y, _ebx2, _btn_y + 20);
++	        if (global.tour_active) {
++	            scr_tour_capture("ASSET:BMP_EDIT", _ebx1, _btn_y, _ebx2, _btn_y + 20);
++	        }
+ 	        draw_set_color(_eb_hov ? make_color_rgb(60, 180, 200) : (_is_ed ? make_color_rgb(20, 70, 90) : make_color_rgb(20, 70, 90)));
+ 	        draw_rectangle(_ebx1, _btn_y, _ebx2, _btn_y + 20, false);
+ 	        draw_set_font_l(fnt_c64_tiny);
+diff --git a/C64Devmachine/objects/obj_c64_node/Draw_0.gml b/C64Devmachine/objects/obj_c64_node/Draw_0.gml
+index 59f6425..7376bba 100644
+--- a/C64Devmachine/objects/obj_c64_node/Draw_0.gml
++++ b/C64Devmachine/objects/obj_c64_node/Draw_0.gml
+@@ -2024,6 +2024,13 @@ if (node_type == "LABEL") {
+         // 2. Draw Editable Value immediately after prefix (Yellow)
+         draw_set_color(c_yellow);
+         draw_text_l(_cursor_x, _yy, _display_val);
++
++        // Guided tour: report an operand that is still 0 so the tour can
++        // box exactly the value to click.
++        if (global.tour_active && is_connected && node_type == "NORMAL" && scr_tour_num(_raw_val) == 0) {
++            scr_tour_capture_world("OPERAND0:" + _inst_lower,
++                _cursor_x - 2, _yy - 1, _cursor_x + string_width_l(_display_val) + 2, _yy + 13);
++        }
+         
+         // 3. Draw Suffix immediately after value (e.g., ",X")
+         if (_suffix != "") {
+diff --git a/C64Devmachine/objects/obj_tour_guide/CleanUp_0.gml b/C64Devmachine/objects/obj_tour_guide/CleanUp_0.gml
+new file mode 100644
+index 0000000..8b8b2b8
+--- /dev/null
++++ b/C64Devmachine/objects/obj_tour_guide/CleanUp_0.gml
+@@ -0,0 +1,10 @@
++/// @desc Put back anything the tour changed.
++
++global.tour_active = false;
++global.tour_keys   = [];
++global.tour_rects  = [];
++global.tour_stamps = [];
++
++if (restore_expert && instance_exists(obj_workspace_manager)) {
++    obj_workspace_manager.expert_mode = true;
++}
+diff --git a/C64Devmachine/objects/obj_tour_guide/Create_0.gml b/C64Devmachine/objects/obj_tour_guide/Create_0.gml
+new file mode 100644
+index 0000000..9935452
+--- /dev/null
++++ b/C64Devmachine/objects/obj_tour_guide/Create_0.gml
+@@ -0,0 +1,33 @@
++/// @desc Guided tour overlay. Started by scr_tour_start().
++
++tour_id        = -1;
++tour_title     = "";
++steps          = [];
++step_idx       = 0;
++step_timer     = 0;
++done_timer     = 0;      // counts down after a step's check passes
++hold_auto      = false;  // true after BACK so the step does not re-skip itself
++restore_expert = false;
++
++// Check baselines (set by scr_tour_enter_step)
++base_bmp_count = 0;
++base_undo_top  = undefined;
++base_undo_name = "";
++base_build     = 0;
++
++// Smoothed highlight rect
++hl_have = false;
++hl_x1   = 0;
++hl_y1   = 0;
++hl_x2   = 0;
++hl_y2   = 0;
++
++// Caption panel + buttons, written by Draw GUI, read by Begin Step
++panel_x1  = 0;
++panel_y1  = 0;
++panel_x2  = 0;
++panel_y2  = 0;
++btn_back  = [0, 0, 0, 0];
++btn_next  = [0, 0, 0, 0];
++btn_exit  = [0, 0, 0, 0];
++panel_vis = false;
+diff --git a/C64Devmachine/objects/obj_tour_guide/Draw_75.gml b/C64Devmachine/objects/obj_tour_guide/Draw_75.gml
+new file mode 100644
+index 0000000..44b9022
+--- /dev/null
++++ b/C64Devmachine/objects/obj_tour_guide/Draw_75.gml
+@@ -0,0 +1,240 @@
++/// @desc Spotlight + caption panel.
++/// Draw GUI End: runs after every object's Draw GUI, so the overlay sits on
++/// top of the workspace, the asset panel and the editors whatever their depth.
++
++panel_vis = false;
++
++// Earlier GUI drawers (asset editors especially) can leave a scissor rect,
++// alpha, blend mode or shader behind. Start from a clean state so the
++// overlay is never clipped away or drawn invisible.
++shader_reset();
++gpu_set_blendmode(bm_normal);
++gpu_set_scissor(0, 0, window_get_width(), window_get_height());
++draw_set_alpha(1);
++draw_set_color(c_white);
++draw_set_halign(fa_left);
++draw_set_valign(fa_top);
++
++if (step_idx < 0 || step_idx >= array_length(steps)) {
++    exit;
++}
++// Stay out of the way of modal dialogs.
++if (instance_exists(obj_message_box) || instance_exists(obj_question_box) || instance_exists(obj_integer_box)) {
++    exit;
++}
++
++var _step  = steps[step_idx];
++var _gw    = global.gui_w;
++var _gh    = display_get_gui_height();
++var _pulse = 0.5 + 0.5 * sin(current_time * 0.006);
++
++// ---------------------------------------------------------------
++// HIGHLIGHT
++// ---------------------------------------------------------------
++var _r = scr_tour_resolve_rect();
++// The text entry modal has its own dim; a spotlight and connector on top of
++// it just cut across the typing box.
++if (obj_workspace_manager.text_modal_visible) {
++    _r = undefined;
++}
++if (is_undefined(_r)) {
++    hl_have = false;
++} else {
++    var _pad = 6;
++    if ((_r[3] - _r[1]) < 24) {
++        _pad = 3;
++    }
++    var _tx1 = _r[0] - _pad;
++    var _ty1 = _r[1] - _pad;
++    var _tx2 = _r[2] + _pad;
++    var _ty2 = _r[3] + _pad;
++    if (!hl_have) {
++        hl_x1 = _tx1;
++        hl_y1 = _ty1;
++        hl_x2 = _tx2;
++        hl_y2 = _ty2;
++        hl_have = true;
++    } else {
++        hl_x1 = lerp(hl_x1, _tx1, 0.35);
++        hl_y1 = lerp(hl_y1, _ty1, 0.35);
++        hl_x2 = lerp(hl_x2, _tx2, 0.35);
++        hl_y2 = lerp(hl_y2, _ty2, 0.35);
++    }
++}
++
++if (hl_have) {
++    // Dim everything except the target
++    draw_set_color(c_black);
++    draw_set_alpha(0.35);
++    draw_rectangle(0, 0, _gw, hl_y1, false);
++    draw_rectangle(0, hl_y2, _gw, _gh, false);
++    draw_rectangle(0, hl_y1, hl_x1, hl_y2, false);
++    draw_rectangle(hl_x2, hl_y1, _gw, hl_y2, false);
++
++    // Pulsing frame
++    var _grow = 2 + (_pulse * 4);
++    draw_set_alpha(0.35 + 0.5 * _pulse);
++    draw_set_color(c_yellow);
++    draw_rectangle(hl_x1 - _grow, hl_y1 - _grow, hl_x2 + _grow, hl_y2 + _grow, true);
++    draw_set_alpha(1);
++    draw_rectangle(hl_x1, hl_y1, hl_x2, hl_y2, true);
++    draw_rectangle(hl_x1 + 1, hl_y1 + 1, hl_x2 - 1, hl_y2 - 1, true);
++}
++
++// ---------------------------------------------------------------
++// CAPTION PANEL
++// ---------------------------------------------------------------
++var _pw   = 460;
++var _in_w = _pw - 40;
++
++draw_set_font_l(fnt_c64_code);
++var _text_h = string_height_ext_l(_step.text, 16, _in_w);
++var _ph     = 70 + _text_h + 44;
++
++// Centre it over the workspace, between the palette and the asset panel.
++var _left = 0;
++if (!obj_workspace_manager.expert_mode) {
++    _left = obj_workspace_manager.shelf_width + 40;
++}
++var _right = _gw;
++if (instance_exists(obj_asset_manager)) {
++    _right = obj_asset_manager.panel_x - 20;
++}
++var _px = floor(((_left + _right) * 0.5) - (_pw * 0.5));
++var _py = _gh - 70 - _ph;
++
++// Jump to the top if it would cover the target.
++if (hl_have) {
++    if (hl_x2 > _px && hl_x1 < _px + _pw && hl_y2 > _py && hl_y1 < _py + _ph) {
++        _py = 90;
++    }
++}
++
++panel_x1  = _px;
++panel_y1  = _py;
++panel_x2  = _px + _pw;
++panel_y2  = _py + _ph;
++panel_vis = true;
++
++// Connector from the panel to the target
++if (hl_have) {
++    var _cx  = (hl_x1 + hl_x2) * 0.5;
++    var _cy  = (hl_y1 + hl_y2) * 0.5;
++    var _ax  = clamp(_cx, _px + 20, _px + _pw - 20);
++    var _ay  = _py;
++    if (_cy > _py + _ph) {
++        _ay = _py + _ph;
++    }
++    var _ex = clamp(_cx, hl_x1, hl_x2);
++    var _ey = hl_y2;
++    if (_cy > _ay) {
++        _ey = hl_y1;
++    }
++    if (_cy >= hl_y1 && _cy <= hl_y2 && (_ay >= hl_y1 && _ay <= hl_y2)) {
++        _ey = _cy;
++    }
++    draw_set_color(c_yellow);
++    draw_set_alpha(0.8);
++    draw_line_width(_ax, _ay, _ex, _ey, 2);
++    draw_circle(_ex, _ey, 4, false);
++    draw_set_alpha(1);
++}
++
++draw_sprite_stretched(spr_glassSlice, obj_workspace_manager.niceSliceFrm, _px, _py, _pw, _ph);
++
++// Header
++draw_set_halign(fa_left);
++draw_set_valign(fa_top);
++draw_set_font_l(fnt_C64_Angled);
++draw_set_color(make_color_rgb(220, 140, 40));
++draw_text_l(_px + 20, _py + 16, tour_title);
++draw_set_halign(fa_right);
++draw_set_color(make_color_rgb(140, 140, 160));
++draw_text(_px + _pw - 20, _py + 16, string(step_idx + 1) + " / " + string(array_length(steps)));
++draw_set_halign(fa_left);
++
++// Step title (flashes green when done)
++var _title_col = c_yellow;
++if (done_timer > 0) {
++    _title_col = c_lime;
++}
++draw_set_color(_title_col);
++draw_text_l(_px + 20, _py + 38, _step.title);
++if (done_timer > 0) {
++    draw_set_halign(fa_right);
++    draw_text_l(_px + _pw - 20, _py + 38, "DONE!");
++    draw_set_halign(fa_left);
++}
++
++// Body
++draw_set_font_l(fnt_c64_code);
++draw_set_color(c_white);
++draw_text_ext_l(_px + 20, _py + 62, _step.text, 16, _in_w);
++
++// Progress dots
++var _dots  = array_length(steps);
++var _dot_x = _px + 20;
++var _dot_y = _py + _ph - 22;
++for (var _d = 0; _d < _dots; _d++) {
++    var _dc = make_color_rgb(70, 70, 90);
++    if (_d < step_idx) {
++        _dc = make_color_rgb(80, 160, 90);
++    }
++    if (_d == step_idx) {
++        _dc = c_yellow;
++    }
++    draw_set_color(_dc);
++    draw_circle(_dot_x + (_d * 12), _dot_y, 3, false);
++}
++
++// Buttons: EXIT  BACK  NEXT/SKIP/FINISH
++var _mx     = device_mouse_x_to_gui(0);
++var _my     = device_mouse_y_to_gui(0);
++var _bw     = 70;
++var _bh     = 20;
++var _by     = _py + _ph - 32;
++var _last   = (step_idx >= array_length(steps) - 1);
++var _nlabel = "NEXT";
++if (_step.check != "NONE") {
++    _nlabel = "SKIP";
++}
++if (_last) {
++    _nlabel = "FINISH";
++}
++
++btn_next = [_px + _pw - 20 - _bw, _by, _px + _pw - 20, _by + _bh];
++btn_back = [btn_next[0] - 8 - _bw, _by, btn_next[0] - 8, _by + _bh];
++btn_exit = [btn_back[0] - 8 - _bw, _by, btn_back[0] - 8, _by + _bh];
++
++var _btns   = [btn_exit, btn_back, btn_next];
++var _labels = ["EXIT", "BACK", _nlabel];
++draw_set_font_l(fnt_c64_tiny);
++draw_set_halign(fa_center);
++for (var _b = 0; _b < 3; _b++) {
++    var _br  = _btns[_b];
++    var _off = (_b == 1 && step_idx == 0);
++    var _hov = (!_off && point_in_rectangle(_mx, _my, _br[0], _br[1], _br[2], _br[3]));
++    var _bg  = make_color_rgb(40, 40, 60);
++    if (_hov) {
++        _bg = make_color_rgb(70, 70, 110);
++    }
++    if (_b == 2 && _step.check == "NONE") {
++        _bg = make_color_rgb(40, 110, 60);
++        if (_hov) {
++            _bg = make_color_rgb(60, 160, 90);
++        }
++    }
++    draw_set_color(_bg);
++    draw_rectangle(_br[0], _br[1], _br[2], _br[3], false);
++    draw_set_color(make_color_rgb(110, 110, 150));
++    draw_rectangle(_br[0], _br[1], _br[2], _br[3], true);
++    var _tc = c_white;
++    if (_off) {
++        _tc = make_color_rgb(90, 90, 90);
++    }
++    draw_set_color(_tc);
++    draw_text_l((_br[0] + _br[2]) * 0.5, _br[1] + 4, _labels[_b]);
++}
++draw_set_halign(fa_left);
++draw_set_color(c_white);
++draw_set_alpha(1);
+diff --git a/C64Devmachine/objects/obj_tour_guide/Step_0.gml b/C64Devmachine/objects/obj_tour_guide/Step_0.gml
+new file mode 100644
+index 0000000..7e81af3
+--- /dev/null
++++ b/C64Devmachine/objects/obj_tour_guide/Step_0.gml
+@@ -0,0 +1,35 @@
++/// @desc Advance the tour when the current step is done.
++
++global.tour_frame++;
++step_timer++;
++
++if (step_idx < 0 || step_idx >= array_length(steps)) {
++    exit;
++}
++
++var _step = steps[step_idx];
++
++// Short "done" flash, then move on.
++if (done_timer > 0) {
++    done_timer--;
++    if (done_timer == 0) {
++        if (step_idx < array_length(steps) - 1) {
++            step_idx++;
++            scr_tour_enter_step();
++        }
++    }
++    exit;
++}
++
++// After BACK, wait until the step is genuinely undone before auto-advancing
++// again, otherwise it would skip straight forward.
++if (hold_auto) {
++    if (!scr_tour_check(_step.check)) {
++        hold_auto = false;
++    }
++    exit;
++}
++
++if (scr_tour_check(_step.check)) {
++    done_timer = 40;
++}
+diff --git a/C64Devmachine/objects/obj_tour_guide/Step_1.gml b/C64Devmachine/objects/obj_tour_guide/Step_1.gml
+new file mode 100644
+index 0000000..267b7a1
+--- /dev/null
++++ b/C64Devmachine/objects/obj_tour_guide/Step_1.gml
+@@ -0,0 +1,45 @@
++/// @desc Caption panel buttons (Begin Step, so the click is claimed before
++///       nodes and the workspace see it).
++
++if (!panel_vis) {
++    exit;
++}
++if (!mouse_check_button_pressed(mb_left)) {
++    exit;
++}
++
++var _mx = device_mouse_x_to_gui(0);
++var _my = device_mouse_y_to_gui(0);
++
++if (!point_in_rectangle(_mx, _my, panel_x1, panel_y1, panel_x2, panel_y2)) {
++    exit;
++}
++
++global.ui_click_block_timer = 6;
++
++var _last = array_length(steps) - 1;
++
++if (point_in_rectangle(_mx, _my, btn_exit[0], btn_exit[1], btn_exit[2], btn_exit[3])) {
++    scr_tour_end();
++    exit;
++}
++
++if (point_in_rectangle(_mx, _my, btn_back[0], btn_back[1], btn_back[2], btn_back[3])) {
++    if (step_idx > 0) {
++        step_idx--;
++        hold_auto = true;
++        scr_tour_enter_step();
++    }
++    exit;
++}
++
++if (point_in_rectangle(_mx, _my, btn_next[0], btn_next[1], btn_next[2], btn_next[3])) {
++    if (step_idx >= _last) {
++        scr_tour_end();
++        exit;
++    }
++    step_idx++;
++    hold_auto = false;
++    scr_tour_enter_step();
++    exit;
++}
+diff --git a/C64Devmachine/objects/obj_tour_guide/obj_tour_guide.yy b/C64Devmachine/objects/obj_tour_guide/obj_tour_guide.yy
+new file mode 100644
+index 0000000..b8afba0
+--- /dev/null
++++ b/C64Devmachine/objects/obj_tour_guide/obj_tour_guide.yy
+@@ -0,0 +1,39 @@
++{
++  "$GMObject":"",
++  "%Name":"obj_tour_guide",
++  "eventList":[
++    {"$GMEvent":"v1","%Name":"","collisionObjectId":null,"eventNum":0,"eventType":0,"isDnD":false,"name":"","resourceType":"GMEvent","resourceVersion":"2.0",},
++    {"$GMEvent":"v1","%Name":"","collisionObjectId":null,"eventNum":1,"eventType":3,"isDnD":false,"name":"","resourceType":"GMEvent","resourceVersion":"2.0",},
++    {"$GMEvent":"v1","%Name":"","collisionObjectId":null,"eventNum":0,"eventType":3,"isDnD":false,"name":"","resourceType":"GMEvent","resourceVersion":"2.0",},
++    {"$GMEvent":"v1","%Name":"","collisionObjectId":null,"eventNum":75,"eventType":8,"isDnD":false,"name":"","resourceType":"GMEvent","resourceVersion":"2.0",},
++    {"$GMEvent":"v1","%Name":"","collisionObjectId":null,"eventNum":0,"eventType":12,"isDnD":false,"name":"","resourceType":"GMEvent","resourceVersion":"2.0",},
++  ],
++  "managed":true,
++  "name":"obj_tour_guide",
++  "overriddenProperties":[],
++  "parent":{
++    "name":"OBJECTS",
++    "path":"folders/OBJECTS.yy",
++  },
++  "parentObjectId":null,
++  "persistent":false,
++  "physicsAngularDamping":0.1,
++  "physicsDensity":0.5,
++  "physicsFriction":0.2,
++  "physicsGroup":1,
++  "physicsKinematic":false,
++  "physicsLinearDamping":0.1,
++  "physicsObject":false,
++  "physicsRestitution":0.1,
++  "physicsSensor":false,
++  "physicsShape":1,
++  "physicsShapePoints":[],
++  "physicsStartAwake":true,
++  "properties":[],
++  "resourceType":"GMObject",
++  "resourceVersion":"2.0",
++  "solid":false,
++  "spriteId":null,
++  "spriteMaskId":null,
++  "visible":true,
++}
+\ No newline at end of file
+diff --git a/C64Devmachine/objects/obj_workspace_manager/Alarm_6.gml b/C64Devmachine/objects/obj_workspace_manager/Alarm_6.gml
+index 757f424..59bc2d6 100644
+--- a/C64Devmachine/objects/obj_workspace_manager/Alarm_6.gml
++++ b/C64Devmachine/objects/obj_workspace_manager/Alarm_6.gml
+@@ -1,4 +1,8 @@
+ /// @desc Deferred Autosave Check (Safe for Mac)
++// Coming back from a tour's clear-restart: don't offer the old autosave.
++if (tour_start_pending >= 0 || global.tour_active) {
++    exit;
++}
+ if (welcome_open) {
+     alarm[5] = 50; // wait for the welcome screen to close first
+     exit;
+diff --git a/C64Devmachine/objects/obj_workspace_manager/Create_0.gml b/C64Devmachine/objects/obj_workspace_manager/Create_0.gml
+index b28d243..e5ec5a3 100644
+--- a/C64Devmachine/objects/obj_workspace_manager/Create_0.gml
++++ b/C64Devmachine/objects/obj_workspace_manager/Create_0.gml
+@@ -130,6 +130,8 @@ version_banner_dismissed = false;
+ welcome_open           = false;
+ welcome_hide_checked   = false;
+ welcome_credits_y      = 0;
++welcome_mode           = 0;      // 0 = welcome / what's new, 1 = guided tour list
++welcome_tour_scroll    = 0;      // first visible row in the tour list
+ welcome_whats_new = [
+     "NEW - STARLIGHT UI theme, tidied up other themes added bkg for cyberpunk theme.",
+     "NEW - ROOMS node - for optimised room switching.",
+@@ -421,6 +423,22 @@ silent_build = false;
+ pending_dump = false;
+ global.last_built = false;
+ global.last_bytes = [];
++
++// Guided tours (scr_tour_guide / obj_tour_guide). The draw loops report the
++// rects of whatever the current tour step points at via scr_tour_capture.
++global.tour_active      = false;
++global.tour_keys        = [];
++global.tour_rects       = [];
++global.tour_stamps      = [];
++global.tour_frame       = 0;
++global.tour_build_count = 0;
++global.tour_waiting     = -1;   // tour id waiting on the clear/save question
++global.tour_default_hash = "";  // workspace hash of the fresh startup state
++tour_baseline_timer     = 30;   // frames before the startup hash is taken
++tour_start_pending      = -1;   // tour to start after a clear-restart
++// True while the centre-screen text entry modal is on screen (set in Draw GUI).
++// The tour hides its spotlight then so it does not cut across the modal.
++text_modal_visible      = false;
+ global.sid_active = false;
+ global.node_link_max_dist = 500;
+ 
+@@ -1058,6 +1076,17 @@ var _hide_welcome = ini_read_real("Settings", "hide_welcome", 0);
+ welcome_hide_checked = (_hide_welcome != 0);
+ welcome_open          = !welcome_hide_checked;
+ 
++// A tour asked for a clean workspace and restarted the app: skip the welcome
++// panel and start that tour once the fresh workspace has settled.
++// The settings ini is already open here (closed further down), so no
++// ini_open/ini_close of our own - closing it early broke the reads below.
++var _tour_after_restart = ini_read_real("Tour", "pending", -1);
++if (_tour_after_restart >= 0) {
++    ini_write_real("Tour", "pending", -1);
++    tour_start_pending = _tour_after_restart;
++    welcome_open       = false;
++}
++
+ // ---- SHOW CODE PANEL (floating live listing, left of the shortcuts column) ----
+ // -1 on x is the "never positioned" marker; the draw script parks it beside the
+ // shortcuts column the first time it runs, then this holds the dragged position.
+diff --git a/C64Devmachine/objects/obj_workspace_manager/Draw_64.gml b/C64Devmachine/objects/obj_workspace_manager/Draw_64.gml
+index 69fe8e7..6d6bd49 100644
+--- a/C64Devmachine/objects/obj_workspace_manager/Draw_64.gml
++++ b/C64Devmachine/objects/obj_workspace_manager/Draw_64.gml
+@@ -383,6 +383,10 @@ for (var i = 0; i < array_length(active_palette); i++) {
+     var is_hover = (gui_mouse_x > btn_x && gui_mouse_x < btn_x + btn_w &&
+                     gui_mouse_y > btn_y && gui_mouse_y < btn_y + btn_h);
+ 
++    if (global.tour_active) {
++        scr_tour_capture("PAL:" + item.title, btn_x, btn_y, btn_x + btn_w, btn_y + btn_h);
++    }
++
+     // Check if this button is a finder match
+     var _is_finder_match = false;
+     if (opcode_finder_text != "") {
+@@ -519,6 +523,9 @@ if (shelf_page > 0) {
+     // Hover check needs to look at the full box around the center
+     var l_hover = (gui_mouse_x >= lx - hw && gui_mouse_x < lx + hw &&
+                    gui_mouse_y >= ly - hh && gui_mouse_y < ly + hh);
++    if (global.tour_active) {
++        scr_tour_capture("ARROW:L", lx - hw, ly - hh, lx + hw, ly + hh);
++    }
+     
+     var l_frame = 0;
+ 	if paletteStyle>1 l_frame=2
+@@ -541,6 +548,9 @@ if (shelf_page < p_count - 1) {
+     
+     var r_hover = (gui_mouse_x >= rx - hw && gui_mouse_x < rx + hw &&
+                    gui_mouse_y >= ry - hh && gui_mouse_y < ry + hh);
++    if (global.tour_active) {
++        scr_tour_capture("ARROW:R", rx - hw, ry - hh, rx + hw, ry + hh);
++    }
+     
+     var r_frame = 0;
+ 	if paletteStyle>1 r_frame=2
+@@ -1131,6 +1141,9 @@ for (var _bi = 0; _bi < _menuitems; _bi++) {
+     var _bhover = (!_bdisabled &&
+                    gui_mouse_x >= _bx && gui_mouse_x < _bx + _mbar_btn_w &&
+                    gui_mouse_y >= _by && gui_mouse_y < _by + _mbar_btn_h);
++    if (global.tour_active) {
++        scr_tour_capture("MENU:" + string(_bi), _bx, _by, _bx + _mbar_btn_w, _by + _mbar_btn_h);
++    }
+     if (_bhover || _bopen) {
+         var _menu_overlay_additive = (uiChromeStyle == 0);
+         if (_menu_overlay_additive) gpu_set_blendmode(bm_add);
+@@ -1440,7 +1453,8 @@ if (gui_menu_open == 5) {
+         { title: "GLOSS DARK",      url: "https://drive.google.com/file/d/1k_OaDIK1II1-M7eJ2JJrWMJOVPGEmE_z/view?usp=drive_link" }, // link under here
+         { title: "HELPER PAGE",            url: "https://robram78.github.io/C64_HELPER/" }, // link under here
+         { title: "HELPER V2+C64U",            url: "https://robram78.github.io/C64_HELPER/u64_registers.html" }, // link under here
+-        
++        { title: "-- GUIDED TOURS --", url: "HEADER" },
++        { title: "TAKE THE TOUR...",     url: "TOURS" },
+     ];
+ 
+     var _item_h_d   = 20;
+@@ -1482,7 +1496,14 @@ if (gui_menu_open == 5) {
+ 
+         if (_ihov && mouse_check_button_pressed(mb_left)) {
+             gui_menu_open = -1;
+-            if (_dp.url != "") {
++            if (_dp.url == "TOURS") {
++                // Open the welcome panel straight on its tour list.
++                welcome_open        = true;
++                welcome_mode        = 1;
++                welcome_tour_scroll = 0;
++            } else if (string_copy(_dp.url, 1, 5) == "TOUR:") {
++                scr_tour_request(real(string_delete(_dp.url, 1, 5)));
++            } else if (_dp.url != "") {
+                 url_open(_dp.url);
+             }
+         }
+@@ -1662,6 +1683,9 @@ if (gui_menu_open == 0) {
+             hover_macro_type  = _mp.type;
+             hover_macro_title = _mp.title;
+         }
++        if (global.tour_active) {
++            scr_tour_capture("MAC:" + _mp.type, _ix1, _iy, _ix2, _iy + _item_h);
++        }
+ 
+         // Keep macro menu rows clean: no button sprite behind menu entries.
+         if (_ihov) {
+@@ -1887,6 +1911,9 @@ for (var j = 0; j < array_length(shortcuts); j++) {
+     var btn_hover = (gui_mouse_x > box_x1 && gui_mouse_x < box_x2 &&
+                      gui_mouse_y > box_y1 && gui_mouse_y < box_y2);
+     var btn_click = btn_hover && mouse_check_button(mb_left);
++    if (global.tour_active) {
++        scr_tour_capture("UI:" + shortcuts[j][1], box_x1, box_y1, box_x2, box_y2);
++    }
+     var is_toggle = (shortcuts[j][1] == "TOGGLE HEX/DEC" || shortcuts[j][1] == "TOGGLE AUTOSAVE MODE");
+ 
+     var body_col = is_toggle
+@@ -2369,10 +2396,17 @@ scr_draw_memory_bar(_bar_x1, _bar_x2, gui_h - 40);
+ /////////////////////////////////////////////////////////////////
+ // A COMMENT is typed on the node itself now, so the centre-screen modal is
+ // skipped entirely for one - obj_c64_node draws the live text and the caret.
++// PRINT's inline text row (index 5) does the same: the node already draws
++// the live string with its caret, so the modal only duplicated it.
+ // Everything else still gets the modal.
+ var _modal_is_comment = (is_entering_text && instance_exists(input_target_node)
+                       && (input_target_node.node_type == "COMMENT"
+                        || input_target_node.node_title == "COMMENT"));
++if (is_entering_text && instance_exists(input_target_node)
++    && input_target_node.node_type == "MACRO_PRINT" && input_target_index == 5) {
++    _modal_is_comment = true;
++}
++text_modal_visible = (is_entering_text && !_modal_is_comment);
+ if (is_entering_text && !_modal_is_comment) {
+     if (global.show_info_window) is_entering_text = false;
+ 
+@@ -3919,83 +3953,170 @@ if (welcome_open) {
+     draw_text_l(_px + _pw / 2, _py + 40, L("VERSION: ") + string(GM_version) + L("   DATE: ") + global.build_date);
+     draw_set_halign(fa_left);
+ 
+-    // What's New
+-    var _wy = _py + 70;
+-    draw_set_font_l(fnt_C64_Angled);
+-    draw_set_color(make_color_rgb(220, 140, 40));
+-    draw_text_l(_px + 20, _wy, "WHAT'S NEW?");
+-    _wy += 22;
+-    draw_set_font_l(fnt_c64_tiny);
+-    draw_set_color(c_aqua);
+-    for (var _wi = 0; _wi < array_length(welcome_whats_new); _wi++) {
+-        // An empty entry is a spacer, not a bullet. Without this it drew a
+-        // lone "- " on its own line above the SHARE note.
+-        if (welcome_whats_new[_wi] == "") {
++    var _tg = scr_tour_welcome_geom(_px, _py, _pw, _ph);
++
++    if (welcome_mode == 1) {
++        // ---- GUIDED TOUR LIST ----
++        var _tours = scr_tour_list();
++        draw_set_font_l(fnt_C64_Angled);
++        draw_set_color(make_color_rgb(220, 140, 40));
++        draw_text_l(_px + 20, _py + 66, "GUIDED TOURS");
++        draw_set_font_l(fnt_c64_tiny);
++        draw_set_color(make_color_rgb(160, 160, 160));
++        draw_text_l(_px + 180, _py + 72, "Pick one. Each step waits for you to do it.");
++
++        for (var _tr = 0; _tr < _tg.rows; _tr++) {
++            var _ti = welcome_tour_scroll + _tr;
++            if (_ti >= array_length(_tours)) {
++                break;
++            }
++            var _ry  = _tg.list[1] + (_tr * _tg.row_h);
++            var _rx1 = _tg.list[0];
++            var _rx2 = _tg.list[2] - 12;
++            var _rhv = point_in_rectangle(_wmx, _wmy, _rx1, _ry, _rx2, _ry + _tg.row_h - 4);
++            var _rbg = make_color_rgb(40, 40, 52);
++            if (_rhv) {
++                _rbg = make_color_rgb(60, 60, 90);
++            }
++            draw_set_color(_rbg);
++            draw_rectangle(_rx1, _ry, _rx2, _ry + _tg.row_h - 4, false);
++            draw_set_color(make_color_rgb(90, 90, 120));
++            draw_rectangle(_rx1, _ry, _rx2, _ry + _tg.row_h - 4, true);
++
++            draw_set_font_l(fnt_c64_tiny);
++            draw_set_color(make_color_rgb(200, 160, 40));
++            draw_text(_rx1 + 10, _ry + 5, string(_ti + 1) + ".");
++            var _tc = c_white;
++            if (_rhv) {
++                _tc = c_yellow;
++            }
++            draw_set_color(_tc);
++            draw_text_l(_rx1 + 36, _ry + 4, _tours[_ti].title);
++            draw_set_color(make_color_rgb(140, 200, 200));
++            draw_text_l(_rx1 + 36, _ry + 19, _tours[_ti].blurb);
++        }
++
++        // Where to find this list again, bottom-left beside the BACK button
++        draw_set_font_l(fnt_c64_tiny);
++        draw_set_color(make_color_rgb(160, 160, 160));
++        draw_text_l(_px + 20, _py + _ph - 44, "You can also find the guided tours in");
++        draw_set_color(make_color_rgb(200, 160, 40));
++        draw_text_l(_px + 20, _py + _ph - 30, "DOCUMENTS > TAKE THE TOUR...");
++
++        // Scrollbar, only when the list is longer than the panel
++        if (array_length(_tours) > _tg.rows) {
++            var _sb_x1 = _tg.list[2] - 6;
++            var _sb_y1 = _tg.list[1];
++            var _sb_h  = _tg.rows * _tg.row_h - 4;
++            var _th_h  = max(20, _sb_h * (_tg.rows / array_length(_tours)));
++            var _th_y  = _sb_y1 + (_sb_h - _th_h) * (welcome_tour_scroll / max(1, array_length(_tours) - _tg.rows));
++            draw_set_color(make_color_rgb(40, 40, 52));
++            draw_rectangle(_sb_x1, _sb_y1, _sb_x1 + 6, _sb_y1 + _sb_h, false);
++            draw_set_color(make_color_rgb(200, 160, 40));
++            draw_rectangle(_sb_x1, _th_y, _sb_x1 + 6, _th_y + _th_h, false);
++        }
++    } else {
++        // What's New
++        var _wy = _py + 70;
++        draw_set_font_l(fnt_C64_Angled);
++        draw_set_color(make_color_rgb(220, 140, 40));
++        draw_text_l(_px + 20, _wy, "WHAT'S NEW?");
++        _wy += 22;
++        draw_set_font_l(fnt_c64_tiny);
++        draw_set_color(c_aqua);
++        for (var _wi = 0; _wi < array_length(welcome_whats_new); _wi++) {
++            // An empty entry is a spacer, not a bullet. Without this it drew a
++            // lone "- " on its own line above the SHARE note.
++            if (welcome_whats_new[_wi] == "") {
++                _wy += 16;
++                continue;
++            }
++            draw_text_l(_px + 30, _wy, "- " + welcome_whats_new[_wi]);
+             _wy += 16;
+-            continue;
+         }
+-        draw_text_l(_px + 30, _wy, "- " + welcome_whats_new[_wi]);
+-        _wy += 16;
+-    }
+ 
+-    // Credits header
+-    _wy += 14;
+-    draw_set_font_l(fnt_C64_Angled);
+-    draw_set_color(make_color_rgb(220, 140, 40));
+-    draw_set_halign(fa_center);
+-    draw_text_l(_px + _pw / 2, _wy, "CREDITS");
+-    draw_set_halign(fa_left);
+-    _wy += 22;
+-
+-    // Scissored, auto-scrolling credits crawl
+-    var _cr_x1 = _px + 20;
+-    var _cr_y1 = _wy;
+-    var _cr_x2 = _px + _pw - 20;
+-    var _cr_y2 = _cr_y1 + 180;
+-    var _cr_line_h = 16;
+-
+-    var _sx_sc = window_get_width()  / global.gui_w;
+-    var _sy_sc = window_get_height() / display_get_gui_height();
+-    gpu_set_scissor(
+-        floor(_cr_x1 * _sx_sc),
+-        floor(_cr_y1 * _sy_sc),
+-        ceil((_cr_x2 - _cr_x1) * _sx_sc),
+-        ceil((_cr_y2 - _cr_y1) * _sy_sc)
+-    );
++        // Credits header
++        _wy += 14;
++        draw_set_font_l(fnt_C64_Angled);
++        draw_set_color(make_color_rgb(220, 140, 40));
++        draw_set_halign(fa_center);
++        draw_text_l(_px + _pw / 2, _wy, "CREDITS");
++        draw_set_halign(fa_left);
++        _wy += 22;
++
++        // Scissored, auto-scrolling credits crawl
++        var _cr_x1 = _px + 20;
++        var _cr_y1 = _wy;
++        var _cr_x2 = _px + _pw - 20;
++        var _cr_y2 = _cr_y1 + 180;
++        var _cr_line_h = 16;
++
++        var _sx_sc = window_get_width()  / global.gui_w;
++        var _sy_sc = window_get_height() / display_get_gui_height();
++        gpu_set_scissor(
++            floor(_cr_x1 * _sx_sc),
++            floor(_cr_y1 * _sy_sc),
++            ceil((_cr_x2 - _cr_x1) * _sx_sc),
++            ceil((_cr_y2 - _cr_y1) * _sy_sc)
++        );
+ 
+-    draw_set_font_l(fnt_c64_tiny);
+-    var _cr_start_y = _cr_y2 - welcome_credits_y;
+-    for (var _ci = 0; _ci < array_length(welcome_credits_lines); _ci++) {
+-        var _cly = _cr_start_y + (_ci * _cr_line_h);
+-        if (_cly > _cr_y1 - _cr_line_h && _cly < _cr_y2 + _cr_line_h) {
+-            var _ctxt      = welcome_credits_lines[_ci];
+-            var _is_header = (_ctxt == "CODE and DESIGN" || _ctxt == "COMMUNITY INPUT" || _ctxt == "And...");
+-            draw_set_color(_is_header ? make_color_rgb(220, 140, 40) : c_white);
+-            draw_set_halign(fa_center);
+-            draw_text_l(_px + _pw / 2, _cly, _ctxt);
+-            draw_set_halign(fa_left);
++        draw_set_font_l(fnt_c64_tiny);
++        var _cr_start_y = _cr_y2 - welcome_credits_y;
++        for (var _ci = 0; _ci < array_length(welcome_credits_lines); _ci++) {
++            var _cly = _cr_start_y + (_ci * _cr_line_h);
++            if (_cly > _cr_y1 - _cr_line_h && _cly < _cr_y2 + _cr_line_h) {
++                var _ctxt      = welcome_credits_lines[_ci];
++                var _is_header = (_ctxt == "CODE and DESIGN" || _ctxt == "COMMUNITY INPUT" || _ctxt == "And...");
++                draw_set_color(_is_header ? make_color_rgb(220, 140, 40) : c_white);
++                draw_set_halign(fa_center);
++                draw_text_l(_px + _pw / 2, _cly, _ctxt);
++                draw_set_halign(fa_left);
++            }
++        }
++
++        gpu_set_scissor(0, 0, window_get_width(), window_get_height());
++
++        // Checkbox
++        var _chkx1   = _px + 20;
++        var _chky1   = _py + _ph - 40;
++        var _chkx2   = _chkx1 + 18;
++        var _chky2   = _chky1 + 18;
++        var _chk_hov = point_in_rectangle(_wmx, _wmy, _chkx1, _chky1, _chkx2, _chky2);
++        draw_set_color(_chk_hov ? make_color_rgb(200, 160, 40) : make_color_rgb(90, 90, 90));
++        draw_rectangle(_chkx1, _chky1, _chkx2, _chky2, true);
++        if (welcome_hide_checked) {
++            draw_set_color(make_color_rgb(200, 160, 40));
++            draw_text_l(_chkx1 + 3, _chky1 - 2, "X");
+         }
++        draw_set_font_l(fnt_c64_tiny);
++        draw_set_color(c_white);
++        draw_text_l(_chkx2 + 8, _chky1, "DON'T SHOW ON STARTUP");
++        draw_set_color(make_color_rgb(140, 140, 140));
++        draw_text_l(_chkx2 + 8, _chky1 + 14, welcome_hide_checked ? L("(currently: hidden on startup)") : L("(currently: shows on startup)"));
++
+     }
+ 
+-    gpu_set_scissor(0, 0, window_get_width(), window_get_height());
+-
+-    // Checkbox
+-    var _chkx1   = _px + 20;
+-    var _chky1   = _py + _ph - 40;
+-    var _chkx2   = _chkx1 + 18;
+-    var _chky2   = _chky1 + 18;
+-    var _chk_hov = point_in_rectangle(_wmx, _wmy, _chkx1, _chky1, _chkx2, _chky2);
+-    draw_set_color(_chk_hov ? make_color_rgb(200, 160, 40) : make_color_rgb(90, 90, 90));
+-    draw_rectangle(_chkx1, _chky1, _chkx2, _chky2, true);
+-    if (welcome_hide_checked) {
+-        draw_set_color(make_color_rgb(200, 160, 40));
+-        draw_text_l(_chkx1 + 3, _chky1 - 2, "X");
++    // TAKE THE TOUR / BACK button
++    var _tb_hov = point_in_rectangle(_wmx, _wmy, _tg.btn[0], _tg.btn[1], _tg.btn[2], _tg.btn[3]);
++    var _tb_bg  = make_color_rgb(40, 110, 60);
++    if (_tb_hov) {
++        _tb_bg = make_color_rgb(60, 160, 90);
+     }
+-    draw_set_font_l(fnt_c64_tiny);
++    draw_set_color(_tb_bg);
++    draw_rectangle(_tg.btn[0], _tg.btn[1], _tg.btn[2], _tg.btn[3], false);
++    draw_set_color(make_color_rgb(120, 200, 140));
++    draw_rectangle(_tg.btn[0], _tg.btn[1], _tg.btn[2], _tg.btn[3], true);
++    var _tb_label = "TAKE THE TOUR";
++    if (welcome_mode == 1) {
++        _tb_label = "BACK";
++    }
++    draw_set_font_l(fnt_C64_Angled);
+     draw_set_color(c_white);
+-    draw_text_l(_chkx2 + 8, _chky1, "DON'T SHOW ON STARTUP");
+-    draw_set_color(make_color_rgb(140, 140, 140));
+-    draw_text_l(_chkx2 + 8, _chky1 + 14, welcome_hide_checked ? L("(currently: hidden on startup)") : L("(currently: shows on startup)"));
++    draw_set_halign(fa_center);
++    draw_set_valign(fa_middle);
++    draw_text_l((_tg.btn[0] + _tg.btn[2]) * 0.5, (_tg.btn[1] + _tg.btn[3]) * 0.5, _tb_label);
++    draw_set_halign(fa_left);
++    draw_set_valign(fa_top);
+ 
+     // Close button
+     var _cbx1   = _px + _pw - 36;
+diff --git a/C64Devmachine/objects/obj_workspace_manager/Step_0.gml b/C64Devmachine/objects/obj_workspace_manager/Step_0.gml
+index 1d3b0e6..3d09296 100644
+--- a/C64Devmachine/objects/obj_workspace_manager/Step_0.gml
++++ b/C64Devmachine/objects/obj_workspace_manager/Step_0.gml
+@@ -1,4 +1,19 @@
+ scr_template_step();
++scr_tour_question_step();
++
++// Record what a clean workspace looks like, then start any tour that asked
++// for the restart that produced it.
++if (tour_baseline_timer > 0) {
++    tour_baseline_timer--;
++    if (tour_baseline_timer == 0) {
++        global.tour_default_hash = scr_save_workspace_as_path("", true);
++        if (tour_start_pending >= 0) {
++            var _tsp = tour_start_pending;
++            tour_start_pending = -1;
++            scr_tour_start(_tsp);
++        }
++    }
++}
+ // First frame only: offer back an emergency save if the last run crashed.
+ // In Step rather than Create so everything the loader touches already exists.
+ // First run only: ask for a language. The crash-recovery offer waits until
+@@ -118,17 +133,62 @@ if (welcome_open) {
+             part_emitter_burst(global.fx_sys, 0, global.pt_node_vapor, 640);
+         }
+         welcome_open = false;
++        welcome_mode = 0;
+     }
+ 
+-    // Checkbox (bottom-left)
+-    var _chkx1 = _px + 20;
+-    var _chky1 = _py + _ph - 40;
+-    var _chkx2 = _chkx1 + 18;
+-    var _chky2 = _chky1 + 18;
+-    if (point_in_rectangle(_wmx, _wmy, _chkx1, _chky1, _chkx2, _chky2)
+-        && mouse_check_button_pressed(mb_left)) {
+-        welcome_hide_checked = !welcome_hide_checked;
+-        scr_welcome_save_pref(welcome_hide_checked);
++    // TAKE THE TOUR / BACK button (bottom-right) and the tour list
++    var _tg = scr_tour_welcome_geom(_px, _py, _pw, _ph);
++    var _tour_pick = -1;
++    if (welcome_open && mouse_check_button_pressed(mb_left)
++        && point_in_rectangle(_wmx, _wmy, _tg.btn[0], _tg.btn[1], _tg.btn[2], _tg.btn[3])) {
++        if (welcome_mode == 0) {
++            welcome_mode        = 1;
++            welcome_tour_scroll = 0;
++        } else {
++            welcome_mode = 0;
++        }
++    } else if (welcome_open && welcome_mode == 1) {
++        var _tours     = scr_tour_list();
++        var _max_scrl  = max(0, array_length(_tours) - _tg.rows);
++        if (point_in_rectangle(_wmx, _wmy, _tg.list[0], _tg.list[1], _tg.list[2], _tg.list[3])) {
++            if (mouse_wheel_up()) {
++                welcome_tour_scroll--;
++            }
++            if (mouse_wheel_down()) {
++                welcome_tour_scroll++;
++            }
++        }
++        welcome_tour_scroll = clamp(welcome_tour_scroll, 0, _max_scrl);
++        if (mouse_check_button_pressed(mb_left)) {
++            for (var _tr = 0; _tr < _tg.rows; _tr++) {
++                var _ti = welcome_tour_scroll + _tr;
++                if (_ti >= array_length(_tours)) {
++                    break;
++                }
++                var _ry = _tg.list[1] + (_tr * _tg.row_h);
++                if (point_in_rectangle(_wmx, _wmy, _tg.list[0], _ry, _tg.list[2], _ry + _tg.row_h - 4)) {
++                    _tour_pick = _ti;
++                }
++            }
++        }
++    } else if (welcome_open) {
++        // Checkbox (bottom-left) - welcome page only
++        var _chkx1 = _px + 20;
++        var _chky1 = _py + _ph - 40;
++        var _chkx2 = _chkx1 + 18;
++        var _chky2 = _chky1 + 18;
++        if (point_in_rectangle(_wmx, _wmy, _chkx1, _chky1, _chkx2, _chky2)
++            && mouse_check_button_pressed(mb_left)) {
++            welcome_hide_checked = !welcome_hide_checked;
++            scr_welcome_save_pref(welcome_hide_checked);
++        }
++    }
++
++    if (_tour_pick >= 0) {
++        welcome_open = false;
++        welcome_mode = 0;
++        io_clear();
++        scr_tour_request(_tour_pick);
+     }
+ 
+     // Keep the actual camera view in sync even though everything else is
+@@ -144,6 +204,7 @@ if (welcome_open) {
+ // F1 reopens the welcome screen at any time
+ if (!is_entering_text && !global.is_any_text_active && keyboard_check_pressed(vk_f1)) {
+     welcome_open = true;
++    welcome_mode = 0;
+ }
+ 
+ // F toggles the flow overlay — rebuilds only if a node was added/removed
+@@ -3038,6 +3099,7 @@ var _dbg_keys = ds_map_keys_to_array(p.labels);
+ 
+     global.last_base_pc = global.start_pc;
+     global.last_built   = true;
++    global.tour_build_count++;
+ 
+ 
+ // Patch IRQ vector ($AA/$BB placeholders → sid_irq or ts_irq address)
+diff --git a/C64Devmachine/scripts/scr_node_draw_macro_bmp/scr_node_draw_macro_bmp.gml b/C64Devmachine/scripts/scr_node_draw_macro_bmp/scr_node_draw_macro_bmp.gml
+index e5cb2dc..f0bc3ec 100644
+--- a/C64Devmachine/scripts/scr_node_draw_macro_bmp/scr_node_draw_macro_bmp.gml
++++ b/C64Devmachine/scripts/scr_node_draw_macro_bmp/scr_node_draw_macro_bmp.gml
+@@ -41,6 +41,9 @@ function scr_node_draw_macro_bmp(_draw_x, _y) {
+     var _ly = _y + _header_h + 4;
+ 
+     // Row 1: Asset name
++    if (global.tour_active && is_connected) {
++        scr_tour_capture_world("FIELD:MACRO_BMP:asset", _draw_x + 68, _ly - 1, _draw_x + width - 8, _ly + 14);
++    }
+     var _name_hover = point_in_rectangle(mouse_x, mouse_y, _draw_x + 68, _ly, _draw_x + width - 8, _ly + 16);
+     draw_set_color(_c_edit);
+     scr_node_macro_text_l(_draw_x + 10, _ly, "ASSET:");
+diff --git a/C64Devmachine/scripts/scr_node_draw_macro_print/scr_node_draw_macro_print.gml b/C64Devmachine/scripts/scr_node_draw_macro_print/scr_node_draw_macro_print.gml
+index 19cdd2c..edf49e3 100644
+--- a/C64Devmachine/scripts/scr_node_draw_macro_print/scr_node_draw_macro_print.gml
++++ b/C64Devmachine/scripts/scr_node_draw_macro_print/scr_node_draw_macro_print.gml
+@@ -60,6 +60,12 @@ function scr_node_draw_macro_print(_draw_x, _y) {
+     draw_set_font_l(fnt_c64_tiny);
+     var _ply = _y + _header_h + 4;
+ 
++    // Guided tour: Y value and COL swatch hit areas (match scr_node_step_macro_print).
++    if (global.tour_active && is_connected) {
++        scr_tour_capture_world("FIELD:MACRO_PRINT:y",   _draw_x + 82, _ply - 1, _draw_x + 112, _ply + 14);
++        scr_tour_capture_world("FIELD:MACRO_PRINT:col", _draw_x + 48, _ply + _line_h - 1, _draw_x + 112, _ply + _line_h + 14);
++    }
++
+     // Row 1: X / Y / LOC
+     draw_set_color(_c_edit);
+     scr_node_macro_text_l(_draw_x + 8, _ply, "X:");
+@@ -183,6 +189,9 @@ function scr_node_draw_macro_print(_draw_x, _y) {
+         draw_set_color(_editing   ? make_color_rgb(40, 80, 70)  :
+                       (_txt_hover ? make_color_rgb(33, 70, 60)  : make_color_rgb(15, 25, 15)));
+         scr_macro_body_rectangle(_draw_x + 4, _ply+3, _draw_x + width - 8, _ply + 17, false);
++        if (global.tour_active && is_connected) {
++            scr_tour_capture_world("FIELD:MACRO_PRINT:text", _draw_x + 4, _ply + 3, _draw_x + width - 8, _ply + 17);
++        }
+         if (_editing) {
+             var _live    = obj_workspace_manager.current_input_string;
+             var _cur_pos = obj_workspace_manager.cursor_pos;
+diff --git a/C64Devmachine/scripts/scr_tour_guide/scr_tour_guide.gml b/C64Devmachine/scripts/scr_tour_guide/scr_tour_guide.gml
+new file mode 100644
+index 0000000..13e8297
+--- /dev/null
++++ b/C64Devmachine/scripts/scr_tour_guide/scr_tour_guide.gml
+@@ -0,0 +1,656 @@
++/// scr_tour_guide - Guided tours (DOCUMENTS > GUIDED TOURS).
++///
++/// A tour is an array of steps. Each step has a title, body text, a list of
++/// highlight targets (first one found on screen wins) and a check code that
++/// auto-advances the tour when the user has done the thing.
++///
++/// Highlight targets:
++///   PAL:<title>         opcode palette button   (captured by workspace Draw GUI)
++///   ARROW:L / ARROW:R   palette page arrows     (captured)
++///   MENU:<n>            menu bar button n       (captured)
++///   MAC:<type>          MACROS dropdown row     (captured)
++///   NODEOP:<op>         first connected NORMAL node using that opcode
++///   NODETYPE:<type>     first connected node of that type
++///   OPERAND0:<op>       operand of a connected NORMAL node still at 0 (captured)
++///   FIELD:<type>:<name> one editable field on a macro node        (captured)
++///   ASSET:ADD           [ADD ASSET +] button
++///   ASSET:TYPE:<type>   row in the add-asset dropdown (only while open)
++///   ASSET:PANEL         the asset list
++///   ASSET:CLOSE         CLOSE button on any asset viewer            (captured)
++///   UI:<label>          right-hand shortcut button, e.g. UI:BUILD & RUN (captured)
++///
++/// Captured targets are written by scr_tour_capture() from the existing draw
++/// loops, so the highlight always sits exactly on what was drawn this frame.
++
++/// @desc Ask to start tour _id. A tour needs a clean workspace, so if the
++///       workspace differs from the one the app started with, the user is
++///       asked (and offered a save) before it is cleared with a restart.
++function scr_tour_request(_id) {
++    if (scr_tour_is_default()) {
++        scr_tour_start(_id);
++        return;
++    }
++    global.tour_waiting = _id;
++    if (scr_workspace_has_changes()) {
++        scr_show_question("Starting a tour clears the workspace.\n\nSave your changes first?", "tour_save");
++    } else {
++        scr_show_question("Starting a tour clears the workspace.\nYour saved project is not changed.\n\nClear it and start the tour?", "tour_clear");
++    }
++}
++
++/// @desc True when the workspace still matches the startup default.
++function scr_tour_is_default() {
++    if (global.tour_default_hash == "") {
++        return false;
++    }
++    return (scr_save_workspace_as_path("", true) == global.tour_default_hash);
++}
++
++/// @desc Clear the workspace the same way PROJECT > RESET/CLEAR does, and
++///       have the fresh session start tour _id once it has settled.
++function scr_tour_restart_into(_id) {
++    ini_open("c64devmachine.ini");
++    ini_write_real("Tour", "pending", _id);
++    ini_close();
++    game_restart();
++}
++
++/// @desc Answers to the tour clear / save questions. Called every Step.
++function scr_tour_question_step() {
++    var _r = global.question_result;
++    if (_r == "tour_save_yes") {
++        global.question_result = "";
++        var _default = "my_project.json";
++        if (global.workspace_path != "") {
++            _default = filename_name(global.workspace_path);
++        }
++        var _path = get_save_filename("C64 Node Project|*.json", _default);
++        io_clear();
++        if (_path == "") {
++            global.tour_waiting = -1;
++            return;
++        }
++        scr_save_workspace_as_path(_path);
++        // Only clear once the save is confirmed on disk.
++        var _verified = false;
++        if (file_exists(_path)) {
++            var _saved = buffer_load(_path);
++            if (_saved != -1) {
++                _verified = (md5_string_utf8(buffer_read(_saved, buffer_text)) == global.saved_hash);
++                buffer_delete(_saved);
++            }
++        }
++        if (_verified) {
++            scr_tour_restart_into(global.tour_waiting);
++        } else {
++            global.tour_waiting = -1;
++            scr_show_message("The save could not be verified. Your current project has been kept.");
++        }
++        return;
++    }
++    if (_r == "tour_save_no") {
++        global.question_result = "";
++        scr_show_question("Discard your changes and start the tour?\nNO keeps your current project.", "tour_discard");
++        return;
++    }
++    if (_r == "tour_discard_yes" || _r == "tour_clear_yes") {
++        global.question_result = "";
++        scr_tour_restart_into(global.tour_waiting);
++        return;
++    }
++    if (_r == "tour_discard_no" || _r == "tour_clear_no") {
++        global.question_result = "";
++        global.tour_waiting = -1;
++        return;
++    }
++}
++
++/// @desc Start (or restart) tour _id on the current workspace.
++function scr_tour_start(_id) {
++    if (instance_exists(obj_tour_guide)) {
++        instance_destroy(obj_tour_guide);
++    }
++    // Depth doubles as the draw z. GameMaker clips anything at or beyond
++    // +/-16000, so -16000 drew nothing at all. -14000 keeps it above the
++    // colour pickers (-9999) and inside the visible range.
++    var _t = instance_create_depth(0, 0, -14000, obj_tour_guide);
++    with (_t) {
++        tour_id    = _id;
++        tour_title = scr_tour_title(_id);
++        steps      = scr_tour_define(_id);
++        step_idx   = 0;
++
++        // The palette is hidden in expert mode; show it for the tour and put
++        // the user's setting back when the tour ends.
++        if (obj_workspace_manager.expert_mode) {
++            obj_workspace_manager.expert_mode = false;
++            restore_expert = true;
++        }
++        scr_tour_enter_step();
++    }
++    global.tour_active = true;
++}
++
++/// @desc Tour names, shown in the caption header.
++function scr_tour_title(_id) {
++    var _list = scr_tour_list();
++    if (_id >= 0 && _id < array_length(_list)) {
++        return _list[_id].title;
++    }
++    return "TOUR";
++}
++
++/// @desc Every tour, in menu order. Index = tour id used by scr_tour_define.
++///       Add new tours here and give them a matching block in scr_tour_define.
++function scr_tour_list() {
++    return [
++        { title: "BORDER & BACKGROUND", blurb: "Drag in opcodes and set the border and background colours." },
++        { title: "YOUR FIRST MACRO",    blurb: "Drag in the PRINT macro and put a message on screen." },
++        { title: "BITMAP BASICS",       blurb: "Paint a bitmap asset and show it with the BITMAP macro." },
++    ];
++}
++
++/// @desc Welcome panel tour list geometry. Shared by Step (clicks) and
++///       Draw GUI (drawing) so the two can never disagree.
++function scr_tour_welcome_geom(_px, _py, _pw, _ph) {
++    var _btn_w  = 190;
++    var _btn_h  = 30;
++    var _btn_x2 = _px + _pw - 20;
++    var _btn_y1 = _py + _ph - 46;
++    var _row_h  = 40;
++    var _list_y1 = _py + 96;
++    var _list_y2 = _py + _ph - 60;
++    return {
++        btn   : [_btn_x2 - _btn_w, _btn_y1, _btn_x2, _btn_y1 + _btn_h],
++        list  : [_px + 20, _list_y1, _px + _pw - 20, _list_y2],
++        row_h : _row_h,
++        rows  : floor((_list_y2 - _list_y1) / _row_h)
++    };
++}
++
++/// @desc Step builder.
++function scr_tour_step(_title, _text, _targets, _check) {
++    return { title: _title, text: _text, targets: _targets, check: _check };
++}
++
++/// @desc The three starter tours.
++function scr_tour_define(_id) {
++    var _s = [];
++
++    if (_id == 0) {
++        array_push(_s, scr_tour_step("WELCOME",
++            "This tour builds a tiny program that changes the C64 border and background colours using real 6502 opcodes.\n\nEach step waits for you to do it. Click NEXT to skip a step.",
++            [], "NONE"));
++        array_push(_s, scr_tour_step("DRAG IN LDA_IMM",
++            "LDA #value loads a number into the A register.\n\nDrag LDA_IMM from the opcode palette and drop it on the spine under SYSTEM INIT.",
++            ["PAL:LDA_IMM", "ARROW:L"], "OP_LDA_IMM"));
++        array_push(_s, scr_tour_step("CHOOSE A COLOUR",
++            "Click the value on your LDA node, type 2 (red) and press ENTER.\n\nC64 colours run from 0 to 15.",
++            ["OPERAND0:lda_imm", "NODEOP:lda_imm"], "LDA_NONZERO"));
++        array_push(_s, scr_tour_step("DRAG IN STA_ABS",
++            "STA stores the A register into memory.\n\nDrag STA_ABS onto the spine, under your LDA node.",
++            ["PAL:STA_ABS", "ARROW:L"], "OP_STA_ABS"));
++        array_push(_s, scr_tour_step("POINT IT AT THE BORDER",
++            "Click the STA value and type $D020, then press ENTER.\n\n$D020 is the VIC-II border colour register.",
++            ["OPERAND0:sta_abs", "NODEOP:sta_abs"], "STA_D020"));
++        array_push(_s, scr_tour_step("NOW THE BACKGROUND",
++            "Same again for the background.\n\nDrag another LDA_IMM onto the spine, under your STA node.",
++            ["PAL:LDA_IMM", "ARROW:L"], "OP_LDA_IMM_2"));
++        array_push(_s, scr_tour_step("CHOOSE A COLOUR",
++            "Click the value on the new LDA node, type 7 (yellow) and press ENTER.",
++            ["OPERAND0:lda_imm", "NODEOP:lda_imm"], "LDA_NONZERO_2"));
++        array_push(_s, scr_tour_step("DRAG IN STA_ABS",
++            "Drag another STA_ABS onto the spine, under the new LDA node.",
++            ["PAL:STA_ABS", "ARROW:L"], "OP_STA_ABS_2"));
++        array_push(_s, scr_tour_step("POINT IT AT THE BACKGROUND",
++            "Click the new STA value, type $D021 and press ENTER.\n\n$D021 is the VIC-II background colour register.",
++            ["OPERAND0:sta_abs", "NODEOP:sta_abs"], "STA_D021"));
++        array_push(_s, scr_tour_step("BUILD AND RUN",
++            "Press F5, or click BUILD & RUN on the right, to build and launch.\n\nIf you are asked about a missing loop or RTS, choose YES to add an RTS.",
++            ["UI:BUILD & RUN"], "BUILT"));
++        array_push(_s, scr_tour_step("DONE!",
++            "Your border should now be red and your background yellow.\n\nTry changing the numbers and pressing F5 again. More tours are in DOCUMENTS > GUIDED TOURS.",
++            [], "NONE"));
++    }
++
++    if (_id == 1) {
++        array_push(_s, scr_tour_step("WELCOME",
++            "Macros are ready made nodes that write lots of 6502 for you.\n\nIn this tour you will print a message on the screen.",
++            [], "NONE"));
++        array_push(_s, scr_tour_step("OPEN THE MACROS MENU",
++            "Click MACROS in the menu bar.",
++            ["MENU:0"], "MENU_MACROS"));
++        array_push(_s, scr_tour_step("DRAG IN PRINT",
++            "Drag PRINT out of the list and drop it on the spine under SYSTEM INIT.",
++            ["MAC:MACRO_PRINT", "MENU:0"], "HAS_PRINT"));
++        array_push(_s, scr_tour_step("TYPE A MESSAGE",
++            "Click the text field on the PRINT node, type HELLO C64 and press ENTER.",
++            ["FIELD:MACRO_PRINT:text", "NODETYPE:MACRO_PRINT"], "PRINT_TEXT"));
++        array_push(_s, scr_tour_step("MOVE IT DOWN",
++            "Set the Y value on the PRINT node to 10 so the message sits mid screen.",
++            ["FIELD:MACRO_PRINT:y", "NODETYPE:MACRO_PRINT"], "PRINT_Y"));
++        array_push(_s, scr_tour_step("PICK A COLOUR",
++            "Click the colour swatch on the PRINT node and choose any colour except white.",
++            ["FIELD:MACRO_PRINT:col", "NODETYPE:MACRO_PRINT"], "PRINT_COL"));
++        array_push(_s, scr_tour_step("BUILD AND RUN",
++            "Press F5, or click BUILD & RUN on the right, to build and launch.\n\nIf you are asked about a missing loop or RTS, choose YES to add an RTS.",
++            ["UI:BUILD & RUN"], "BUILT"));
++        array_push(_s, scr_tour_step("DONE!",
++            "Your message should be on screen in your colour.\n\nEvery macro works the same way: drag it in, fill in its fields, build.",
++            [], "NONE"));
++    }
++
++    if (_id == 2) {
++        array_push(_s, scr_tour_step("WELCOME",
++            "In this tour you will make a multicolour bitmap, paint on it and show it on the C64.",
++            [], "NONE"));
++        array_push(_s, scr_tour_step("ADD AN ASSET",
++            "Click [ADD ASSET +] at the top of the asset panel.",
++            ["ASSET:ADD"], "ADD_OPEN"));
++        array_push(_s, scr_tour_step("CHOOSE BITMAP",
++            "Pick BITMAP from the list. A new bitmap asset appears in the panel.",
++            ["ASSET:TYPE:BITMAP", "ASSET:ADD"], "BMP_ADDED"));
++        array_push(_s, scr_tour_step("OPEN THE EDITOR",
++            "Click EDIT on your new BITMAP row to open the bitmap editor.",
++            ["ASSET:EDIT:BITMAP", "ASSET:PANEL"], "BMP_OPEN"));
++        array_push(_s, scr_tour_step("CREATE THE CANVAS",
++            "A new bitmap starts empty, so there is nothing to draw on yet.\n\nClick CREATE at the top of the viewer to make a blank canvas and switch painting on.",
++            ["ASSET:BMP_EDIT"], "BMP_EDITING"));
++        array_push(_s, scr_tour_step("DRAW SOMETHING",
++            "Pick a colour and draw on the canvas with the left mouse button.",
++            [], "BMP_PAINTED"));
++        array_push(_s, scr_tour_step("FLOOD FILL",
++            "Choose the FILL tool, pick another colour and click inside a shape to fill it.",
++            [], "BMP_FILLED"));
++        array_push(_s, scr_tour_step("CLOSE THE EDITOR",
++            "Click CLOSE at the top right of the viewer, or press ESC.",
++            ["ASSET:CLOSE"], "BMP_CLOSED"));
++        array_push(_s, scr_tour_step("DRAG IN BITMAP",
++            "Open MACROS and drag BITMAP onto the spine under SYSTEM INIT.",
++            ["MAC:MACRO_BMP", "MENU:0"], "HAS_BMP_NODE"));
++        array_push(_s, scr_tour_step("LINK YOUR PICTURE",
++            "Click the asset field on the BITMAP node and choose the bitmap you painted.",
++            ["FIELD:MACRO_BMP:asset", "NODETYPE:MACRO_BMP"], "BMP_LINKED"));
++        array_push(_s, scr_tour_step("BUILD AND RUN",
++            "Press F5, or click BUILD & RUN on the right, to build and launch.\n\nIf you are asked about a missing loop or RTS, choose YES to add an RTS.",
++            ["UI:BUILD & RUN"], "BUILT"));
++        array_push(_s, scr_tour_step("DONE!",
++            "Your picture should be on the C64 screen.\n\nThe bitmap editor also has lines, shapes, gradients and dithering to explore.",
++            [], "NONE"));
++    }
++
++    return _s;
++}
++
++/// @desc Called on the tour object whenever step_idx changes.
++function scr_tour_enter_step() {
++    step_timer = 0;
++    done_timer = 0;
++    hl_have    = false;
++
++    var _targets = [];
++    if (step_idx >= 0 && step_idx < array_length(steps)) {
++        _targets = steps[step_idx].targets;
++    }
++    global.tour_keys   = _targets;
++    global.tour_rects  = array_create(array_length(_targets), 0);
++    global.tour_stamps = array_create(array_length(_targets), -1);
++    for (var _i = 0; _i < array_length(_targets); _i++) {
++        global.tour_rects[_i] = [0, 0, 0, 0];
++    }
++
++    base_bmp_count = scr_tour_bitmap_count();
++    base_undo_top  = undefined;
++    base_undo_name = "";
++    base_build     = global.tour_build_count;
++}
++
++/// @desc Draw loops call this with the rect they just drew for _key.
++function scr_tour_capture(_key, _x1, _y1, _x2, _y2) {
++    if (!global.tour_active) {
++        return;
++    }
++    for (var _i = 0; _i < array_length(global.tour_keys); _i++) {
++        if (global.tour_keys[_i] == _key) {
++            global.tour_rects[_i]  = [_x1, _y1, _x2, _y2];
++            global.tour_stamps[_i] = global.tour_frame;
++            return;
++        }
++    }
++}
++
++/// @desc Same as scr_tour_capture, but for rects drawn in world space (node
++///       Draw events). Converted to GUI with the workspace camera.
++function scr_tour_capture_world(_key, _x1, _y1, _x2, _y2) {
++    if (!global.tour_active) {
++        return;
++    }
++    var _wm = obj_workspace_manager;
++    scr_tour_capture(_key,
++        (_x1 - _wm.cam_x) / _wm.cam_zoom, (_y1 - _wm.cam_y) / _wm.cam_zoom,
++        (_x2 - _wm.cam_x) / _wm.cam_zoom, (_y2 - _wm.cam_y) / _wm.cam_zoom);
++}
++
++/// @desc Operand as a number: reals pass through, "$D020" and "53280" parse.
++function scr_tour_num(_v) {
++    if (is_real(_v) || is_int64(_v)) {
++        return _v;
++    }
++    if (!is_string(_v)) {
++        return 0;
++    }
++    var _s = string_upper(string_trim(_v));
++    if (_s == "") {
++        return 0;
++    }
++    if (string_char_at(_s, 1) == "$") {
++        var _hex = "0123456789ABCDEF";
++        var _n   = 0;
++        for (var _i = 2; _i <= string_length(_s); _i++) {
++            var _d = string_pos(string_char_at(_s, _i), _hex) - 1;
++            if (_d < 0) {
++                return _n;
++            }
++            _n = (_n * 16) + _d;
++        }
++        return _n;
++    }
++    if (string_digits(_s) == _s) {
++        return real(_s);
++    }
++    return 0;
++}
++
++/// @desc Connected NORMAL node that uses opcode _op. Prefers one whose
++///       operand is still 0 (the one the user has not edited yet).
++function scr_tour_node_by_op(_op) {
++    var _any   = noone;
++    var _fresh = noone;
++    with (obj_c64_node) {
++        if (is_connected && node_type == "NORMAL") {
++            for (var _i = 0; _i < array_length(instructions); _i++) {
++                if (string_lower(string(instructions[_i][0])) == _op) {
++                    if (_any == noone) {
++                        _any = id;
++                    }
++                    if (_fresh == noone && scr_tour_num(instructions[_i][1]) == 0) {
++                        _fresh = id;
++                    }
++                }
++            }
++        }
++    }
++    if (_fresh != noone) {
++        return _fresh;
++    }
++    return _any;
++}
++
++/// @desc Any connected NORMAL node with opcode _op whose operand is _val.
++///       _val < 0 means "any non-zero operand".
++function scr_tour_has_op_value(_op, _val) {
++    var _found = false;
++    with (obj_c64_node) {
++        if (is_connected && node_type == "NORMAL") {
++            for (var _i = 0; _i < array_length(instructions); _i++) {
++                if (string_lower(string(instructions[_i][0])) == _op) {
++                    var _n = scr_tour_num(instructions[_i][1]);
++                    if (_val < 0) {
++                        if (_n != 0) {
++                            _found = true;
++                        }
++                    } else {
++                        if (_n == _val) {
++                            _found = true;
++                        }
++                    }
++                }
++            }
++        }
++    }
++    return _found;
++}
++
++/// @desc How many connected NORMAL nodes use opcode _op.
++///       _nonzero: only count ones whose operand has been set.
++function scr_tour_count_op(_op, _nonzero) {
++    var _c = 0;
++    with (obj_c64_node) {
++        if (is_connected && node_type == "NORMAL") {
++            for (var _i = 0; _i < array_length(instructions); _i++) {
++                if (string_lower(string(instructions[_i][0])) == _op) {
++                    if (!_nonzero || scr_tour_num(instructions[_i][1]) != 0) {
++                        _c++;
++                    }
++                }
++            }
++        }
++    }
++    return _c;
++}
++
++/// @desc First connected node of _type, or noone.
++function scr_tour_node_by_type(_type) {
++    var _hit = noone;
++    with (obj_c64_node) {
++        if (_hit == noone && is_connected && node_type == _type) {
++            _hit = id;
++        }
++    }
++    return _hit;
++}
++
++/// @desc Number of BITMAP assets in the asset list.
++function scr_tour_bitmap_count() {
++    var _c = 0;
++    if (!instance_exists(obj_asset_manager)) {
++        return 0;
++    }
++    var _list = obj_asset_manager.asset_list;
++    for (var _i = 0; _i < ds_list_size(_list); _i++) {
++        var _a = ds_list_find_value(_list, _i);
++        if (_a.type == "BITMAP") {
++            _c++;
++        }
++    }
++    return _c;
++}
++
++/// @desc The BITMAP asset open in the viewer, or undefined.
++function scr_tour_viewer_bitmap() {
++    if (!instance_exists(obj_asset_manager)) {
++        return undefined;
++    }
++    var _am = obj_asset_manager;
++    if (!_am.viewer_open) {
++        return undefined;
++    }
++    if (_am.viewer_asset < 0 || _am.viewer_asset >= ds_list_size(_am.asset_list)) {
++        return undefined;
++    }
++    var _a = ds_list_find_value(_am.asset_list, _am.viewer_asset);
++    if (_a.type != "BITMAP") {
++        return undefined;
++    }
++    return _a;
++}
++
++/// @desc True once a new undo entry lands on the open bitmap.
++///       _need_fill: only count it while the FILL tool is selected.
++function scr_tour_bitmap_changed(_need_fill) {
++    var _a = scr_tour_viewer_bitmap();
++    if (is_undefined(_a)) {
++        base_undo_name = "";
++        return false;
++    }
++    var _stack = _a.meta[$ "undo_stack"];
++    if (!is_array(_stack)) {
++        return false;
++    }
++    var _top = undefined;
++    if (array_length(_stack) > 0) {
++        _top = _stack[array_length(_stack) - 1];
++    }
++    var _tool_ok = true;
++    if (_need_fill) {
++        _tool_ok = (_a.meta[$ "active_tool"] == "FILL");
++    }
++    // Re-base while the editor settles (it pushes its own first entry on
++    // open), when the open asset changes, or while the wrong tool is held.
++    if (step_timer < 20 || base_undo_name != _a.name || !_tool_ok) {
++        base_undo_name = _a.name;
++        base_undo_top  = _top;
++        return false;
++    }
++    if (is_undefined(_top)) {
++        return false;
++    }
++    return (_top != base_undo_top);
++}
++
++/// @desc Evaluate a step's check code. Runs on the tour object.
++function scr_tour_check(_code) {
++    var _n = noone;
++    switch (_code) {
++        case "NONE":
++            return false;
++        case "OP_LDA_IMM":
++            return (scr_tour_node_by_op("lda_imm") != noone);
++        case "LDA_NONZERO":
++            return scr_tour_has_op_value("lda_imm", -1);
++        case "OP_STA_ABS":
++            return (scr_tour_node_by_op("sta_abs") != noone);
++        case "STA_D020":
++            return scr_tour_has_op_value("sta_abs", 0xD020);
++        case "STA_D021":
++            return scr_tour_has_op_value("sta_abs", 0xD021);
++        case "OP_LDA_IMM_2":
++            return (scr_tour_count_op("lda_imm", false) >= 2);
++        case "LDA_NONZERO_2":
++            return (scr_tour_count_op("lda_imm", true) >= 2);
++        case "OP_STA_ABS_2":
++            return (scr_tour_count_op("sta_abs", false) >= 2);
++        case "BUILT":
++            return (global.tour_build_count > base_build);
++        case "MENU_MACROS":
++            if (obj_workspace_manager.gui_menu_open == 0) {
++                return true;
++            }
++            return (scr_tour_node_by_type("MACRO_PRINT") != noone);
++        case "HAS_PRINT":
++            return (scr_tour_node_by_type("MACRO_PRINT") != noone);
++        case "PRINT_TEXT":
++            _n = scr_tour_node_by_type("MACRO_PRINT");
++            if (_n == noone) {
++                return false;
++            }
++            return (string(_n.instructions[0][5]) != "");
++        case "PRINT_Y":
++            _n = scr_tour_node_by_type("MACRO_PRINT");
++            if (_n == noone) {
++                return false;
++            }
++            return (scr_tour_num(_n.instructions[0][2]) != 0);
++        case "PRINT_COL":
++            _n = scr_tour_node_by_type("MACRO_PRINT");
++            if (_n == noone) {
++                return false;
++            }
++            return (scr_tour_num(_n.instructions[0][3]) != 1);
++        case "ADD_OPEN":
++            if (obj_asset_manager.add_dropdown_open) {
++                return true;
++            }
++            return (scr_tour_bitmap_count() > base_bmp_count);
++        case "BMP_ADDED":
++            return (scr_tour_bitmap_count() > base_bmp_count);
++        case "BMP_OPEN":
++            return !is_undefined(scr_tour_viewer_bitmap());
++        case "BMP_EDITING":
++            var _eb = scr_tour_viewer_bitmap();
++            if (is_undefined(_eb)) {
++                return false;
++            }
++            return (_eb.meta[$ "is_editing"] == true);
++        case "BMP_PAINTED":
++            return scr_tour_bitmap_changed(false);
++        case "BMP_FILLED":
++            return scr_tour_bitmap_changed(true);
++        case "BMP_CLOSED":
++            return !obj_asset_manager.viewer_open;
++        case "HAS_BMP_NODE":
++            return (scr_tour_node_by_type("MACRO_BMP") != noone);
++        case "BMP_LINKED":
++            _n = scr_tour_node_by_type("MACRO_BMP");
++            if (_n == noone) {
++                return false;
++            }
++            return (string(_n.instructions[0][1]) != "");
++    }
++    return false;
++}
++
++/// @desc GUI rect of a node (world -> GUI via the workspace camera).
++function scr_tour_node_rect(_n) {
++    var _wm = obj_workspace_manager;
++    var _nx = _n.x + _n.x_indent;
++    var _x1 = (_nx - _wm.cam_x) / _wm.cam_zoom;
++    var _y1 = (_n.y - _wm.cam_y) / _wm.cam_zoom;
++    var _x2 = (_nx + _n.width - _wm.cam_x) / _wm.cam_zoom;
++    var _y2 = (_n.y + _n.height - _wm.cam_y) / _wm.cam_zoom;
++    return [_x1, _y1, _x2, _y2];
++}
++
++/// @desc Resolve the current step's highlight. Returns [x1,y1,x2,y2] or
++///       undefined when nothing is on screen.
++function scr_tour_resolve_rect() {
++    var _keys = global.tour_keys;
++    for (var _i = 0; _i < array_length(_keys); _i++) {
++        var _k = _keys[_i];
++
++        if (global.tour_stamps[_i] == global.tour_frame) {
++            return global.tour_rects[_i];
++        }
++
++        if (string_copy(_k, 1, 7) == "NODEOP:") {
++            var _no = scr_tour_node_by_op(string_delete(_k, 1, 7));
++            if (_no != noone) {
++                return scr_tour_node_rect(_no);
++            }
++        }
++        if (string_copy(_k, 1, 9) == "NODETYPE:") {
++            var _nt = scr_tour_node_by_type(string_delete(_k, 1, 9));
++            if (_nt != noone) {
++                return scr_tour_node_rect(_nt);
++            }
++        }
++
++        if (instance_exists(obj_asset_manager)) {
++            var _am    = obj_asset_manager;
++            var _right = global.gui_w - 2;
++            if (_k == "ASSET:ADD" && !_am.viewer_open) {
++                return [_am.panel_x + 4, _am.panel_y + 4, _right - 4, _am.panel_y + 26];
++            }
++            if (_k == "ASSET:PANEL" && !_am.viewer_open) {
++                return [_am.panel_x, _am.panel_y + 66, _right, display_get_gui_height() - 100];
++            }
++            if (string_copy(_k, 1, 11) == "ASSET:TYPE:" && _am.add_dropdown_open) {
++                var _want = string_delete(_k, 1, 11);
++                for (var _t = 0; _t < array_length(_am.asset_types); _t++) {
++                    if (_am.asset_types[_t] == _want) {
++                        var _dy = _am.panel_y + 28 + (_t * 20);
++                        return [_am.panel_x, _dy, _right, _dy + 20];
++                    }
++                }
++            }
++        }
++    }
++    return undefined;
++}
++
++/// @desc End the tour and put anything it changed back.
++function scr_tour_end() {
++    if (instance_exists(obj_tour_guide)) {
++        instance_destroy(obj_tour_guide);
++    }
++}
+diff --git a/C64Devmachine/scripts/scr_tour_guide/scr_tour_guide.yy b/C64Devmachine/scripts/scr_tour_guide/scr_tour_guide.yy
+new file mode 100644
+index 0000000..5a742c7
+--- /dev/null
++++ b/C64Devmachine/scripts/scr_tour_guide/scr_tour_guide.yy
+@@ -0,0 +1,13 @@
++{
++  "$GMScript":"v1",
++  "%Name":"scr_tour_guide",
++  "isCompatibility":false,
++  "isDnD":false,
++  "name":"scr_tour_guide",
++  "parent":{
++    "name":"UI",
++    "path":"folders/SCRIPTS/UI.yy",
++  },
++  "resourceType":"GMScript",
++  "resourceVersion":"2.0",
++}
