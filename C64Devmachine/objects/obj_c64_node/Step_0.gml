@@ -26,6 +26,45 @@ if (global.showcode_mouse_over && !is_dragging) exit;
 // a hidden node being interfered with in the empty space its parent leaves.
 if (scr_node_is_hidden(id)) exit;
 
+// [WIRE THEM] — resolve a shared-predecessor pair by wiring left → right
+// (top → bottom breaks a tie). Falls back to the reverse direction when the
+// first ORG's output is already wired elsewhere.
+if (node_type == "ORG" && amb_btn_live && instance_exists(org_amb_partner) &&
+    mouse_check_button_pressed(mb_left) &&
+    point_in_rectangle(mouse_x, mouse_y, amb_btn_x1, amb_btn_y1, amb_btn_x2, amb_btn_y2)) {
+    var _wa = id;
+    var _wb = org_amb_partner;
+    var _w_first  = _wa;
+    var _w_second = _wb;
+    if (_wb.x < _wa.x) {
+        _w_first  = _wb;
+        _w_second = _wa;
+    } else if (_wb.x == _wa.x && _wb.y < _wa.y) {
+        _w_first  = _wb;
+        _w_second = _wa;
+    }
+    var _w_src = noone;
+    var _w_dst = noone;
+    if (_w_first.wire_out_target == -1) {
+        _w_src = _w_first;
+        _w_dst = _w_second;
+    } else if (_w_second.wire_out_target == -1) {
+        _w_src = _w_second;
+        _w_dst = _w_first;
+    }
+    if (_w_src != noone) {
+        _w_src.wire_out_target = _w_dst.org_uid;
+        _w_dst.wire_in_source  = _w_src.org_uid;
+        _wa.org_amb_partner    = noone;
+        _wb.org_amb_partner    = noone;
+        amb_btn_live           = false;
+        global.addresses_dirty = true;
+        global.undo_dirty      = true;
+        scr_c64_update_addresses();
+    }
+    exit;
+}
+
 // The pointer is on an ORG fold tab — the click belongs to the tab, not to the
 // ORG node underneath it, which would otherwise start a drag on the same press.
 if (global.org_collapse_hot != noone && !is_dragging) exit;
@@ -63,7 +102,9 @@ if obj_workspace_manager.code_editor_open exit;
 if obj_workspace_manager.code_editor_open exit;
 if (instance_exists(obj_asset_manager) && obj_asset_manager.viewer_open) exit;
 if (global.show_info_window) exit;
-if (obj_workspace_manager.label_search_open) exit;
+// Label search owns input — except for the few frames after it unfolds an ORG,
+// when node layout must run so the result reaches its real position.
+if (obj_workspace_manager.label_search_open && obj_workspace_manager.label_search_reflow <= 0) exit;
 
 /////////////////////////////////////////////////////////////////
 // LABEL-REFERENCE HOVER HIGHLIGHT (LABEL nodes only)
@@ -440,7 +481,8 @@ if (label_picker_open && mouse_check_button_pressed(mb_left)) {
    // ---- ASSET PICKER (BYTE_DATA / TEXT_DATA / LINE_COLL) ----
     if (label_picker_mode == "BYTE_ASSET" || label_picker_mode == "TEXT_ASSET"
 	 || label_picker_mode == "SOUND_ASSET" || label_picker_mode == "LINE_ASSET"
-	 || label_picker_mode == "HUD_ASSET") {
+	 || label_picker_mode == "HUD_ASSET" || label_picker_mode == "ROOM_ASSET"
+	 || label_picker_mode == "MASK_SRC") {
         var _want_type = "BYTE_DATA";
         if (label_picker_mode == "TEXT_ASSET") {
             _want_type = "TEXT_DATA";
@@ -450,6 +492,10 @@ if (label_picker_open && mouse_check_button_pressed(mb_left)) {
             _want_type = "LINE_COLL";
         } else if (label_picker_mode == "HUD_ASSET") {
             _want_type = "HUD";
+        } else if (label_picker_mode == "ROOM_ASSET") {
+            _want_type = "ROOM_MAP";
+        } else if (label_picker_mode == "MASK_SRC") {
+            _want_type = "SPRITE_MASK";
         }
         var _px      = draw_x + width + 8;
         var _py      = y + 36;
@@ -466,7 +512,7 @@ if (label_picker_open && mouse_check_button_pressed(mb_left)) {
             var _am = obj_asset_manager;
             for (var _ai = 0; _ai < ds_list_size(_am.asset_list); _ai++) {
                 var _a = _am.asset_list[| _ai];
-                if (_a.type == _want_type) array_push(_alist, _a.name);
+                if (_a.type == _want_type || ((_want_type == "LINE_COLL" || _want_type == "SPRITE_MASK") && _a.type == "ROOM_MAP")) array_push(_alist, _a.name);
             }
         }
         var _count = array_length(_alist);
@@ -1122,6 +1168,9 @@ if ((mouse_check_button_pressed(mb_left) or scr_opt_pressed()) && !is_dragging &
 		case "MACRO_COLL_ADV":    scr_node_step_macro_coll_adv(draw_x);    break;
 		case "MACRO_COLL_LINE":   scr_node_step_macro_coll_line(draw_x);   break;
         case "MACRO_ANIM":        scr_node_step_macro_anim(draw_x);        break;
+        case "MACRO_ANIM_SET":    scr_node_step_macro_anim_set(draw_x);    break;
+        case "MACRO_ROOMS":       scr_node_step_macro_rooms(draw_x);       break;
+        case "MACRO_SPR_MASK":    scr_node_step_macro_spr_mask(draw_x);    break;
         case "MACRO_SFX":         scr_node_step_macro_sfx(draw_x);         break;
         case "MACRO_CODE":        scr_node_step_macro_code(draw_x);        break;
 		case "MACRO_V_SCROLL":    scr_node_step_macro_vscroll();        break;
@@ -1765,6 +1814,20 @@ if ((mouse_check_button_pressed(mb_left) or scr_opt_pressed()) && !is_dragging &
                                     if (anim_alias == "") anim_alias = "anim" + string(real(id));
                                     array_push(other.label_picker_list, anim_alias + "_sub");
                                     array_push(other.label_picker_list, anim_alias + "_reset");
+                                }
+                                if (node_type == "MACRO_ANIM_SET") {
+                                    array_push(other.label_picker_list, scr_anim_set_alias(id) + "_sub");
+                                    array_push(other.label_picker_list, scr_anim_set_alias(id) + "_reset");
+                                }
+                                if (node_type == "MACRO_SPR_MASK") {
+                                    scr_sprmask_node_defaults(id);
+                                    array_push(other.label_picker_list, anim_alias + "_sub");
+                                }
+                                if (node_type == "MACRO_ROOMS" && string(instructions[0][1]) != "") {
+                                    var _rmpx = scr_room_map_prefix(string(instructions[0][1]));
+                                    array_push(other.label_picker_list, _rmpx + "start");
+                                    array_push(other.label_picker_list, _rmpx + "door");
+                                    array_push(other.label_picker_list, _rmpx + "enter");
                                 }
                                 if (node_type == "MACRO_SCROLL") {
 				                    array_push(other.label_picker_list, "Scroller_L");

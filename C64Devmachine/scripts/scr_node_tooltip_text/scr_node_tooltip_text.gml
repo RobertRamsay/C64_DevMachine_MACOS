@@ -471,6 +471,63 @@ function scr_node_tooltip_text(_node_type) {
             ]
         },
 
+        "MACRO_SPR_MASK": {
+            title: "SPRITE MASK",
+            lines: [
+                "Hides sprites behind foreground parts of the scene.",
+                "SOURCE = a ROOM_MAP (the current room's MASK, fetched",
+                "by ROOMS into MASK RAM) or one SPRITE_MASK asset.",
+                "",
+                "JSR <alias>_sub once per frame, after animating.",
+                "It ANDs each listed slot's frame with the mask under",
+                "the sprite into a double-buffered WORK block (2 x 64",
+                "bytes per slot, in the sprites' VIC bank) and points",
+                "the slot at it; unmasked, the real frames come back.",
+                "",
+                "HOT Y = the feet row in the sprite: a masked cell only",
+                "hides the sprite while the feet are above its DEPTH."
+            ]
+        },
+
+        "MACRO_ROOMS": {
+            title: "ROOMS",
+            lines: [
+                "Loads the rooms of a ROOM_MAP asset (made in the",
+                "asset panel's map view) and routes doors between them.",
+                "",
+                "ROOM = the byte holding the current room number.",
+                "SPRITES = player sprite slots moved to arrival points",
+                "(e.g. 0,1). HOT X/Y = the player's hotspot inside the",
+                "sprite - the map's points are that pixel.",
+                "HOOK = optional label called after each room loads.",
+                "",
+                "RM_<MAP>_start  enter ROOM at its spawn point",
+                "RM_<MAP>_door   A = collider line type (2-7)",
+                "RM_<MAP>_enter  reload ROOM at the last arrival point",
+                "",
+                "Point a COLL_LINE at the ROOM_MAP to probe whichever",
+                "room is current."
+            ]
+        },
+
+        "MACRO_ANIM_SET": {
+            title: "ANIM SET",
+            lines: [
+                "Several animation sequences sharing ONE player.",
+                "Each row is a sequence: frame lists per sprite",
+                "slot, its own DELAY and LOOP.",
+                "",
+                "SELECT names the byte that picks the row ($02C8,",
+                "or a variable). Changing it restarts the new row",
+                "from its first frame - no reset calls needed.",
+                "Out-of-range SELECT = idle.",
+                "",
+                "JSR <alias>_sub once per frame. <alias>_reset",
+                "restarts the current row. <alias>_done = 1 once a",
+                "one-shot row holds its last frame."
+            ]
+        },
+
         "MACRO_ANIM": {
             title: "ANIMATE",
             lines: [

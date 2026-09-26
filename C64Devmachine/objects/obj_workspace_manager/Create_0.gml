@@ -177,7 +177,7 @@ paletteStyle=1
 showGrid=1;
 badgeStyle=1
 buttonStyle=1
-nodeStyle     = 0;  // 0..spr_9s_tile1 frames, final virtual index = Cyber renderer
+nodeStyle     = 0;  // 0 flat, 1..n-2 slices, n-1 Cyber renderer, n Starlight (last slice)
 macroStyle    = 0;  // 0 classic menu rows, 1 appended Cyber macro-button pair
 niceSliceFrm  = 0;
 uiChromeStyle = 0;  // 0 existing chrome, 1 appended Cyber chrome
@@ -791,6 +791,20 @@ label_search_cursor  = 0;
 label_search_ready   = false;
 label_search_results = [];
 label_search_index   = -1;
+label_search_info    = [];     // parallel to label_search_results: {node, def, line, text, ny}
+label_search_pending = noone;  // result waiting for its folded ORG to reflow
+label_search_pending_frac = 0.2;
+label_search_reflow  = 0;      // frames left while node layout runs under the modal
+
+// MACRO_REU asset drop-down (ASSET mode) — drawn in Draw_64 so it sits on top
+reu_pick_open   = false;
+reu_pick_node   = noone;
+reu_pick_items  = [];
+reu_pick_gx     = 0;
+reu_pick_gy     = 0;
+reu_pick_skip   = 0;   // ignore the press that opened it
+reu_pick_scroll = 0;
+reu_pick_rows   = 18;  // visible rows
 
 /// =============================================================
 /// ADDITIONS TO Create_0.gml of obj_workspace_manager
@@ -1023,7 +1037,7 @@ bkgImg        = clamp(ini_read_real("Settings", "bkgImg",        0), 0, max(0, s
 showGrid      = ini_read_real("Settings", "showGrid",      0);
 paletteStyle  = clamp(ini_read_real("Settings", "paletteStyle",  0), 0, max(0, sprite_get_number(spr_palette_page) - 1));
 badgeStyle    = clamp(ini_read_real("Settings", "badgeStyle",    0), 0, max(0, sprite_get_number(spr_logobadge) - 1));
-buttonStyle   = clamp(ini_read_real("Settings", "buttonStyle",   0), 0, max(0, sprite_get_number(spr_opcode_button) - 2));
+buttonStyle   = clamp(ini_read_real("Settings", "buttonStyle",   0), 0, min(sprite_get_number(spr_opcode_button), max(1, sprite_get_number(spr_palette_page))) - 1);
 niceSliceFrm  = clamp(ini_read_real("Settings", "niceSliceFrm",  0), 0, max(0, sprite_get_number(spr_glassSlice) - 1));
 uiChromeStyle = clamp(ini_read_real("Settings", "uiChromeStyle", 0), 0, 1);
 nodeStyle     = clamp(ini_read_real("Settings", "nodeStyle",     0), 0, sprite_get_number(spr_9s_tile1));

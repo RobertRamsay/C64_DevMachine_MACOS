@@ -270,6 +270,9 @@ if (height_dirty) {
 	case "MACRO_COLL_ADV":   height = _G * 19;  break;    
 	case "MACRO_COLL_LINE":  height = _G * 7;   break;
     case "MACRO_ANIM":       height = _G * 18;  break;
+    case "MACRO_ANIM_SET":   height = scr_anim_set_height(id); break;
+    case "MACRO_ROOMS":      height = _G * 12;  break;
+    case "MACRO_SPR_MASK":   height = _G * 9;   break;
     case "MACRO_SFX":        height = _G * 6;   break;
 	case "MACRO_CODE":       height = _G * 5;   break;
     case "GET_VAR":     height = _G * 5;  break;         
@@ -328,7 +331,8 @@ if (label_picker_open) {
 
     if (label_picker_mode == "BYTE_ASSET" || label_picker_mode == "TEXT_ASSET"
      || label_picker_mode == "SOUND_ASSET" || label_picker_mode == "LINE_ASSET"
-     || label_picker_mode == "HUD_ASSET") {
+     || label_picker_mode == "HUD_ASSET" || label_picker_mode == "ROOM_ASSET"
+     || label_picker_mode == "MASK_SRC") {
         // One picker, four asset types. TEXT_ASSET lists TEXT_DATA (SID SOUND
         // note lists, MACRO_PRINT text); BYTE_ASSET lists BYTE_DATA;
         // SOUND_ASSET lists SOUND_EDITOR songs (MACRO_SID_SONG);
@@ -347,6 +351,12 @@ if (label_picker_open) {
         } else if (label_picker_mode == "HUD_ASSET") {
             _want_type = "HUD";
             _pick_hdr  = "HUD ASSETS";
+        } else if (label_picker_mode == "ROOM_ASSET") {
+            _want_type = "ROOM_MAP";
+            _pick_hdr  = "ROOM_MAP ASSETS";
+        } else if (label_picker_mode == "MASK_SRC") {
+            _want_type = "SPRITE_MASK";
+            _pick_hdr  = "ROOM MAPS / MASKS";
         }
         var _px      = draw_x + width + 8;
         var _py      = y + 36;
@@ -362,7 +372,7 @@ if (label_picker_open) {
             var _am = obj_asset_manager;
             for (var _ai = 0; _ai < ds_list_size(_am.asset_list); _ai++) {
                 var _a = _am.asset_list[| _ai];
-                if (_a.type == _want_type) array_push(_alist, _a.name);
+                if (_a.type == _want_type || ((_want_type == "LINE_COLL" || _want_type == "SPRITE_MASK") && _a.type == "ROOM_MAP")) array_push(_alist, _a.name);
             }
         }
         var _count = array_length(_alist);
@@ -644,6 +654,20 @@ var _active_list = [];
 					array_push(other.label_picker_list, anim_alias + "_sub");
 					array_push(other.label_picker_list, anim_alias + "_reset");
                 }
+                if (node_type == "MACRO_ANIM_SET") {
+                    array_push(other.label_picker_list, scr_anim_set_alias(id) + "_sub");
+                    array_push(other.label_picker_list, scr_anim_set_alias(id) + "_reset");
+                }
+                if (node_type == "MACRO_SPR_MASK") {
+                    scr_sprmask_node_defaults(id);
+                    array_push(other.label_picker_list, anim_alias + "_sub");
+                }
+                if (node_type == "MACRO_ROOMS" && string(instructions[0][1]) != "") {
+                    var _rmpx = scr_room_map_prefix(string(instructions[0][1]));
+                    array_push(other.label_picker_list, _rmpx + "start");
+                    array_push(other.label_picker_list, _rmpx + "door");
+                    array_push(other.label_picker_list, _rmpx + "enter");
+                }
                 if (node_type == "MACRO_SCROLL") {
                     array_push(other.label_picker_list, "Scroller_L");
                     array_push(other.label_picker_list, "Scroller_R");
@@ -891,7 +915,11 @@ _box_alpha *= global.idle_fade;
 if (_box_alpha < 0.1) { x -= x_indent; draw_set_alpha(1.0); exit; }
 
 var _node_style = obj_workspace_manager.nodeStyle;
-var _node_cyber = (_node_style >= sprite_get_number(spr_9s_tile1));
+// Node styles (6): 0 flat gradient, 1..n-2 tinted 9-slices, n-1 the handcrafted
+// cyberpunk renderer, n the last 9-slice (Starlight) drawn in its own colours.
+var _n9         = sprite_get_number(spr_9s_tile1);
+var _node_cyber = (_node_style == _n9 - 1);
+var _node_star  = (_node_style >= _n9);
 
 if (_node_cyber) {
     var _cy_body_top = make_color_rgb(13, 14, 16);
@@ -915,6 +943,12 @@ if (_node_cyber) {
     draw_triangle(draw_x + width - 12, y + height, draw_x + width, y + height - 12, draw_x + width, y + height, false);
     draw_set_alpha(1.0);
 }
+else if (_node_star) {
+    // Starlight: the slice carries its own colours, so no body tint; unwired nodes dim.
+    var _star_col = make_color_rgb(150, 150, 150);
+    if (is_connected) { _star_col = c_white; }
+    draw_sprite_stretched_ext(spr_9s_tile1, _n9 - 1, draw_x, y, width, height, _star_col, _box_alpha);
+}
 else if (_node_style == 0) {
     draw_set_alpha(_box_alpha);
     if node_type!="LABEL" {draw_rectangle_color(draw_x, y, draw_x + width, y + height,
@@ -924,7 +958,7 @@ else if (_node_style == 0) {
         _body_col, _label_edge_col, _label_edge_col, _dark_col, false);}
 }
 else {
-    draw_sprite_stretched_ext(spr_9s_tile1, clamp(_node_style, 1, sprite_get_number(spr_9s_tile1) - 1),
+    draw_sprite_stretched_ext(spr_9s_tile1, clamp(_node_style, 1, max(1, _n9 - 2)),
                               draw_x, y, width, height, _body_col, _box_alpha);
 }
 
@@ -992,6 +1026,9 @@ switch (node_type) {
     case "MACRO_COLLISION":   _head_col = is_connected ? make_color_rgb(180, 60,  60) : make_color_rgb( 90, 30,  30); break;
 	case "MACRO_COLL_ADV":    _head_col = is_connected ? make_color_rgb(220, 100, 40) : make_color_rgb(110, 50, 20); break;
     case "MACRO_ANIM":        _head_col = is_connected ? make_color_rgb( 60,180,  60) : make_color_rgb( 30, 90,  30); break;
+    case "MACRO_ANIM_SET":    _head_col = is_connected ? make_color_rgb( 40,160, 110) : make_color_rgb( 20, 80,  55); break;
+    case "MACRO_SPR_MASK":    _head_col = is_connected ? make_color_rgb(190, 70, 190) : make_color_rgb( 95, 35,  95); break;
+    case "MACRO_ROOMS":       _head_col = is_connected ? make_color_rgb(200,150,  40) : make_color_rgb(100, 75,  20); break;
     case "MACRO_SFX":         _head_col = is_connected ? make_color_rgb(255,160,  40) : make_color_rgb(120, 70,  10); break;
 	case "MACRO_CODE":        _head_col = is_connected ? make_color_rgb( 50,140, 100) : make_color_rgb( 25, 70,  50); break;
 	case "COND_IF":     _head_col = is_connected ? make_color_rgb(180, 120,  40) : make_color_rgb( 90, 60,  20);  break;
@@ -1055,7 +1092,10 @@ else if (_node_style == 0) {
     draw_set_alpha(1.0);
 }
 else {
-    draw_sprite_stretched_ext(spr_9s_tile1, clamp(_node_style, 1, sprite_get_number(spr_9s_tile1) - 1),
+    // Starlight headers keep the node's own colour over the Starlight slice
+    var _hdr_frame = clamp(_node_style, 1, max(1, _n9 - 2));
+    if (_node_star) { _hdr_frame = _n9 - 1; }
+    draw_sprite_stretched_ext(spr_9s_tile1, _hdr_frame,
                               draw_x, y, width, header_h, _head_col, _box_alpha);
 }
 
@@ -1076,6 +1116,85 @@ if (node_type == "ORG" && node_title != "VARIABLES" && node_title != "HW REGISTE
     draw_circle(_dot_in_x, _dot_y, _dot_r, false);
     draw_set_color(c_black);
     draw_circle(_dot_in_x, _dot_y, _dot_r, true);
+
+    // Ambiguous sensing warning — two preceding ORG chains tie for this slot
+    if (proxy && !_in_wired && org_prev_ambiguous) {
+        var _amb_pulse = abs(sin(current_time * 0.006));
+        var _amb_col   = merge_colour(c_red, c_yellow, _amb_pulse);
+        draw_set_color(_amb_col);
+        draw_circle(_dot_in_x, _dot_y, _dot_r + 3, true);
+        draw_circle(_dot_in_x, _dot_y, _dot_r + 4, true);
+        draw_set_font_l(fnt_c64_code);
+        draw_set_halign(fa_left);
+        draw_set_valign(fa_bottom);
+        draw_text_l(draw_x, y - 2, "SENSING 2 PREV ORGS - WIRE OR PLACE SIDE BY SIDE");
+        draw_set_valign(fa_top);
+    }
+
+    // Shared predecessor warning — line to partner + [WIRE THEM] button.
+    // Drawn once per pair, by the partner with the lower instance id.
+    amb_btn_live = false;
+    if (proxy && !_in_wired && instance_exists(org_amb_partner) && real(id) < real(org_amb_partner)) {
+        var _pa      = org_amb_partner;
+        var _pa_x    = _pa.x + _pa.x_indent + (width * 0.5);
+        var _pa_y    = _pa.y + (header_h * 0.5);
+        var _me_x    = draw_x + (width * 0.5);
+        var _me_y    = _dot_y;
+        var _sp_puls = abs(sin(current_time * 0.006));
+        var _sp_col  = merge_colour(c_red, c_yellow, _sp_puls);
+
+        // Dashed connector
+        draw_set_color(_sp_col);
+        var _sp_len  = point_distance(_me_x, _me_y, _pa_x, _pa_y);
+        var _sp_dir  = point_direction(_me_x, _me_y, _pa_x, _pa_y);
+        var _sp_step = 10;
+        for (var _sd = 0; _sd < _sp_len; _sd += _sp_step * 2) {
+            var _sd2 = min(_sd + _sp_step, _sp_len);
+            draw_line_width(_me_x + lengthdir_x(_sd, _sp_dir),  _me_y + lengthdir_y(_sd, _sp_dir),
+                            _me_x + lengthdir_x(_sd2, _sp_dir), _me_y + lengthdir_y(_sd2, _sp_dir), 2);
+        }
+
+        // Warning box at the midpoint
+        var _mx = (_me_x + _pa_x) * 0.5;
+        var _my = (_me_y + _pa_y) * 0.5;
+        draw_set_font_l(fnt_c64_code);
+        var _msg   = "SAME PREV ORG";
+        var _btn   = "[WIRE THEM]";
+        var _bw    = max(string_width_l(_msg), string_width_l(_btn)) + 16;
+        var _lh    = 18;
+        var _bx1   = _mx - (_bw * 0.5);
+        var _by1   = _my - _lh - 4;
+        var _bx2   = _mx + (_bw * 0.5);
+        var _by2   = _my + _lh + 4;
+
+        draw_set_alpha(0.9);
+        draw_set_color(make_color_rgb(20, 10, 30));
+        draw_rectangle(_bx1, _by1, _bx2, _by2, false);
+        draw_set_alpha(1.0);
+        draw_set_color(_sp_col);
+        draw_rectangle(_bx1, _by1, _bx2, _by2, true);
+
+        draw_set_halign(fa_center);
+        draw_set_valign(fa_middle);
+        draw_text_l(_mx, _my - (_lh * 0.5), _msg);
+
+        amb_btn_x1   = _bx1 + 4;
+        amb_btn_y1   = _my + 1;
+        amb_btn_x2   = _bx2 - 4;
+        amb_btn_y2   = _by2 - 3;
+        amb_btn_live = true;
+        var _btn_hov = point_in_rectangle(mouse_x, mouse_y, amb_btn_x1, amb_btn_y1, amb_btn_x2, amb_btn_y2);
+        if (_btn_hov) {
+            draw_set_color(make_color_rgb(255, 140, 0));
+            draw_rectangle(amb_btn_x1, amb_btn_y1, amb_btn_x2, amb_btn_y2, false);
+            draw_set_color(c_black);
+        } else {
+            draw_set_color(c_white);
+        }
+        draw_text_l(_mx, (amb_btn_y1 + amb_btn_y2) * 0.5, _btn);
+        draw_set_halign(fa_left);
+        draw_set_valign(fa_top);
+    }
 
     // Output dot (right side) — sends wire_out_target
     var _out_wired = (wire_out_target != -1);
@@ -1486,6 +1605,9 @@ if (_lod_body) switch (node_type) {
 	case "MACRO_COLL_ADV":    scr_node_draw_macro_coll_adv(draw_x);  break;
 	case "MACRO_COLL_LINE":   scr_node_draw_macro_coll_line(draw_x, y); break;
 	case "MACRO_ANIM":        scr_node_draw_macro_anim(draw_x);      break;
+	case "MACRO_ANIM_SET":    scr_node_draw_macro_anim_set(draw_x);  break;
+	case "MACRO_ROOMS":       scr_node_draw_macro_rooms(draw_x);     break;
+	case "MACRO_SPR_MASK":    scr_node_draw_macro_spr_mask(draw_x);  break;
 	case "MACRO_SFX":         scr_node_draw_macro_sfx(draw_x);       break;
 	case "MACRO_CODE":        scr_node_draw_macro_code(draw_x, y);   break;   
     case "ORG": {
@@ -2513,6 +2635,24 @@ if (node_type == "INIT") {
 
         draw_set_color(c_white);
         draw_set_font_l(_font_before);
+    }
+}
+
+// =============================================================
+// LABEL SEARCH (CTRL+SHIFT+F) — current result ring
+// =============================================================
+with (obj_workspace_manager) {
+    if (label_search_open && label_search_index >= 0 && label_search_index < array_length(label_search_results)) {
+        if (label_search_results[label_search_index] == other.id) {
+            var _lsh_x   = other.x + other.x_indent;
+            var _lsh_pul = abs(sin(current_time * 0.006));
+            draw_set_color(merge_colour(c_lime, c_white, _lsh_pul));
+            draw_set_alpha(0.95);
+            draw_rectangle(_lsh_x - 4, other.y - 4, _lsh_x + other.width + 4, other.y + other.height + 4, true);
+            draw_rectangle(_lsh_x - 5, other.y - 5, _lsh_x + other.width + 5, other.y + other.height + 5, true);
+            draw_rectangle(_lsh_x - 6, other.y - 6, _lsh_x + other.width + 6, other.y + other.height + 6, true);
+            draw_set_alpha(1.0);
+        }
     }
 }
 

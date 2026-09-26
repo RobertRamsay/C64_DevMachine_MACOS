@@ -394,19 +394,11 @@ for (var i = 0; i < array_length(active_palette); i++) {
         }
     }
 
-    // Button background sprite. Cyber keeps its base and layers the highlight frame over it.
-    var _cyber_btn_style = max(0, sprite_get_number(spr_opcode_button) - 2);
+    // Button background sprite.
+    // One frame per theme; hover is spr_hover_glow alone, the frame never changes.
+    var _cyber_btn_style = min(sprite_get_number(spr_opcode_button), max(1, sprite_get_number(spr_palette_page))) - 1;
     var _is_cyber_button = (buttonStyle == _cyber_btn_style);
-    if (_is_cyber_button) {
-        draw_sprite_ext(spr_opcode_button, buttonStyle, btn_x, btn_y, 1, 1, 0, c_white, 1);
-        if (is_hover || _is_finder_match) {
-            draw_sprite_ext(spr_opcode_button, buttonStyle+1, btn_x, btn_y, 1, 1, 0, c_white, 0.55);
-        }
-    } else if (is_hover) {
-        draw_sprite_ext(spr_opcode_button, buttonStyle+1, btn_x, btn_y, 1, 1, 0, c_white, 1);
-    } else {
-        draw_sprite_ext(spr_opcode_button, buttonStyle, btn_x, btn_y, 1, 1, 0, c_white, 1);
-    }
+    draw_sprite_ext(spr_opcode_button, buttonStyle, btn_x, btn_y, 1, 1, 0, c_white, 1);
 
     // Draw mnemonic label
     draw_set_font_l(fnt_c64_opCode);
@@ -581,15 +573,9 @@ var _menu_labels = [
     "MACROS", "EXTRA", "VARS", "PROJECT", "OPTIONS", "DOCUMENTS", "IMPORT", "TEMPLATES", "PORTS"
 ];
 
-// Panel Style owns menu-bar chrome.
-if (niceSliceFrm > 0)
-{
-    uiChromeStyle = 1;
-}
-else
-{
-    uiChromeStyle = 0;
-}
+// Panel Style owns menu-bar chrome: the last (cyber) slice uses cyber chrome.
+uiChromeStyle = 0;
+if (niceSliceFrm == max(0, sprite_get_number(spr_glassSlice) - 1)) { uiChromeStyle = 1; }
 
 // OPTIONS DROPDOWN (button 2)
 if (gui_menu_open == 4) {
@@ -608,7 +594,7 @@ if (gui_menu_open == 4) {
         { title: "PALETTE STYLE",      action: "PALETTE_STYLE"    },
         { title: "OPCODE BUTTONS",     action: "OPCODE_STYLE"     },
         { title: "LOGO STYLE",         action: "BADGE_STYLE"      },
-        { title: "BACKGROUND STYLE",   action: "BACKGROUND_STYLE" },
+        { title: "BKG STYLE",          action: "BACKGROUND_STYLE" },
         { title: "PANEL STYLE",        action: "PANEL_STYLE"      },
         { title: "NODE STYLE",         action: "NODE_STYLE"       },
         { title: "RESET CUSTOM UI",    action: "RESET_UI"         },
@@ -721,7 +707,7 @@ if (gui_menu_open == 4) {
 		
         if (_op.action == "CYBER_PRESET") {
             var _preset_count = max(1, sprite_get_number(spr_palette_page));
-            _state_str = string(clamp(paletteStyle, 0, _preset_count - 1) + 1);
+            _state_str = string(clamp(paletteStyle, 0, _preset_count - 1) + 1) + "/" + string(_preset_count);
             if (paletteStyle == _preset_count - 1) {
                 _state_col = c_yellow;
             } else {
@@ -729,23 +715,25 @@ if (gui_menu_open == 4) {
             }
         }
         if (_op.action == "PALETTE_STYLE") {
-            _state_str = string(paletteStyle + 1);
+            _state_str = string(paletteStyle + 1) + "/" + string(max(1, sprite_get_number(spr_palette_page)));
             _state_col = make_color_rgb(160, 160, 220);
         }
         if (_op.action == "OPCODE_STYLE") {
-            _state_str = string(buttonStyle + 1);
+            var _cy_btn_label = min(sprite_get_number(spr_opcode_button), max(1, sprite_get_number(spr_palette_page)));
+            _state_str = string(buttonStyle + 1) + "/" + string(_cy_btn_label);
             _state_col = make_color_rgb(160, 160, 220);
+            if (buttonStyle == _cy_btn_label - 1) { _state_col = c_yellow; }
         }
         if (_op.action == "BADGE_STYLE") {
-            _state_str = string(badgeStyle + 1);
+            _state_str = string(badgeStyle + 1) + "/" + string(max(1, sprite_get_number(spr_logobadge)));
             _state_col = make_color_rgb(160, 160, 220);
         }
         if (_op.action == "BACKGROUND_STYLE") {
-            _state_str = string(bkgImg + 1);
+            _state_str = string(bkgImg + 1) + "/" + string(max(1, sprite_get_number(spr_bkg)));
             _state_col = make_color_rgb(160, 160, 220);
         }
         if (_op.action == "PANEL_STYLE") {
-            _state_str = string(niceSliceFrm + 1);
+            _state_str = string(niceSliceFrm + 1) + "/" + string(max(1, sprite_get_number(spr_glassSlice)));
             if (niceSliceFrm > 0) {
                 _state_col = c_yellow;
             } else {
@@ -753,8 +741,8 @@ if (gui_menu_open == 4) {
             }
         }
         if (_op.action == "NODE_STYLE") {
-            _state_str = string(nodeStyle + 1);
-            if (nodeStyle >= sprite_get_number(spr_9s_tile1)) {
+            _state_str = string(nodeStyle + 1) + "/" + string(sprite_get_number(spr_9s_tile1) + 1);
+            if (nodeStyle >= sprite_get_number(spr_9s_tile1) - 1) {
                 _state_col = c_yellow;
             } else {
                 _state_col = make_color_rgb(160, 160, 220);
@@ -780,7 +768,20 @@ if (gui_menu_open == 4) {
 
         
 
-        if (_ihov && mouse_check_button_pressed(mb_left)) {
+        // Left click steps a cycling option forward, right click steps it
+        // back; both wrap round. Right click does nothing on other options.
+        var _opt_cycles = ["FLOW_OVERLAY", "FLOW_LINE_STYLE", "CYBER_PRESET", "PALETTE_STYLE",
+                           "OPCODE_STYLE", "BADGE_STYLE", "BACKGROUND_STYLE", "PANEL_STYLE",
+                           "NODE_STYLE", "LANGUAGE"];
+        var _opt_is_cycle = array_contains(_opt_cycles, _op.action);
+        var _opt_l = _ihov && mouse_check_button_pressed(mb_left);
+        var _opt_r = _ihov && mouse_check_button_pressed(mb_right) && _opt_is_cycle;
+        var _dir   = 1;
+        if (_opt_r) {
+            _dir = -1;
+            global.ui_click_block_timer = 6;
+        }
+        if (_opt_l || _opt_r) {
             if (_op.action == "EXPERT_MODE") {
                 expert_mode = !expert_mode;
                 opcode_finder_active     = false;
@@ -813,7 +814,7 @@ if (gui_menu_open == 4) {
             else if (_op.action == "FLOW_OVERLAY") {
                 // Mirrors the F-key handler in obj_workspace_manager Step so
                 // both entry points stay in sync.
-                flow_overlay_mode = (flow_overlay_mode + 1) mod 3; // Cycles 0 -> 1 -> 2 -> 0
+                flow_overlay_mode = (flow_overlay_mode + _dir + 3) mod 3; // 0 -> 1 -> 2 -> 0 (right click reverses)
 
                 if (flow_overlay_mode == 1) {
                     global.qmenu_toast_text = "FLOW LINES in LOCAL MODE\nHOVER over NODES to VIEW";
@@ -839,7 +840,7 @@ if (gui_menu_open == 4) {
                 }
             }
             else if (_op.action == "FLOW_LINE_STYLE") {
-                flow_line_style = (flow_line_style + 1) mod 2; // 0 -> 1 -> 0
+                flow_line_style = (flow_line_style + _dir + 2) mod 2; // 0 -> 1 -> 0
 
                 if (flow_line_style == 0) {
                     global.qmenu_toast_text = "FLOW LINES: DIRECT";
@@ -858,60 +859,45 @@ if (gui_menu_open == 4) {
             }
             else if (_op.action == "CYBER_PRESET") {
                 var _preset_count = max(1, sprite_get_number(spr_palette_page));
-                var _preset = (clamp(paletteStyle, 0, _preset_count - 1) + 1) mod _preset_count;
-                var _is_cyber_preset = (_preset == _preset_count - 1);
+                var _preset = (clamp(paletteStyle, 0, _preset_count - 1) + _dir + _preset_count) mod _preset_count;
                 paletteStyle = _preset;
-                bkgImg       = min(_preset, max(0, sprite_get_number(spr_bkg) - 1));
-                nodeStyle    = min(_preset, sprite_get_number(spr_9s_tile1));
-                if (_is_cyber_preset) {
-                    badgeStyle   = max(0, sprite_get_number(spr_logobadge) - 1);
-                    buttonStyle  = max(0, sprite_get_number(spr_opcode_button) - 2);
-                    niceSliceFrm = max(0, sprite_get_number(spr_glassSlice) - 1);
-                } else {
-                    var _legacy_badge_max = max(0, sprite_get_number(spr_logobadge) - 2);
-                    badgeStyle = min(_preset, _legacy_badge_max);
-                    var _legacy_opcode_pairs = max(1, floor((sprite_get_number(spr_opcode_button) - 2) / 2));
-                    var _legacy_opcode_style = min(_preset, _legacy_opcode_pairs - 1);
-                    buttonStyle  = _legacy_opcode_style * 2;
-                    niceSliceFrm = 0;
-                }
-                if (niceSliceFrm > 0) {
-                    uiChromeStyle = 1;
-                } else {
-                    uiChromeStyle = 0;
-                }
+                bkgImg = min(_preset, max(0, sprite_get_number(spr_bkg) - 1));
+                nodeStyle = min(_preset, sprite_get_number(spr_9s_tile1));
+                // Theme N uses opcode button N (the last theme is cyber)
+                buttonStyle = min(_preset, min(sprite_get_number(spr_opcode_button), max(1, sprite_get_number(spr_palette_page))) - 1);
+                // Theme N uses logo N as well (one logo frame per theme)
+                badgeStyle = min(_preset, max(0, sprite_get_number(spr_logobadge) - 1));
+                // ...and glass slice N; only the last (cyber) slice brings cyber chrome
+                niceSliceFrm = min(_preset, max(0, sprite_get_number(spr_glassSlice) - 1));
+                uiChromeStyle = 0;
+                if (niceSliceFrm == max(0, sprite_get_number(spr_glassSlice) - 1)) { uiChromeStyle = 1; }
             }
             else if (_op.action == "PALETTE_STYLE") {
-                paletteStyle = (paletteStyle + 1) mod max(1, sprite_get_number(spr_palette_page));
+                var _pal_n = max(1, sprite_get_number(spr_palette_page));
+                paletteStyle = (paletteStyle + _dir + _pal_n) mod _pal_n;
             }
             else if (_op.action == "OPCODE_STYLE") {
-                var _cy_btn_cycle = max(0, sprite_get_number(spr_opcode_button) - 2);
-                if (buttonStyle == 0) {
-                    buttonStyle = min(1, _cy_btn_cycle);
-                } else if (buttonStyle == 1) {
-                    buttonStyle = min(2, _cy_btn_cycle);
-                } else if (buttonStyle == 2 && _cy_btn_cycle > 2) {
-                    buttonStyle = _cy_btn_cycle;
-                } else {
-                    buttonStyle = 0;
-                }
+                // One opcode button per theme (6): frame N is style N, no hover frame.
+                var _btn_styles = min(sprite_get_number(spr_opcode_button), max(1, sprite_get_number(spr_palette_page)));
+                buttonStyle = (buttonStyle + _dir + _btn_styles) mod _btn_styles;
             }
             else if (_op.action == "BADGE_STYLE") {
-                badgeStyle = (badgeStyle + 1) mod max(1, sprite_get_number(spr_logobadge));
+                var _bdg_n = max(1, sprite_get_number(spr_logobadge));
+                badgeStyle = (badgeStyle + _dir + _bdg_n) mod _bdg_n;
             }
             else if (_op.action == "BACKGROUND_STYLE") {
-                bkgImg = (bkgImg + 1) mod max(1, sprite_get_number(spr_bkg));
+                var _bkg_n = max(1, sprite_get_number(spr_bkg));
+                bkgImg = (bkgImg + _dir + _bkg_n) mod _bkg_n;
             }
             else if (_op.action == "PANEL_STYLE") {
-                niceSliceFrm = (niceSliceFrm + 1) mod max(1, sprite_get_number(spr_glassSlice));
-                if (niceSliceFrm > 0) {
-                    uiChromeStyle = 1;
-                } else {
-                    uiChromeStyle = 0;
-                }
+                var _pnl_n = max(1, sprite_get_number(spr_glassSlice));
+                niceSliceFrm = (niceSliceFrm + _dir + _pnl_n) mod _pnl_n;
+                uiChromeStyle = 0;
+                if (niceSliceFrm == _pnl_n - 1) { uiChromeStyle = 1; }
             }
             else if (_op.action == "NODE_STYLE") {
-                nodeStyle = (nodeStyle + 1) mod (sprite_get_number(spr_9s_tile1) + 1);
+                var _nod_n = sprite_get_number(spr_9s_tile1) + 1;
+                nodeStyle = (nodeStyle + _dir + _nod_n) mod _nod_n;
             }
             else if (_op.action == "OPCODE_HEADERS") {
                 opcode_headers_on = !opcode_headers_on;
@@ -1626,6 +1612,9 @@ if (gui_menu_open == 0) {
         { title: "ENABLER",      type: "MACRO_SPR_ENABLE"    },
         { title: "EXPANDER",     type: "MACRO_SPR_EXPAND"    },
         { title: "ANIMATE",      type: "MACRO_ANIM"          },
+        { title: "ANIM SET",     type: "MACRO_ANIM_SET"      },
+        { title: "ROOMS",        type: "MACRO_ROOMS"         },
+        { title: "SPRITE MASK",  type: "MACRO_SPR_MASK"      },
         { title: "FLIP X",       type: "MACRO_FLIP_X"        },
         { title: "--- SOUND ---", type: "HEADER"              },
         { title: "SID",          type: "MACRO_SID"           },
@@ -3293,8 +3282,8 @@ if (global.show_info_window && instance_exists(global.info_node)) {
 	    // No full-screen dim — the modal is small and floats above
 	    // center so the canvas stays visible while jumping between
 	    // results via < / >.
-	    var _lsw = 420;
-	    var _lsh = 150;
+	    var _lsw = 460;
+	    var _lsh = 170;
 	    var _lsx = (gui_w - _lsw) / 2;
         var _lsy = (gui_h - _lsh) / 2;
 
@@ -3320,13 +3309,16 @@ if (global.show_info_window && instance_exists(global.info_node)) {
 	    if (_lsclose_hov && mouse_check_button_pressed(mb_left)) {
 	        label_search_open    = false;
 	        label_search_results = [];
+	        label_search_info    = [];
 	        label_search_index   = -1;
+	        label_search_pending = noone;
+	        label_search_reflow  = 0;
 	    }
 
 	    // Hint
 	    draw_set_font_l(fnt_c64_tiny);
 	    draw_set_color(c_gray);
-	    draw_text_l(_lsx + 14, _lsy + 32, "NAME / NAME* / *NAME / *NAME*");
+	    draw_text_l(_lsx + 14, _lsy + 32, "NAME / NAME* / *NAME / *NAME*   LABELS + CODE   CTRL+V PASTES");
 
 	    // Input field
 	    var _lfx1 = _lsx + 14;
@@ -3358,10 +3350,12 @@ if (global.show_info_window && instance_exists(global.info_node)) {
 	    draw_set_halign(fa_left);
 	    if (_lsb_hov && mouse_check_button_pressed(mb_left)) {
 	        label_search_results = scr_label_search_run(label_search_query);
-	        label_search_index   = (array_length(label_search_results) > 0) ? 0 : -1;
+	        label_search_index   = -1;
+	        if (array_length(label_search_results) > 0) {
+	            label_search_index = 0;
+	        }
 	        if (label_search_index >= 0 && instance_exists(label_search_results[label_search_index])) {
-	            scr_focus_camera_on_node_offset(label_search_results[label_search_index], 0.2);
-	            camera_set_view_pos(cam_view, cam_x, cam_y);
+	            scr_label_search_goto(label_search_results[label_search_index], 0.55);
 	        }
 	    }
 
@@ -3384,8 +3378,7 @@ if (global.show_info_window && instance_exists(global.info_node)) {
 	        if (_lsp_hov && mouse_check_button_pressed(mb_left)) {
 	            label_search_index = (label_search_index - 1 + _lsr_count) mod _lsr_count;
 	            if (instance_exists(label_search_results[label_search_index])) {
-	                scr_focus_camera_on_node_offset(label_search_results[label_search_index], 0.2);
-	                camera_set_view_pos(cam_view, cam_x, cam_y);
+	                scr_label_search_goto(label_search_results[label_search_index], 0.2);
 	            }
 	        }
 
@@ -3398,19 +3391,40 @@ if (global.show_info_window && instance_exists(global.info_node)) {
 	        if (_lsn_hov && mouse_check_button_pressed(mb_left)) {
 	            label_search_index = (label_search_index + 1) mod _lsr_count;
 	            if (instance_exists(label_search_results[label_search_index])) {
-	                scr_focus_camera_on_node_offset(label_search_results[label_search_index], 0.2);
-	                camera_set_view_pos(cam_view, cam_x, cam_y);
+	                scr_label_search_goto(label_search_results[label_search_index], 0.2);
 	            }
 	        }
 
-	        // Current label name
-	        if (instance_exists(label_search_results[label_search_index])) {
-	            var _lscur      = label_search_results[label_search_index];
-	            var _lscur_name = (array_length(_lscur.instructions) > 0 && array_length(_lscur.instructions[0]) > 1)
-	                             ? string(_lscur.instructions[0][1]) : "";
+	        // Current result: DEF/REF + node title, then the matching line
+	        if (instance_exists(label_search_results[label_search_index]) && label_search_index < array_length(label_search_info)) {
+	            var _lscur  = label_search_results[label_search_index];
+	            var _lsinf  = label_search_info[label_search_index];
+	            var _lskind = "REF";
+	            var _lskcol = make_color_rgb(255, 160, 30);
+	            if (_lsinf.def) {
+	                _lskind = "DEF";
+	                _lskcol = c_lime;
+	            }
 	            draw_set_font_l(fnt_c64_tiny);
+	            draw_set_color(_lskcol);
+	            draw_text_l(_lsr_x + 150, _lsr_y, _lskind);
 	            draw_set_color(c_white);
-	            draw_text_l(_lsr_x, _lsr_y + 20, _lscur_name);
+	            draw_text_l(_lsr_x + 185, _lsr_y, string_copy(string_upper(_lscur.node_title), 1, 18));
+
+	            var _lsline = _lsinf.text;
+	            if (_lsinf.line > 0) {
+	                _lsline = "L" + string(_lsinf.line) + ": " + _lsline;
+	            }
+	            draw_set_font_l(fnt_c64_code);
+	            var _lsmaxw = _lsw - 28;
+	            if (string_width_l(_lsline) > _lsmaxw) {
+	                while (string_length(_lsline) > 4 && string_width_l(_lsline + "...") > _lsmaxw) {
+	                    _lsline = string_copy(_lsline, 1, string_length(_lsline) - 1);
+	                }
+	                _lsline += "...";
+	            }
+	            draw_set_color(c_yellow);
+	            draw_text_l(_lsx + 14, _lsby2 + 12, _lsline);
 	        }
 	    } else if (label_search_query != "") {
 	        draw_set_color(c_red);
@@ -3997,4 +4011,180 @@ if (welcome_open) {
     draw_text_l((_cbx1 + _cbx2) / 2, (_cby1 + _cby2) / 2, "X");
     draw_set_halign(fa_left);
     draw_set_valign(fa_top);
+}
+
+
+// =============================================================
+// MACRO_REU ASSET DROP-DOWN — list of the manifest's linked assets.
+// Hovering a row shows the asset's thumbnail beside the list.
+// =============================================================
+if (reu_pick_open) {
+    if (!global.any_picker_open || !instance_exists(reu_pick_node)) {
+        reu_pick_open = false;
+    }
+}
+if (reu_pick_open) {
+    var _rp_n    = array_length(reu_pick_items);
+    var _rp_rh   = 18;
+    var _rp_vis  = min(reu_pick_rows, _rp_n);
+    var _rp_gh   = display_get_gui_height();
+    draw_set_font_l(fnt_c64_code);
+    var _rp_w = 160;
+    for (var _rpi = 0; _rpi < _rp_n; _rpi++) {
+        _rp_w = max(_rp_w, string_width_l(reu_pick_items[_rpi]) + 24);
+    }
+    _rp_w = min(_rp_w, 520);
+    var _rp_x1 = clamp(reu_pick_gx - 20, 8, global.gui_w - _rp_w - 8);
+    var _rp_h  = _rp_vis * _rp_rh + 8;
+    var _rp_y1 = reu_pick_gy;
+    if (_rp_y1 + _rp_h > _rp_gh - 8) {
+        _rp_y1 = max(8, _rp_gh - 8 - _rp_h);
+    }
+    var _rp_x2 = _rp_x1 + _rp_w;
+    var _rp_y2 = _rp_y1 + _rp_h;
+    reu_pick_scroll = clamp(reu_pick_scroll, 0, max(0, _rp_n - _rp_vis));
+
+    draw_set_color(make_color_rgb(16, 19, 29));
+    draw_rectangle(_rp_x1, _rp_y1, _rp_x2, _rp_y2, false);
+    draw_set_color(make_color_rgb(100, 200, 180));
+    draw_rectangle(_rp_x1, _rp_y1, _rp_x2, _rp_y2, true);
+
+    var _rp_cur = "";
+    if (instance_exists(reu_pick_node)) {
+        _rp_cur = string(reu_pick_node.instructions[0][11]);
+    }
+    var _rp_hover = -1;
+    var _rp_hover_y = 0;
+    for (var _rpv = 0; _rpv < _rp_vis; _rpv++) {
+        var _rpk = reu_pick_scroll + _rpv;
+        if (_rpk >= _rp_n) break;
+        var _rpy = _rp_y1 + 4 + _rpv * _rp_rh;
+        var _rp_hov = point_in_rectangle(gui_mouse_x, gui_mouse_y, _rp_x1 + 2, _rpy, _rp_x2 - 10, _rpy + _rp_rh - 1);
+        if (_rp_hov) {
+            _rp_hover   = _rpk;
+            _rp_hover_y = _rpy;
+            draw_set_color(make_color_rgb(45, 105, 120));
+            draw_rectangle(_rp_x1 + 2, _rpy, _rp_x2 - 10, _rpy + _rp_rh - 1, false);
+        }
+        var _rp_name = reu_pick_items[_rpk];
+        if (_rp_name == _rp_cur) {
+            draw_set_color(c_lime);
+        } else {
+            draw_set_color(c_white);
+        }
+        var _rp_txt = _rp_name;
+        var _rp_room = _rp_w - 24;
+        if (string_width_l(_rp_txt) > _rp_room) {
+            while (string_length(_rp_txt) > 1 && string_width_l(_rp_txt + "...") > _rp_room) {
+                _rp_txt = string_copy(_rp_txt, 1, string_length(_rp_txt) - 1);
+            }
+            _rp_txt += "...";
+        }
+        draw_text_l(_rp_x1 + 8, _rpy + 1, _rp_txt);
+    }
+
+    // Scrollbar
+    if (_rp_n > _rp_vis) {
+        var _rp_sbh = max(16, (_rp_h - 8) * (_rp_vis / _rp_n));
+        var _rp_sby = _rp_y1 + 4 + ((_rp_h - 8 - _rp_sbh) * (reu_pick_scroll / max(1, _rp_n - _rp_vis)));
+        draw_set_color(make_color_rgb(70, 85, 95));
+        draw_rectangle(_rp_x2 - 7, _rp_sby, _rp_x2 - 3, _rp_sby + _rp_sbh, false);
+    }
+
+    // Thumbnail of the hovered asset
+    if (_rp_hover >= 0 && instance_exists(obj_asset_manager)) {
+        var _rp_asset = scr_reu_find_asset(reu_pick_items[_rp_hover]);
+        if (!is_undefined(_rp_asset) && is_struct(_rp_asset.meta)) {
+            var _rp_meta = _rp_asset.meta;
+            var _rp_surf = -1;
+            var _rp_keys = ["preview_surf", "preview_surf_clean", "preview_surf_mc"];
+            for (var _rpq = 0; _rpq < array_length(_rp_keys); _rpq++) {
+                if (variable_struct_exists(_rp_meta, _rp_keys[_rpq])) {
+                    var _rp_c = variable_struct_get(_rp_meta, _rp_keys[_rpq]);
+                    if (surface_exists(_rp_c)) { _rp_surf = _rp_c; break; }
+                }
+            }
+            // A bitmap that has never been opened has no cached surface yet
+            if (_rp_surf == -1 && (_rp_asset.type == "BITMAP")) {
+                scr_asset_bmp_build_preview(_rp_asset);
+                if (variable_struct_exists(_rp_meta, "preview_surf") && surface_exists(_rp_meta.preview_surf)) {
+                    _rp_surf = _rp_meta.preview_surf;
+                }
+            }
+            var _rp_sprs = [];
+            if (variable_struct_exists(_rp_meta, "spr_sprites") && is_array(_rp_meta.spr_sprites)) {
+                _rp_sprs = _rp_meta.spr_sprites;
+            }
+            var _rp_scount = array_length(_rp_sprs);
+            if (variable_struct_exists(_rp_meta, "used_count")) {
+                _rp_scount = min(_rp_scount, max(0, _rp_meta.used_count));
+            }
+            var _rp_tw = 320;
+            var _rp_th = 200;
+            var _rp_tx = _rp_x2 + 10;
+            if (_rp_tx + _rp_tw + 12 > global.gui_w) {
+                _rp_tx = _rp_x1 - _rp_tw - 22;
+            }
+            var _rp_ty = clamp(_rp_hover_y - 110, 8, _rp_gh - _rp_th - 40);
+            if (_rp_surf != -1 || _rp_scount > 0) {
+                draw_set_color(make_color_rgb(16, 19, 29));
+                draw_rectangle(_rp_tx, _rp_ty, _rp_tx + _rp_tw + 12, _rp_ty + _rp_th + 30, false);
+                draw_set_color(make_color_rgb(100, 200, 180));
+                draw_rectangle(_rp_tx, _rp_ty, _rp_tx + _rp_tw + 12, _rp_ty + _rp_th + 30, true);
+                draw_set_font_l(fnt_c64_tiny);
+                draw_set_color(make_color_rgb(150, 170, 185));
+                draw_text_l(_rp_tx + 6, _rp_ty + 5, _rp_asset.type);
+                var _rp_ix = _rp_tx + 6;
+                var _rp_iy = _rp_ty + 24;
+                if (variable_struct_exists(_rp_meta, "bg_col")) {
+                    draw_set_color(scr_c64_pepto_colour(_rp_meta.bg_col));
+                } else {
+                    draw_set_color(c_black);
+                }
+                draw_rectangle(_rp_ix, _rp_iy, _rp_ix + _rp_tw, _rp_iy + _rp_th, false);
+                var _rp_filter = gpu_get_tex_filter();
+                gpu_set_tex_filter(false);
+                if (_rp_surf != -1) {
+                    var _rp_sw = surface_get_width(_rp_surf);
+                    var _rp_sh = surface_get_height(_rp_surf);
+                    var _rp_sc = min(_rp_tw / _rp_sw, _rp_th / _rp_sh);
+                    draw_surface_ext(_rp_surf, _rp_ix + (_rp_tw - _rp_sw * _rp_sc) * 0.5, _rp_iy + (_rp_th - _rp_sh * _rp_sc) * 0.5, _rp_sc, _rp_sc, 0, c_white, 1);
+                } else {
+                    var _rp_cols = max(1, ceil(sqrt(_rp_scount)));
+                    var _rp_rows = max(1, ceil(_rp_scount / _rp_cols));
+                    var _rp_cs   = min(_rp_tw / (_rp_cols * 52), _rp_th / (_rp_rows * 46));
+                    for (var _rps = 0; _rps < _rp_scount; _rps++) {
+                        var _rp_spr = _rp_sprs[_rps];
+                        if (!sprite_exists(_rp_spr)) continue;
+                        var _rp_sx = _rp_ix + ((_rps mod _rp_cols) * 52 + 2) * _rp_cs;
+                        var _rp_sy = _rp_iy + (floor(_rps / _rp_cols) * 46 + 2) * _rp_cs;
+                        var _rp_ss = min(48 / sprite_get_width(_rp_spr), 42 / sprite_get_height(_rp_spr)) * _rp_cs;
+                        draw_sprite_ext(_rp_spr, 0, _rp_sx + sprite_get_xoffset(_rp_spr) * _rp_ss, _rp_sy + sprite_get_yoffset(_rp_spr) * _rp_ss, _rp_ss, _rp_ss, 0, c_white, 1);
+                    }
+                }
+                gpu_set_tex_filter(_rp_filter);
+            }
+        }
+    }
+
+    // Input: pick, or click away / Esc to close
+    if (reu_pick_skip > 0) {
+        reu_pick_skip -= 1;
+    } else if (mouse_check_button_pressed(mb_left)) {
+        if (_rp_hover >= 0 && instance_exists(reu_pick_node)) {
+            scr_undo_snapshot();
+            reu_pick_node.instructions[0][11] = reu_pick_items[_rp_hover];
+            global.addresses_dirty = true;
+            global.undo_dirty = true;
+        }
+        reu_pick_open = false;
+        global.any_picker_open = false;
+        global.was_editor_open = true;
+        obj_asset_manager.alarm[2] = 60;
+    }
+    if (keyboard_check_pressed(vk_escape)) {
+        reu_pick_open = false;
+        global.any_picker_open = false;
+    }
+    draw_set_color(c_white);
 }
