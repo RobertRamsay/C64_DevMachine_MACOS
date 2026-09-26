@@ -14,7 +14,7 @@ showcode_refresh_requested = false;
 editor_layout_refresh_requested = false;
 
 
-global.build_date = "September 25th, 2026"; // edit this string for each release
+global.build_date = "September 26th, 2026"; // edit this string for each release
 
 // Frame counter. Incremented once in Begin Step, and used as the validity
 // stamp for per-frame lookup caches (see scr_reu_asset_map). Anything keyed
@@ -131,6 +131,9 @@ welcome_open           = false;
 welcome_hide_checked   = false;
 welcome_credits_y      = 0;
 welcome_whats_new = [
+    "NEW - STARLIGHT UI theme, tidied up other themes added bkg for cyberpunk theme.",
+    "NEW - ROOMS node - for optimised room switching.",
+    "NEW - ANIM SET node - for optimised sprite animtion setting.",
     "NEW - Templates and Ports with 1 project in each: SHMUP.V and ZYRONS ESCAPE.",
     "REFINED - REU ORG asset layout improved and preview of the asset when you hover.",
     "REFINED - MEMORY Bar now can ZOOM into sections via the ALL / SEG / ONE button.",
