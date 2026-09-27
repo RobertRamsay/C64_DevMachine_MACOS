@@ -201,8 +201,9 @@ if (welcome_open) {
     exit;
 }
 
-// F1 reopens the welcome screen at any time
-if (!is_entering_text && !global.is_any_text_active && keyboard_check_pressed(vk_f1)) {
+// F1 reopens the welcome screen at any time (except in the Music Maker,
+// where F1-F4 are its transport keys)
+if (!is_entering_text && !global.is_any_text_active && keyboard_check_pressed(vk_f1) && !scr_music_maker_is_open()) {
     welcome_open = true;
     welcome_mode = 0;
 }
@@ -1590,8 +1591,9 @@ if (scr_cmd_held()) {
     if (keyboard_check_pressed(ord("Y")) && !global.is_any_text_active) { scr_undo_step(1);  exit; }
 }
 
-if (keyboard_check_pressed(vk_f1))  { scr_cleanup_nodes(); scr_c64_update_addresses(); }
-if (keyboard_check_pressed(vk_f4))  { trigger_export = true; }////
+// F1-F4 belong to the Music Maker's transport while it is open.
+if (keyboard_check_pressed(vk_f1) && !scr_music_maker_is_open())  { scr_cleanup_nodes(); scr_c64_update_addresses(); }
+if (keyboard_check_pressed(vk_f4) && !scr_music_maker_is_open())  { trigger_export = true; }
 if (keyboard_check_pressed(vk_f5))  { trigger_build = true; }
 if (keyboard_check_pressed(vk_f7)) {
 	global.autosave_mode = (global.autosave_mode + 1) mod 4;
@@ -2380,7 +2382,7 @@ if (keyboard_check_pressed(ord("V"))) {
 
     // Macro nodes are drag-only from the shelf - no shortcuts
 
-	if (keyboard_check_pressed(vk_f3)) global.comments_visible = !global.comments_visible;
+	if (keyboard_check_pressed(vk_f3) && !scr_music_maker_is_open()) global.comments_visible = !global.comments_visible;
 }
 
 
@@ -2479,8 +2481,8 @@ abs(x - _spine_x) < global.node_display_width &&
 // 3. COMPILER & AUTO-VICE LAUNCH
 // =============================================================
 
-// F2: Silent build + VICE dump
-if (keyboard_check_pressed(vk_f2)) {
+// F2: Silent build + VICE dump (not while the Music Maker owns F1-F4)
+if (keyboard_check_pressed(vk_f2) && !scr_music_maker_is_open()) {
     silent_build  = true;
     pending_dump  = true;
     trigger_build = true;
@@ -4177,7 +4179,7 @@ silent_build  = false;
 // =============================================================
 // EXPORT .PRG (F4)
 // =============================================================
-var export_trigger = keyboard_check_pressed(vk_f4) || trigger_export;
+var export_trigger = (keyboard_check_pressed(vk_f4) && !scr_music_maker_is_open()) || trigger_export;
 if (export_trigger) {
     trigger_export = false;
 

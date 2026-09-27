@@ -220,8 +220,31 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
         }
         return _pats;
     };
+    // Each undo entry is the patterns before the edit plus where the cursor
+    // was when it was made, so undo/redo can put the cursor back on the edit.
+    // Moves the cursor (and the order row / scroll it needs) to an undo entry's
+    // location, dropping any selection or half-typed command.
+    var _se_undo_goto = function(_mm, _ent, _visrows) {
+        _mm.sel_order_row = _ent.ord;
+        _mm.sel_voice     = _ent.voice;
+        _mm.sel_step      = _ent.step;
+        _mm.sel_sub       = _ent.sub;
+        _mm.sel_anchor_voice = _ent.voice;
+        _mm.sel_anchor_step  = _ent.step;
+        _mm.cmd_entry_str    = "";
+        _mm.edit_active      = false;
+        if (_mm.sel_step < _mm.list_scroll || _mm.sel_step >= _mm.list_scroll + _visrows) {
+            _mm.list_scroll = max(0, _mm.sel_step - floor(_visrows / 2));
+        }
+    };
     var _se_push_undo = function(_mm, _snapf) {
-        array_push(_mm.undo_stack, _snapf(_mm));
+        array_push(_mm.undo_stack, {
+            pats  : _snapf(_mm),
+            voice : _mm.sel_voice,
+            step  : _mm.sel_step,
+            sub   : _mm.sel_sub,
+            ord   : _mm.sel_order_row
+        });
         if (array_length(_mm.undo_stack) > 50) {
             array_delete(_mm.undo_stack, 0, 1);
         }
@@ -301,7 +324,7 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
         }
     }
 
-    var _transport_labels = ["PLAY PAT", "PLAY SONG", "PLAY HERE", "STOP"];
+    var _transport_labels = ["PLAY PAT (F3)", "PLAY SONG (F1)", "PLAY HERE", "STOP (F4)"];
     var _transport_actions = ["PAT", "SONG", "HERE", "STOP"];
     draw_set_font_l(fnt_c64_tiny);
     draw_set_halign(fa_left);
@@ -318,6 +341,19 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
     // Space in a text field belongs to that field, never to the transport.
     var _transport_typing = _m.edit_active || _m.instr_edit_active
                          || _m.instr_name_edit_active || _m.song_name_edit_active;
+    // GoatTracker function keys: F1 song from the start, F2 this pattern from
+    // the cursor row (looping), F3 this pattern from the top (looping), F4 stop.
+    if (!_transport_typing) {
+        if (keyboard_check_pressed(vk_f1)) {
+            _transport_action = "SONG";
+        } else if (keyboard_check_pressed(vk_f2)) {
+            _transport_action = "ROW_HERE";
+        } else if (keyboard_check_pressed(vk_f3)) {
+            _transport_action = "PAT";
+        } else if (keyboard_check_pressed(vk_f4)) {
+            _transport_action = "STOP";
+        }
+    }
     if (!_transport_typing && keyboard_check_pressed(vk_space)) {
         if (keyboard_check(vk_control) || scr_cmd_held()) {
             _transport_action = _m.song_playing ? "STOP" : "SONG";
@@ -472,7 +508,7 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
     draw_set_font_l(fnt_c64_tiny);
     draw_set_color(make_color_rgb(120, 140, 190));
     draw_text_l(_vx1 + 20, _cy,
-        "CLICK A CELL, TYPE A NOTE (C-4, C#3, ---)   |   ENTER COMMITS + DROPS A ROW   |   DEL CLEARS   |   BKSP PULLS UP   |   INS PUSHES DOWN   |   UP/DOWN MOVES   |   TAB NOTE/CMD   |   SPACE LOOP ROW   |   SHIFT+SPACE FROM START   |   CTRL+SPACE PLAY SONG");
+        "CLICK A CELL, TYPE A NOTE (C-4, C#3, ---)   |   ENTER COMMITS + DROPS A ROW   |   DEL CLEARS   |   BKSP PULLS UP   |   INS PUSHES DOWN   |   UP/DOWN MOVES   |   TAB NOTE/CMD   |   F1 SONG   F2 PAT FROM ROW   F3 PAT   F4 STOP");
    
     draw_set_font_l(fnt_c64_tiny);
     var _status_y = _cy + 50;
@@ -1086,12 +1122,16 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
         // ── UNDO / REDO ── Ctrl+Z / Ctrl+Y (Ctrl+Shift+Z also redoes).
         // Every pattern edit already pushed a snapshot (notes, instruments per
         // cell, command column); this is the half that restores them.
+        // The cursor jumps to where the undone / redone edit was made; the
+        // opposite stack gets the same location so redo lands there too.
         if (_kb_ctrl && keyboard_check_pressed(ord("Z")) && !keyboard_check(vk_shift)) {
             if (array_length(_m.undo_stack) > 0) {
-                array_push(_m.redo_stack, _se_snap(_m));
                 var _un_top = array_length(_m.undo_stack) - 1;
-                _m.patterns = _m.undo_stack[_un_top];
+                var _un = _m.undo_stack[_un_top];
                 array_delete(_m.undo_stack, _un_top, 1);
+                array_push(_m.redo_stack, { pats: _se_snap(_m), voice: _un.voice, step: _un.step, sub: _un.sub, ord: _un.ord });
+                _m.patterns = _un.pats;
+                _se_undo_goto(_m, _un, _vis);
                 _m.bank_sel_pattern = clamp(_m.bank_sel_pattern, 0, array_length(_m.patterns) - 1);
                 _m.warn_msg   = "UNDO";
                 _m.warn_timer = game_get_speed(gamespeed_fps);
@@ -1105,10 +1145,12 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
         }
         if (_kb_ctrl && _redo_key) {
             if (array_length(_m.redo_stack) > 0) {
-                array_push(_m.undo_stack, _se_snap(_m));
                 var _re_top = array_length(_m.redo_stack) - 1;
-                _m.patterns = _m.redo_stack[_re_top];
+                var _re = _m.redo_stack[_re_top];
                 array_delete(_m.redo_stack, _re_top, 1);
+                array_push(_m.undo_stack, { pats: _se_snap(_m), voice: _re.voice, step: _re.step, sub: _re.sub, ord: _re.ord });
+                _m.patterns = _re.pats;
+                _se_undo_goto(_m, _re, _vis);
                 _m.bank_sel_pattern = clamp(_m.bank_sel_pattern, 0, array_length(_m.patterns) - 1);
                 _m.warn_msg   = "REDO";
                 _m.warn_timer = game_get_speed(gamespeed_fps);
