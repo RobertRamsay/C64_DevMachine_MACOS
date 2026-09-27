@@ -1,0 +1,1026 @@
+diff --git a/C64Devmachine/C64Devmachine_mac.yyp b/C64Devmachine/C64Devmachine_mac.yyp
+index 6693584..5af5334 100644
+--- a/C64Devmachine/C64Devmachine_mac.yyp
++++ b/C64Devmachine/C64Devmachine_mac.yyp
+@@ -1356,6 +1356,7 @@
+     {"id":{"name":"scr_sound_editor_draw_instruments","path":"scripts/scr_sound_editor_draw_instruments/scr_sound_editor_draw_instruments.yy",},},
+     {"id":{"name":"scr_sound_editor_editor","path":"scripts/scr_sound_editor_editor/scr_sound_editor_editor.yy",},},
+     {"id":{"name":"scr_sound_editor_play_step","path":"scripts/scr_sound_editor_play_step/scr_sound_editor_play_step.yy",},},
++    {"id":{"name":"scr_sound_editor_cmd_menu","path":"scripts/scr_sound_editor_cmd_menu/scr_sound_editor_cmd_menu.yy",},},
+     {"id":{"name":"scr_sound_instrument_preview_play","path":"scripts/scr_sound_instrument_preview_play/scr_sound_instrument_preview_play.yy",},},
+     {"id":{"name":"scr_sound_preview_cache_clear","path":"scripts/scr_sound_preview_cache_clear/scr_sound_preview_cache_clear.yy",},},
+     {"id":{"name":"scr_sound_preview_cache_key","path":"scripts/scr_sound_preview_cache_key/scr_sound_preview_cache_key.yy",},},
+diff --git a/C64Devmachine/objects/obj_asset_manager/Draw_64.gml b/C64Devmachine/objects/obj_asset_manager/Draw_64.gml
+index a395820..08e9045 100644
+--- a/C64Devmachine/objects/obj_asset_manager/Draw_64.gml
++++ b/C64Devmachine/objects/obj_asset_manager/Draw_64.gml
+@@ -801,6 +801,11 @@ if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list))
+ 	_vx1 = _wide_editor ? 30 : 288;
+ 	_vy1 = 108;
+ 	var _vx2 = _wide_editor ? (panel_x + 20) : (panel_x - 10);
++	// The Music Maker is modal and uses the full width, centred: 30px margins
++	// both sides (matching its 108px top/bottom), over the asset panel.
++	if (_asset.type == "MUSIC_MAKER") {
++		_vx2 = _gui_w - _vx1;
++	}
+ 	var _vy2 = 972;
+ 
+     var _vw    = _vx2 - _vx1;
+@@ -11087,13 +11092,25 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
+ 	
+     var _as_x = 0;
+     var _as_y = 0;
++    var _sv_w = 60;
++    var _sv_x = 0;
++    var _sv_y1 = 0;
++    var _sv_y2 = 0;
+ 	
+     if (_asset.type == "META_TILESET") {
+         _as_x = _vx1 + 20;
+         _as_y = _vy2 - 305;
++        _sv_x  = _as_x + 100;
++        _sv_y1 = _as_y;
++        _sv_y2 = _as_y + 14;
+     } else {
+-        _as_x = _vx1 + 1090;
+-		_as_y = _vy1 +8;
++        // Header: SAVE sits just left of CLOSE and is drawn like it;
++        // AUTOSAVE: ON/OFF sits just left of SAVE.
++        _sv_x  = _vx2 - 80 - 8 - _sv_w;
++        _sv_y1 = _vy1 + 4;
++        _sv_y2 = _vy1 + 24;
++        _as_x  = _sv_x - 110;
++        _as_y  = _vy1 + 8;
+     }
+     var _ashov = point_in_rectangle(_mx, _my, _as_x, _as_y, _as_x + 100, _as_y + 16);
+     draw_set_font_l(fnt_c64_tiny);
+@@ -11102,21 +11119,34 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
+     if (_ashov && mouse_check_button_pressed(mb_left)) {
+         _asset.meta.autosave = !_asset.meta.autosave;
+     }
+-    var _sv_x  = _as_x + 100;
+-    var _sv_w  = 60;
+-    var _svhov = point_in_rectangle(_mx, _my, _sv_x, _as_y, _sv_x + _sv_w, _as_y + 16);
++    var _svhov = point_in_rectangle(_mx, _my, _sv_x, _sv_y1, _sv_x + _sv_w, _sv_y2);
++    // Unsaved changes: the button pulses amber; otherwise it matches CLOSE
++    // (dark, lighter edge), turning green on hover.
+     if (_asset.meta.is_dirty) {
+         _asset.meta.flash_timer = (_asset.meta.flash_timer + 1) mod 40;
+-        var _alpha = (_asset.meta.flash_timer < 20) ? 1.0 : 0.3;
++        var _alpha = 0.3;
++        if (_asset.meta.flash_timer < 20) {
++            _alpha = 1.0;
++        }
+         draw_set_color(make_color_rgb(200, 150, 50));
+         draw_set_alpha(_alpha);
++    } else if (_svhov) {
++        draw_set_color(make_color_rgb(50, 140, 70));
+     } else {
+-        draw_set_color(make_color_rgb(40, 40, 40));
++        draw_set_color(make_color_rgb(30, 30, 42));
+     }
+-    draw_rectangle(_sv_x, _as_y, _sv_x + _sv_w, _as_y + 14, false);
++    draw_rectangle(_sv_x, _sv_y1, _sv_x + _sv_w, _sv_y2, false);
+     draw_set_alpha(1.0);
++    if (_svhov) {
++        draw_set_color(c_white);
++    } else {
++        draw_set_color(make_color_rgb(110, 110, 140));
++    }
++    draw_rectangle(_sv_x, _sv_y1, _sv_x + _sv_w, _sv_y2, true);
+     draw_set_color(c_white);
+-    draw_text_l(_sv_x + 10, _as_y, "SAVE");
++    draw_set_halign(fa_center);
++    draw_text_l(_sv_x + _sv_w * 0.5, _sv_y1 + 4, "SAVE");
++    draw_set_halign(fa_left);
+ 	    if ((_svhov && mouse_check_button_pressed(mb_left)) || (_asset.meta.is_dirty && _asset.meta.autosave)) {
+ 	        // SPRITE_SET is never written back to its source file. The
+ 	        // workspace JSON already preserves the buffer + meta (including
+diff --git a/C64Devmachine/objects/obj_asset_manager/Step_0.gml b/C64Devmachine/objects/obj_asset_manager/Step_0.gml
+index 6992928..047b571 100644
+--- a/C64Devmachine/objects/obj_asset_manager/Step_0.gml
++++ b/C64Devmachine/objects/obj_asset_manager/Step_0.gml
+@@ -47,6 +47,9 @@ if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list))
+         _wide_modal = true;
+         _vx1 = 30;
+         _vx2 = panel_x + 20;
++        if (_vb_type == "MUSIC_MAKER") {
++            _vx2 = _gui_w - _vx1;   // full width, centred — must match Draw
++        }
+     }
+ }
+ var _mouse_in_viewer = viewer_open && point_in_rectangle(_mx, _my, _vx1, _vy1, _vx2, _vy2);
+diff --git a/C64Devmachine/scripts/scr_compile_chain/scr_compile_chain.gml b/C64Devmachine/scripts/scr_compile_chain/scr_compile_chain.gml
+index 5355597..90b3944 100644
+--- a/C64Devmachine/scripts/scr_compile_chain/scr_compile_chain.gml
++++ b/C64Devmachine/scripts/scr_compile_chain/scr_compile_chain.gml
+@@ -17487,6 +17487,8 @@ case "MACRO_SID_SONG": {
+ 
+                 if (_st_empty == true) {
+                     _note_byte = 0xFE;
++                } else if (_st_note == "+++") {
++                    _note_byte = 0xFD;   // key on: gate back on, same note
+                 } else if (_st_note == "" || _st_note == "---") {
+                     _note_byte = 0xFF;
+                 } else {
+@@ -17894,6 +17896,16 @@ case "MACRO_SID_SONG": {
+         // forever, cycling its stream silently and never releasing. A rest
+         // that can't stop a voice isn't a rest, so this now clears the
+         // active flag too — matching what a tracker's --- is expected to do.
++        // $FD = +++ key on: gate back on from the shadow — same note, same
++        // instrument position, the envelope simply re-attacks.
++        array_push(_list, ["cmp_imm", 0xFD,            _id]);
++        array_push(_list, ["bne",     _vp + "notkon",  _id]);
++        array_push(_list, ["lda_zp",  _cb,             _id]);
++        array_push(_list, ["ora_imm", 0x01,            _id]);
++        array_push(_list, ["sta_zp",  _cb,             _id]);
++        array_push(_list, ["sta_abs", _D400 + 4,       _id]);
++        array_push(_list, ["jmp_abs", _vp + "docmd",   _id]);
++        array_push(_list, ["label",   _vp + "notkon"]);
+         array_push(_list, ["cmp_imm", 0xFF,            _id]);
+         array_push(_list, ["bne",     _vp + "isnote",  _id]);
+         // Gate off from the SHADOW, not a read of $D404 — the register is
+diff --git a/C64Devmachine/scripts/scr_sid64_sim/scr_sid64_sim.gml b/C64Devmachine/scripts/scr_sid64_sim/scr_sid64_sim.gml
+index 18db9e3..5093be6 100644
+--- a/C64Devmachine/scripts/scr_sid64_sim/scr_sid64_sim.gml
++++ b/C64Devmachine/scripts/scr_sid64_sim/scr_sid64_sim.gml
+@@ -7,8 +7,8 @@
+ /// before. Keep this in step with scr_compile_chain's MACRO_SID_SONG case and
+ /// scr_sid_song_emit_fx_routines — the two are one design.
+ ///
+-/// Row sentinels match the compiled pattern bytes: note 254 = hold (empty
+-/// cell), 255 = rest; command 255 = none.
++/// Row sentinels match the compiled pattern bytes: note 253 = +++ key on,
++/// 254 = hold (empty cell), 255 = --- rest; command 255 = none.
+ 
+ /// A voice's full state: the 6502 player's ZP bytes plus its RAM effect tables.
+ function scr_sid64_sim_voice_new() {
+@@ -176,6 +176,10 @@ function scr_sid64_sim_row(_sim, _v, _note, _instr, _cmd, _val) {
+     var _r0 = _v * 7;
+     if (_note == 254) {
+         // hold — the command still applies
++    } else if (_note == 253) {
++        // +++ key on: gate back on from the shadow
++        _vc.cb = _vc.cb | 0x01;
++        scr_sid64_sim_write(_sim, _r0 + 4, _vc.cb);
+     } else if (_note == 255) {
+         // rest: gate off, instrument stops, pending note cancelled
+         _vc.cb = _vc.cb & 0xFE;
+@@ -465,6 +469,8 @@ function scr_sid64_sim_fetch(_sim, _v, _orow) {
+         }
+         if (!is_undefined(_empty) && _empty == true) {
+             _note = 254;
++        } else if (_nn == "+++") {
++            _note = 253;
+         } else if (_nn == "" || _nn == "---") {
+             _note = 255;
+         } else {
+diff --git a/C64Devmachine/scripts/scr_sound_editor_cmd_menu/scr_sound_editor_cmd_menu.gml b/C64Devmachine/scripts/scr_sound_editor_cmd_menu/scr_sound_editor_cmd_menu.gml
+new file mode 100644
+index 0000000..4226345
+--- /dev/null
++++ b/C64Devmachine/scripts/scr_sound_editor_cmd_menu/scr_sound_editor_cmd_menu.gml
+@@ -0,0 +1,421 @@
++/// Instrument command helpers for the Music Maker's COMMANDS box:
++/// WAVE / NOTE / HOLD / LOOP / END dropdowns that insert a ready-made line at
++/// the text cursor, and a ? button that lays a help table over the box.
++///
++/// All of it is called twice per frame from scr_sound_editor_draw_instruments:
++///   scr_sound_editor_cmd_bar(..., false) at the COMMANDS header — draws the
++///       buttons and handles every click (returns true when it used the click,
++///       so the command box doesn't also react to it);
++///   scr_sound_editor_cmd_bar(..., true)  after the box — draws the open list
++///       or the help table on top of it.
++
++/// The dropdowns' contents. LOOP is built from the instrument's own lines.
++function scr_sound_editor_cmd_menus(_lines) {
++    var _loop = [];
++    for (var _li = 0; _li < min(array_length(_lines), 16); _li++) {
++        var _n = string(_li);
++        while (string_length(_n) < 2) { _n = "0" + _n; }
++        array_push(_loop, { ins: "L" + string(_li), label: "BACK TO " + _n + ": " + string_trim(_lines[_li]) });
++    }
++    if (array_length(_loop) == 0) {
++        array_push(_loop, { ins: "L0", label: "BACK TO THE FIRST STEP" });
++    }
++    return [
++        { id: "WAVE", items: [
++            { ins: "$11", label: "TRIANGLE" },
++            { ins: "$21", label: "SAWTOOTH" },
++            { ins: "$41", label: "PULSE" },
++            { ins: "$81", label: "NOISE" },
++            { ins: "$15", label: "TRI + RING MOD" },
++            { ins: "$13", label: "TRI + SYNC" },
++            { ins: "$17", label: "TRI + RING + SYNC" },
++            { ins: "$23", label: "SAW + SYNC" },
++            { ins: "$43", label: "PULSE + SYNC" },
++            { ins: "$61", label: "SAW + PULSE" },
++            { ins: "$51", label: "TRI + PULSE" },
++            { ins: "$31", label: "TRI + SAW" }
++        ] },
++        { id: "NOTE", items: [
++            { ins: "N",    label: "THE PLAYED NOTE" },
++            { ins: "N+12", label: "OCTAVE UP" },
++            { ins: "N-12", label: "OCTAVE DOWN" },
++            { ins: "N+7",  label: "FIFTH UP" },
++            { ins: "N+5",  label: "FOURTH UP" },
++            { ins: "N+4",  label: "MAJOR THIRD UP" },
++            { ins: "N+3",  label: "MINOR THIRD UP" },
++            { ins: "N+2",  label: "TONE UP" },
++            { ins: "N+1",  label: "SEMITONE UP" },
++            { ins: "N-1",  label: "SEMITONE DOWN" },
++            { ins: "N+24", label: "TWO OCTAVES UP" }
++        ] },
++        { id: "HOLD", items: [
++            { ins: "D1",   label: "1 FRAME (FASTEST ARP)" },
++            { ins: "D2",   label: "2 FRAMES" },
++            { ins: "D3",   label: "3 FRAMES" },
++            { ins: "D4",   label: "4 FRAMES" },
++            { ins: "D6",   label: "6 FRAMES" },
++            { ins: "D8",   label: "8 FRAMES" },
++            { ins: "D12",  label: "12 FRAMES" },
++            { ins: "D25",  label: "HALF A SECOND" },
++            { ins: "D50",  label: "ONE SECOND" },
++            { ins: "D255", label: "~5 SECONDS (SUSTAIN)" }
++        ] },
++        { id: "LOOP", items: _loop },
++        { id: "END", items: [
++            { ins: "---", label: "GATE OFF + STOP (NOTE RELEASES)" }
++        ] }
++    ];
++}
++
++/// Inserts _ins as its own line at the text cursor, opening the instrument's
++/// text for editing first if it wasn't. A blank cursor line takes it in place.
++function scr_sound_editor_cmd_insert(_m, _instr, _ins) {
++    if (!_m.instr_edit_active) {
++        _m.instr_edit_active      = true;
++        _m.instr_edit_buf         = _instr.text;
++        _m.instr_edit_cursor      = string_length(_m.instr_edit_buf);
++        _m.instr_name_edit_active = false;
++    }
++    var _buf = _m.instr_edit_buf;
++    var _cur = _m.instr_edit_cursor;
++    var _ls = _cur;
++    while (_ls > 0 && string_char_at(_buf, _ls) != "\n") {
++        _ls -= 1;
++    }
++    var _le = _cur;
++    while (_le < string_length(_buf) && string_char_at(_buf, _le + 1) != "\n") {
++        _le += 1;
++    }
++    var _line = string_trim(string_copy(_buf, _ls + 1, _le - _ls));
++    if (_line == "") {
++        _m.instr_edit_buf    = string_delete(_buf, _ls + 1, _le - _ls);
++        _m.instr_edit_buf    = string_insert(_ins, _m.instr_edit_buf, _ls + 1);
++        _m.instr_edit_cursor = _ls + string_length(_ins);
++    } else {
++        _m.instr_edit_buf    = string_insert("\n" + _ins, _buf, _le + 1);
++        _m.instr_edit_cursor = _le + 1 + string_length(_ins);
++    }
++}
++
++/// _x0/_x1: the COMMANDS column's left/right edges; _y: header row.
++/// _bx0.._by1: the command box (the help table covers it).
++function scr_sound_editor_cmd_bar(_m, _instr, _x0, _x1, _y, _bx0, _by0, _bx1, _by1, _mx, _my, _draw_top) {
++    var _src = _instr.text;
++    if (_m.instr_edit_active) {
++        _src = _m.instr_edit_buf;
++    }
++    var _menus = scr_sound_editor_cmd_menus(string_split(_src, "\n"));
++    var _bh = 16;
++    var _row_h = 16;
++    var _lw = 230;
++    var _gap = 3;
++
++    // Button layout, right-aligned: WAVE NOTE HOLD LOOP END ?
++    var _bw = [];
++    var _total = 0;
++    for (var _i = 0; _i < array_length(_menus); _i++) {
++        array_push(_bw, string_width_l(_menus[_i].id) + 10);
++        _total += _bw[_i] + _gap;
++    }
++    var _qw = string_width_l("?") + 10;
++    _total += _qw;
++    var _bx = [];
++    var _cx = _x1 - _total;
++    for (var _i = 0; _i < array_length(_menus); _i++) {
++        array_push(_bx, _cx);
++        _cx += _bw[_i] + _gap;
++    }
++    var _qx = _cx;
++
++    // The open list (if any).
++    var _open = -1;
++    for (var _i = 0; _i < array_length(_menus); _i++) {
++        if (_m.cmd_menu_open == _menus[_i].id) {
++            _open = _i;
++        }
++    }
++    var _lx1 = 0;
++    var _ly1 = _y + _bh + 2;
++    var _ly2 = _ly1;
++    if (_open >= 0) {
++        _lx1 = clamp(_bx[_open] + _bw[_open] - _lw, _x0 - 4, _x1 - _lw);
++        _ly2 = _ly1 + array_length(_menus[_open].items) * _row_h + 4;
++    }
++
++    if (_draw_top) {
++        draw_set_font_l(fnt_c64_pico);
++        if (_open >= 0) {
++            var _its = _menus[_open].items;
++            draw_set_color(make_color_rgb(20, 20, 32));
++            draw_rectangle(_lx1, _ly1, _lx1 + _lw, _ly2, false);
++            draw_set_color(make_color_rgb(120, 120, 170));
++            draw_rectangle(_lx1, _ly1, _lx1 + _lw, _ly2, true);
++            for (var _i = 0; _i < array_length(_its); _i++) {
++                var _iy = _ly1 + 2 + _i * _row_h;
++                var _hov = point_in_rectangle(_mx, _my, _lx1, _iy, _lx1 + _lw, _iy + _row_h - 1);
++                if (_hov) {
++                    draw_set_color(make_color_rgb(50, 50, 90));
++                    draw_rectangle(_lx1 + 1, _iy, _lx1 + _lw - 1, _iy + _row_h - 1, false);
++                }
++                draw_set_color(make_color_rgb(255, 200, 100));
++                draw_text_l(_lx1 + 6, _iy + 3, _its[_i].ins);
++                if (_hov) {
++                    draw_set_color(c_yellow);
++                } else {
++                    draw_set_color(c_white);
++                }
++                var _lab = _its[_i].label;
++                while (string_length(_lab) > 1 && string_width_l(_lab) > _lw - 56) {
++                    _lab = string_copy(_lab, 1, string_length(_lab) - 1);
++                }
++                draw_text_l(_lx1 + 50, _iy + 3, _lab);
++            }
++        } else if (_m.cmd_help_open) {
++            scr_sound_editor_cmd_help(_bx0, _by0, _bx1, _by1);
++        }
++        draw_set_font_l(fnt_c64_tiny);
++        return false;
++    }
++
++    // ── buttons ──
++    draw_set_font_l(fnt_c64_pico);
++    for (var _i = 0; _i <= array_length(_menus); _i++) {
++        var _is_q = (_i == array_length(_menus));
++        var _x = _qx;
++        var _w = _qw;
++        var _lab = "?";
++        var _on = _m.cmd_help_open;
++        if (!_is_q) {
++            _x = _bx[_i];
++            _w = _bw[_i];
++            _lab = _menus[_i].id;
++            _on = (_open == _i);
++        }
++        var _hv = point_in_rectangle(_mx, _my, _x, _y, _x + _w, _y + _bh);
++        if (_hv || _on) {
++            draw_set_color(make_color_rgb(60, 60, 110));
++        } else {
++            draw_set_color(make_color_rgb(40, 40, 70));
++        }
++        draw_rectangle(_x, _y, _x + _w, _y + _bh, false);
++        if (_hv) {
++            draw_set_color(c_yellow);
++        } else {
++            draw_set_color(c_white);
++        }
++        draw_text_l(_x + 5, _y + 3, _lab);
++    }
++    draw_set_font_l(fnt_c64_tiny);
++
++    if (!mouse_check_button_pressed(mb_left)) {
++        return false;
++    }
++    // A button: toggle its list (or the help), closing anything else.
++    for (var _i = 0; _i <= array_length(_menus); _i++) {
++        var _is_q = (_i == array_length(_menus));
++        var _x = _qx;
++        var _w = _qw;
++        if (!_is_q) {
++            _x = _bx[_i];
++            _w = _bw[_i];
++        }
++        if (point_in_rectangle(_mx, _my, _x, _y, _x + _w, _y + _bh)) {
++            if (_is_q) {
++                _m.cmd_help_open = !_m.cmd_help_open;
++                _m.cmd_menu_open = "";
++            } else {
++                if (_open == _i) {
++                    _m.cmd_menu_open = "";
++                } else {
++                    _m.cmd_menu_open = _menus[_i].id;
++                }
++                _m.cmd_help_open = false;
++            }
++            return true;
++        }
++    }
++    // Help open: any click closes it.
++    if (_m.cmd_help_open) {
++        _m.cmd_help_open = false;
++        return true;
++    }
++    if (_open < 0) {
++        return false;
++    }
++    // List open: a click picks an entry or just closes it.
++    _m.cmd_menu_open = "";
++    if (!point_in_rectangle(_mx, _my, _lx1, _ly1, _lx1 + _lw, _ly2)) {
++        return true;
++    }
++    var _pick = floor((_my - _ly1 - 2) / _row_h);
++    if (_pick >= 0 && _pick < array_length(_menus[_open].items)) {
++        scr_sound_editor_cmd_insert(_m, _instr, _menus[_open].items[_pick].ins);
++    }
++    return true;
++}
++
++/// The ? table: what each instrument command does, with an example.
++function scr_sound_editor_cmd_help(_x0, _y0, _x1, _y1) {
++    draw_set_color(make_color_rgb(14, 14, 24));
++    draw_rectangle(_x0, _y0, _x1, _y1, false);
++    draw_set_color(make_color_rgb(120, 120, 170));
++    draw_rectangle(_x0, _y0, _x1, _y1, true);
++    var _rows = [
++        ["INSTRUMENT PROGRAM: RUNS FROM STEP 00 WHEN A NOTE PLAYS", ""],
++        ["", ""],
++        ["$xx", "set the waveform (see WAVE)"],
++        ["", "$41 pulse  $21 saw  $11 tri  $81 noise"],
++        ["", "the gate stays on until --- or a rest"],
++        ["N", "play the pattern's note"],
++        ["N+n / N-n", "the note shifted n semitones"],
++        ["", "N+12 octave up, N+7 fifth, N+4 3rd"],
++        ["Dn", "wait n frames before the next step"],
++        ["", "50 frames = 1 second (PAL)"],
++        ["Ln", "jump back to step n (loops forever)"],
++        ["---", "gate off + stop: the note releases"],
++        ["", ""],
++        ["EXAMPLES", ""],
++        ["plain lead", "$41 / D255 / L1"],
++        ["major arp", "$41 / N / D1 / N+4 / D1 / N+7 / D1 / L1"],
++        ["minor arp", "$41 / N / D1 / N+3 / D1 / N+7 / D1 / L1"],
++        ["octave arp", "$41 / N / D1 / N+12 / D1 / L1"],
++        ["drum", "$81 / N+24 / D1 / $41 / N / D3 / ---"],
++        ["", ""],
++        ["CLICK ANYWHERE TO CLOSE", ""]
++    ];
++    draw_set_font_l(fnt_c64_pico);
++    for (var _i = 0; _i < array_length(_rows); _i++) {
++        var _ry = _y0 + 6 + _i * 13;
++        if (_ry + 12 > _y1) {
++            break;
++        }
++        // Rows with no second column are headings and may run across it.
++        draw_set_color(make_color_rgb(255, 200, 100));
++        draw_text_l(_x0 + 6, _ry, _rows[_i][0]);
++        draw_set_color(make_color_rgb(200, 200, 220));
++        draw_text_l(_x0 + 84, _ry, _rows[_i][1]);
++    }
++    draw_set_font_l(fnt_c64_tiny);
++}
++
++/// Readable explanation of one instrument program line, for the command box's
++/// side column. _lines is the whole program (so a loop can say where it goes).
++/// Returns { text, bad } — bad marks something that won't do what it looks like.
++function scr_sound_editor_instr_comment(_line, _lines) {
++    var _raw = string_trim(_line);
++    var _up  = string_upper(_raw);
++    if (_raw == "") {
++        return { text: "", bad: false };
++    }
++
++    // --- : end
++    var _all_dash = true;
++    for (var _di = 1; _di <= string_length(_up); _di++) {
++        if (string_char_at(_up, _di) != "-") {
++            _all_dash = false;
++            break;
++        }
++    }
++    if (_all_dash) {
++        return { text: "gate off, program stops - the note releases", bad: false };
++    }
++
++    var _c0 = string_char_at(_up, 1);
++    var _rest = string_delete(_up, 1, 1);
++
++    // N / N+n / N-n : note
++    if (_c0 == "N") {
++        if (_rest == "" || _rest == "+0" || _rest == "-0") {
++            return { text: "play the pattern's note", bad: false };
++        }
++        var _sgn = string_char_at(_rest, 1);
++        var _num = string_digits(string_delete(_rest, 1, 1));
++        if ((_sgn != "+" && _sgn != "-") || _num == "" || string_length(_num) != string_length(_rest) - 1) {
++            return { text: "? write N, N+n or N-n", bad: true };
++        }
++        var _n = real(_num);
++        var _names = ["unison", "semitone", "tone", "minor 3rd", "major 3rd", "4th", "tritone",
++                      "5th", "minor 6th", "major 6th", "minor 7th", "major 7th"];
++        var _desc = _names[_n mod 12];
++        var _oct = _n div 12;
++        if (_n mod 12 == 0) {
++            _desc = string(_oct) + " octave";
++            if (_oct > 1) {
++                _desc += "s";
++            }
++        } else if (_oct > 0) {
++            _desc += " + " + string(_oct) + " oct";
++        }
++        var _dir = "up";
++        if (_sgn == "-") {
++            _dir = "down";
++        }
++        return { text: "note " + _dir + " " + string(_n) + " (" + _desc + ")", bad: false };
++    }
++
++    // Dn : hold
++    if (_c0 == "D") {
++        var _dn = string_digits(_rest);
++        if (_dn == "" || string_length(_dn) != string_length(_rest)) {
++            return { text: "? write Dn, n = 1-255 frames", bad: true };
++        }
++        var _d = real(_dn);
++        if (_d < 1 || _d > 255) {
++            return { text: "? hold must be 1-255 frames", bad: true };
++        }
++        var _secs = string_format(_d / 50, 1, 2);
++        var _fr = " frames";
++        if (_d == 1) {
++            _fr = " frame";
++        }
++        return { text: "hold " + string(_d) + _fr + " (" + string_trim(_secs) + " s)", bad: false };
++    }
++
++    // Ln : loop
++    if (_c0 == "L") {
++        var _ln = string_digits(_rest);
++        if (_ln == "" || string_length(_ln) != string_length(_rest)) {
++            return { text: "? write Ln, n = a step number", bad: true };
++        }
++        var _l = real(_ln);
++        if (_l >= array_length(_lines)) {
++            return { text: "! step " + string(_l) + " doesn't exist", bad: true };
++        }
++        var _to = string_trim(_lines[_l]);
++        return { text: "loop back to step " + string(_l) + " (" + _to + ")", bad: false };
++    }
++
++    // $xx / xx : waveform + control bits
++    var _hex = _up;
++    if (string_char_at(_hex, 1) == "$") {
++        _hex = string_delete(_hex, 1, 1);
++    }
++    var _is_hex = (string_length(_hex) > 0 && string_length(_hex) <= 2);
++    for (var _hi = 1; _hi <= string_length(_hex); _hi++) {
++        if (string_pos(string_char_at(_hex, _hi), "0123456789ABCDEF") == 0) {
++            _is_hex = false;
++            break;
++        }
++    }
++    if (!_is_hex) {
++        return { text: "? not a command - see WAVE/NOTE/HOLD/LOOP/END", bad: true };
++    }
++    var _v = real(hex_to_decimal(_hex));
++    var _w = [];
++    if (_v & 0x10) array_push(_w, "triangle");
++    if (_v & 0x20) array_push(_w, "saw");
++    if (_v & 0x40) array_push(_w, "pulse");
++    if (_v & 0x80) array_push(_w, "noise");
++    var _txt = "silent (no waveform)";
++    if (array_length(_w) > 0) {
++        _txt = string_join_ext(" + ", _w);
++    }
++    if (_v & 0x04) _txt += ", ring mod";
++    if (_v & 0x02) _txt += ", sync";
++    if (_v & 0x08) _txt += ", TEST (oscillator held)";
++    // The player always turns the gate bit on for a program waveform line.
++    if ((_v & 0x01) == 0) {
++        _txt += " (gate forced on)";
++    }
++    return { text: _txt, bad: false };
++}
+diff --git a/C64Devmachine/scripts/scr_sound_editor_cmd_menu/scr_sound_editor_cmd_menu.yy b/C64Devmachine/scripts/scr_sound_editor_cmd_menu/scr_sound_editor_cmd_menu.yy
+new file mode 100644
+index 0000000..2b3a174
+--- /dev/null
++++ b/C64Devmachine/scripts/scr_sound_editor_cmd_menu/scr_sound_editor_cmd_menu.yy
+@@ -0,0 +1,13 @@
++{
++  "$GMScript":"v1",
++  "%Name":"scr_sound_editor_cmd_menu",
++  "isCompatibility":false,
++  "isDnD":false,
++  "name":"scr_sound_editor_cmd_menu",
++  "parent":{
++    "name":"SOUND_EDITOR",
++    "path":"folders/SCRIPTS/SOUND_EDITOR.yy",
++  },
++  "resourceType":"GMScript",
++  "resourceVersion":"2.0",
++}
+diff --git a/C64Devmachine/scripts/scr_sound_editor_commit_cell/scr_sound_editor_commit_cell.gml b/C64Devmachine/scripts/scr_sound_editor_commit_cell/scr_sound_editor_commit_cell.gml
+index 3d54f36..df11372 100644
+--- a/C64Devmachine/scripts/scr_sound_editor_commit_cell/scr_sound_editor_commit_cell.gml
++++ b/C64Devmachine/scripts/scr_sound_editor_commit_cell/scr_sound_editor_commit_cell.gml
+@@ -29,6 +29,10 @@ function scr_sound_editor_commit_cell(_m, _push_undo_fn, _snap_fn, _col_pat) {
+         _step.note      = "";
+         _step.instr_idx = -1;
+         _step.empty     = true;
++    } else if (_up == "+" || _up == "++" || _up == "+++") {
++        _step.note      = "+++";    // key on: gate back on, same note
++        _step.instr_idx = -1;
++        _step.empty     = false;
+     } else if (_all_dash) {
+         _step.note      = "---";
+         _step.instr_idx = -1;
+diff --git a/C64Devmachine/scripts/scr_sound_editor_draw_instruments/scr_sound_editor_draw_instruments.gml b/C64Devmachine/scripts/scr_sound_editor_draw_instruments/scr_sound_editor_draw_instruments.gml
+index 93cd486..11196cc 100644
+--- a/C64Devmachine/scripts/scr_sound_editor_draw_instruments/scr_sound_editor_draw_instruments.gml
++++ b/C64Devmachine/scripts/scr_sound_editor_draw_instruments/scr_sound_editor_draw_instruments.gml
+@@ -422,6 +422,7 @@ function scr_sound_editor_draw_instruments(_m, _ix0, _iy0, _mx, _my, _ix1 = -1,
+     }
+ 
+     // ── SOURCE TEXT BOX ──
++    var _wave_click = false;   // the command dropdowns / help used this frame's click
+     var _tb_x0 = _ix0;
+     var _tb_w  = _list_w;
+     var _tb_y1 = _pw_y + 24;
+@@ -432,8 +433,10 @@ function scr_sound_editor_draw_instruments(_m, _ix0, _iy0, _mx, _my, _ix1 = -1,
+         _tb_w  = _ix1 - _tb_x0 - 4;
+         _tb_y1 = _iy0;
+         _tb_h  = _iy1 - _iy0 - 160;   // room for compiled size, 3 error lines, legend
+-        draw_set_color(make_color_rgb(255, 200, 100));
+-        draw_text_l(_tb_x0, _iy0 - 20, "COMMANDS");
++        // WAVE / NOTE / HOLD / LOOP / END dropdowns + ? help, on the header row
++        // (the COMMANDS title makes way for them).
++        _wave_click = scr_sound_editor_cmd_bar(_m, _sel_instr, _tb_x0, _tb_x0 + _tb_w + 4, _iy0 - 22,
++                                               _tb_x0 - 4, _tb_y1 - 2, _tb_x0 + _tb_w + 4, _tb_y1 + _tb_h + 2, _mx, _my, false);
+     }
+     draw_set_color(make_color_rgb(14, 14, 22));
+     draw_rectangle(_tb_x0 - 4, _tb_y1 - 2, _tb_x0 + _tb_w + 4, _tb_y1 + _tb_h + 2, false);
+@@ -441,10 +444,10 @@ function scr_sound_editor_draw_instruments(_m, _ix0, _iy0, _mx, _my, _ix1 = -1,
+     draw_rectangle(_tb_x0 - 4, _tb_y1 - 2, _tb_x0 + _tb_w + 4, _tb_y1 + _tb_h + 2, true);
+ 
+     var _tb_hov = point_in_rectangle(_mx, _my, _tb_x0 - 4, _tb_y1 - 2, _tb_x0 + _tb_w + 4, _tb_y1 + _tb_h + 2);
+-    if (!_tb_hov && mouse_check_button_pressed(mb_left) && _m.instr_edit_active) {
++    if (!_tb_hov && mouse_check_button_pressed(mb_left) && _m.instr_edit_active && !_wave_click) {
+         scr_sound_editor_commit_instrument(_m, _sel_instr);
+     }
+-    if (_tb_hov && mouse_check_button_pressed(mb_left)) {
++    if (_tb_hov && mouse_check_button_pressed(mb_left) && !_wave_click) {
+         if (!_m.instr_edit_active) {
+             _m.instr_edit_active      = true;
+             _m.instr_edit_buf         = _sel_instr.text;
+@@ -526,80 +529,45 @@ function scr_sound_editor_draw_instruments(_m, _ix0, _iy0, _mx, _my, _ix1 = -1,
+         draw_set_color(_m.instr_edit_active ? c_lime : make_color_rgb(160, 160, 180));
+         draw_text_l(_tb_x0 + 4 + _tb_prefix_w, _tb_y1 + 4 + _tli * 16, _tb_line_txt);
+ 
+-        // Generate automated side-notes with detailed SID register decoding when not editing
+-        if (!_m.instr_edit_active) {
+-            var _raw_tok = string_trim(_tb_lines[_tli]);
+-            var _up_tok  = string_upper(_raw_tok);
+-            var _comment = "";
+-
+-            if (_raw_tok != "") {
+-                var _c0 = string_char_at(_up_tok, 1);
+-                
+-                // Check for End / Dashes
+-                var _all_dash = true;
+-                for (var _di = 1; _di <= string_length(_up_tok); _di++) {
+-                    if (string_char_at(_up_tok, _di) != "-") { _all_dash = false; break; }
+-                }
+-
+-                if (_all_dash) {
+-                    _comment = "; gate off + stop";
+-                } else if (_c0 == "N") {
+-                    var _rest = string_delete(_up_tok, 1, 1);
+-                    if (_rest == "" || _rest == "+0") {
+-                        _comment = "; note reset";
+-                    } else {
+-                        _comment = "; note offset " + _rest;
+-                    }
+-                } else if (_c0 == "D") {
+-                    _comment = "; hold " + string_delete(_up_tok, 1, 1) + " ticks";
+-                } else if (_c0 == "L") {
+-                    _comment = "; loop to step " + string_delete(_up_tok, 1, 1);
+-                } else {
+-                    // Waveform / Control byte hex decoding
+-                    var _hexstr = _up_tok;
+-                    if (string_char_at(_hexstr, 1) == "$") { _hexstr = string_delete(_hexstr, 1, 1); }
+-                    var _is_hex = (string_length(_hexstr) > 0);
+-                    for (var _hi = 1; _hi <= string_length(_hexstr); _hi++) {
+-                        if (string_pos(string_char_at(_hexstr, _hi), "0123456789ABCDEF") == 0) { _is_hex = false; break; }
+-                    }
+-                    
+-                    if (_is_hex) {
+-                        var _val = real(hex_to_decimal(_hexstr));
+-                        var _wf_parts = [];
+-                        
+-                        // Extract waveforms (bits 4-7)
+-                        if (_val & 0x80) array_push(_wf_parts, "Noise");
+-                        if (_val & 0x40) array_push(_wf_parts, "Pulse");
+-                        if (_val & 0x20) array_push(_wf_parts, "Saw");
+-                        if (_val & 0x10) array_push(_wf_parts, "Triangle");
+-                        
+-                        var _wf_str = (array_length(_wf_parts) > 0) ? string_join_ext("+", _wf_parts) : "No Wave";
+-                        
+-                        // Extract control bits (bits 0-3)
+-                        var _ctrl_parts = [];
+-                        if (_val & 0x01) array_push(_ctrl_parts, "Gate on");
+-                        if (_val & 0x02) array_push(_ctrl_parts, "Sync");
+-                        if (_val & 0x04) array_push(_ctrl_parts, "Ring mod");
+-                        if (_val & 0x08) array_push(_ctrl_parts, "Test");
+-						
+-						                        
+-                        _comment = "; " + _wf_str;
+-                        if (array_length(_ctrl_parts) > 0) {
+-                            _comment += ", " + string_join_ext(", ", _ctrl_parts);
+-                        }
+-                  }
+-                }
++        // Plain-English side note for every line, live while typing too
++        // (see scr_sound_editor_instr_comment). Mid-blue; problems in red.
++        var _cm = scr_sound_editor_instr_comment(_tb_lines[_tli], _tb_lines);
++        if (_cm.text != "") {
++            var _comment = _cm.text;
++            // Trim a long side-note to the box instead of running past it.
++            while (string_length(_comment) > 1 && string_width_l(_comment) > _tb_w - 86) {
++                _comment = string_copy(_comment, 1, string_length(_comment) - 1);
+             }
+-
+-            if (_comment != "") {
+-                // Trim a long side-note to the box instead of running past it.
+-                while (string_length(_comment) > 1 && string_width_l(_comment) > _tb_w - 86) {
+-                    _comment = string_copy(_comment, 1, string_length(_comment) - 1);
+-                }
+-                draw_set_color(make_color_rgb(90, 110, 90));
+-                draw_text_l(_tb_x0 + 80, _tb_y1 + 4 + _tli * 16, _comment);
++            if (_cm.bad) {
++                draw_set_color(make_color_rgb(230, 90, 90));
++            } else {
++                draw_set_color(make_color_rgb(90, 150, 230));
+             }
++            draw_text_l(_tb_x0 + 80, _tb_y1 + 4 + _tli * 16, _comment);
++        }
++    }
++
++    // Space while editing an instrument previews it: C in the current
++    // octave, played from the text as typed (not yet committed).
++    if (_m.instr_edit_active && keyboard_check_pressed(vk_space)) {
++        keyboard_string = string_replace_all(keyboard_string, " ", "");
++        var _sp_oct = 4;
++        var _sp_o = _m[$ "cur_octave"];
++        if (!is_undefined(_sp_o)) {
++            _sp_oct = real(_sp_o);
+         }
++        var _sp_ins = {
++            text        : _m.instr_edit_buf,
++            attack      : _sel_instr.attack,
++            decay       : _sel_instr.decay,
++            sustain     : _sel_instr.sustain,
++            release     : _sel_instr.release,
++            pulse_width : _sel_instr.pulse_width,
++            vib_delay   : scr_sid64_instr_field(_sel_instr, "vib_delay", 0),
++            vib_speed   : scr_sid64_instr_field(_sel_instr, "vib_speed", 0),
++            vib_depth   : scr_sid64_instr_field(_sel_instr, "vib_depth", 0)
++        };
++        scr_sound_instrument_preview_play(_sp_ins, "C-" + string(_sp_oct), 0);
+     }
+ 
+     if (_m.instr_edit_active) {
+@@ -672,5 +640,11 @@ function scr_sound_editor_draw_instruments(_m, _ix0, _iy0, _mx, _my, _ix1 = -1,
+     draw_text_l(_tb_x0, _lg_y + 48, "---   END (GATE OFF + STOP)");
+     draw_set_font_l(fnt_c64_tiny);
+ 
++    // Dropdown list / help table last, so they sit over the command box.
++    if (_two_col) {
++        scr_sound_editor_cmd_bar(_m, _sel_instr, _tb_x0, _tb_x0 + _tb_w + 4, _iy0 - 22,
++                                 _tb_x0 - 4, _tb_y1 - 2, _tb_x0 + _tb_w + 4, _tb_y1 + _tb_h + 2, _mx, _my, true);
++    }
++
+     draw_set_color(c_white);
+ }
+\ No newline at end of file
+diff --git a/C64Devmachine/scripts/scr_sound_editor_editor/scr_sound_editor_editor.gml b/C64Devmachine/scripts/scr_sound_editor_editor/scr_sound_editor_editor.gml
+index 423caa4..93e46d6 100644
+--- a/C64Devmachine/scripts/scr_sound_editor_editor/scr_sound_editor_editor.gml
++++ b/C64Devmachine/scripts/scr_sound_editor_editor/scr_sound_editor_editor.gml
+@@ -100,6 +100,9 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my)
+     if (!variable_struct_exists(_m, "sel_voice"))   _m.sel_voice   = 0;
+     // 0 = the note column, 1 = the command column of the selected voice.
+     if (!variable_struct_exists(_m, "sel_sub"))     _m.sel_sub     = 0;
++    // Instrument panel's command dropdowns ("" = none open) and ? help table.
++    if (!variable_struct_exists(_m, "cmd_menu_open")) _m.cmd_menu_open = "";
++    if (!variable_struct_exists(_m, "cmd_help_open")) _m.cmd_help_open = false;
+     // Command being typed: digits so far, and the cell they belong to.
+     if (!variable_struct_exists(_m, "cmd_entry_str"))   _m.cmd_entry_str   = "";
+     if (!variable_struct_exists(_m, "cmd_entry_voice")) _m.cmd_entry_voice = -1;
+@@ -343,7 +346,9 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my)
+                          || _m.instr_name_edit_active || _m.song_name_edit_active;
+     // GoatTracker function keys: F1 song from the start, F2 this pattern from
+     // the cursor row (looping), F3 this pattern from the top (looping), F4 stop.
+-    if (!_transport_typing) {
++    // They type nothing, so they also work while an instrument's text is open.
++    var _fkeys_ok = !_m.edit_active && !_m.instr_name_edit_active && !_m.song_name_edit_active;
++    if (_fkeys_ok) {
+         if (keyboard_check_pressed(vk_f1)) {
+             _transport_action = "SONG";
+         } else if (keyboard_check_pressed(vk_f2)) {
+@@ -415,7 +420,7 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my)
+                     continue;   // NRs: this voice finished early, stays silent
+                 }
+                 var _p_step = _col_pat[_pv].steps[_pv_local];
+-                if (_p_step.empty) {
++                if (_p_step.empty || _p_step.note == "+++") {
+                     // Empty row — hold, same as the runtime's $FE.
+                 } else if (_p_step.note == "" || _p_step.note == "---") {
+                     scr_sound_preview_free_channel(_pv);
+@@ -464,7 +469,7 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my)
+                     _sv_local_row = _m.song_master_row;
+                 }
+                 var _sv_step = _sv_pat.steps[_sv_local_row];
+-                if (_sv_step.empty) {
++                if (_sv_step.empty || _sv_step.note == "+++") {
+                     // Empty row — leave whatever is ringing alone, matching
+                     // the runtime's $FE hold.
+                 } else if (_sv_step.note == "" || _sv_step.note == "---") {
+@@ -508,7 +513,7 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my)
+     draw_set_font_l(fnt_c64_tiny);
+     draw_set_color(make_color_rgb(120, 140, 190));
+     draw_text_l(_vx1 + 20, _cy,
+-        "CLICK A CELL, TYPE A NOTE (C-4, C#3, ---)   |   ENTER COMMITS + DROPS A ROW   |   DEL CLEARS   |   BKSP PULLS UP   |   INS PUSHES DOWN   |   UP/DOWN MOVES   |   TAB NOTE/CMD   |   F1 SONG   F2 PAT FROM ROW   F3 PAT   F4 STOP");
++        "CLICK A CELL, TYPE A NOTE (C-4, C#3, ---)   |   ENTER COMMITS + DROPS A ROW   |   DEL CLEARS   |   BKSP PULLS UP   |   INS PUSHES DOWN   |   UP/DOWN MOVES   |   TAB NOTE/CMD   |   - STOP  + KEY ON   |   F1 SONG   F2 PAT FROM ROW   F3 PAT   F4 STOP");
+    
+     draw_set_font_l(fnt_c64_tiny);
+     var _status_y = _cy + 50;
+@@ -793,6 +798,54 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my)
+     var _sel_s_hi = max(_m.sel_anchor_step,  _m.sel_step);
+     var _sel_multi = (_sel_v_lo != _sel_v_hi) || (_sel_s_lo != _sel_s_hi);
+ 
++    // ── 9XX RANGE CHECK ── walks the three patterns the way the player does
++    // (instrument PW on a note, 8XX sets, 9XX adds XX per frame for one row's
++    // worth of frames at the current tempo, FXX changes the tempo) and marks
++    // any 9XX that drives the pulse width into $000 / $FFF, where the pulse
++    // wave is silent. -1 = fine; otherwise the width it hit. Rows before the
++    // first note in a pattern have an unknown width and aren't judged.
++    var _pw_warn = [array_create(_grid_len, -1), array_create(_grid_len, -1), array_create(_grid_len, -1)];
++    var _pw_now  = [-1, -1, -1];
++    var _pw_spd  = clamp(real(_m.play_speed), 1, 255);
++    for (var _pwr = 0; _pwr < _grid_len; _pwr++) {
++        var _pw_next_spd = _pw_spd;
++        for (var _pwv = 0; _pwv < 3; _pwv++) {
++            var _pw_pat = _col_pat[_pwv];
++            if (_pw_pat == noone || _pwr >= _pw_pat.pattern_len || _pwr >= array_length(_pw_pat.steps)) {
++                continue;
++            }
++            var _pw_st = _pw_pat.steps[_pwr];
++            var _pw_is_note = (!_pw_st.empty && _pw_st.note != "" && _pw_st.note != "---" && _pw_st.note != "+++");
++            if (_pw_is_note && _pw_st.cmd != 3
++            && _pw_st.instr_idx >= 0 && _pw_st.instr_idx < array_length(_m.instruments)) {
++                _pw_now[_pwv] = floor(scr_sid64_instr_field(_m.instruments[_pw_st.instr_idx], "pulse_width", 0x800)) & 0xFFF;
++            }
++            if (_pw_st.cmd == 8) {
++                _pw_now[_pwv] = (_pw_st.cmd_val << 4) & 0xFFF;
++            }
++            if (_pw_st.cmd == 0x0F && _pw_st.cmd_val > 0) {
++                _pw_next_spd = _pw_st.cmd_val;   // takes effect from the next row
++            }
++            if (_pw_st.cmd == 9 && _pw_now[_pwv] >= 0) {
++                var _pw_d = _pw_st.cmd_val;
++                if (_pw_d >= 0x80) {
++                    _pw_d -= 256;
++                }
++                var _pw_new = _pw_now[_pwv] + _pw_d * _pw_spd;
++                if (_pw_new <= 0) {
++                    _pw_warn[_pwv][_pwr] = 0x000;
++                    _pw_new = 0;
++                } else if (_pw_new >= 0xFFF) {
++                    _pw_warn[_pwv][_pwr] = 0xFFF;
++                    _pw_new = 0xFFF;
++                }
++                _pw_now[_pwv] = _pw_new;
++            }
++        }
++        _pw_spd = _pw_next_spd;
++    }
++    var _pw_tip = "";   // hover text for a flagged 9XX, drawn last
++
+     for (var _r = 0; _r < _vis; _r++) {
+         var _row = _r + _m.list_scroll;
+         if (_row >= _grid_len) {
+@@ -878,6 +931,9 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my)
+             } else if (_step.note == "---" || _step.note == "") {
+                 draw_set_color(make_color_rgb(140, 90, 90));
+                 draw_text_transformed_l(_cx1 + 8, _ry + 8, "---", _txt_scale, _txt_scale, 0);
++            } else if (_step.note == "+++") {
++                draw_set_color(make_color_rgb(90, 150, 90));
++                draw_text_transformed_l(_cx1 + 8, _ry + 8, "+++", _txt_scale, _txt_scale, 0);
+             } else {
+                 var _missing   = (_step.instr_idx >= 0 && _step.instr_idx >= array_length(_m.instruments));
+                 var _has_instr = (_step.instr_idx >= 0 && !_missing);
+@@ -913,6 +969,21 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my)
+                 var _cv_hex = string_upper(decimal_to_hex(_step.cmd_val));
+                 while (string_length(_cv_hex) < 2) { _cv_hex = "0" + _cv_hex; }
+                 draw_set_color(make_color_rgb(255, 170, 90));
++                if (_row < _grid_len && _pw_warn[_cv][_row] >= 0) {
++                    draw_set_color(c_red);
++                    if (point_in_rectangle(_mx, _my, _cmd_x - 6, _ry, _cx2, _ry + _row_h)) {
++                        // 901-97F sweep up, 980-9FF sweep down (9FF = -1, 980 = -128 per frame).
++                        if (_pw_warn[_cv][_row] > 0) {
++                            _pw_tip = "SILENT: THIS SWEEP PUSHES THE PULSE WIDTH PAST ITS TOP ($FFF)."
++                                    + "\nUSE A SMALLER VALUE OR FEWER ROWS, RESET IT WITH 8XX,"
++                                    + "\nOR SWEEP BACK DOWN WITH 980-9FF (9FF = -1, 9F0 = -16 PER FRAME).";
++                        } else {
++                            _pw_tip = "SILENT: THIS SWEEP PUSHES THE PULSE WIDTH PAST ITS BOTTOM ($000)."
++                                    + "\nUSE A SMALLER DROP OR FEWER ROWS, RESET IT WITH 8XX,"
++                                    + "\nOR SWEEP BACK UP WITH 901-97F (901 = +1, 910 = +16 PER FRAME).";
++                        }
++                    }
++                }
+                 draw_text_transformed_l(_cmd_x, _ry + 8, string_upper(decimal_to_hex(_st_cmd)) + _cv_hex, _txt_scale, _txt_scale, 0);
+             } else {
+                 draw_set_color(make_color_rgb(60, 60, 70));
+@@ -1186,15 +1257,24 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my)
+                     _ps_max = max(_ps_max, _pr);
+                 }
+             }
++            // Cursor stays in its voice and drops to the row after the pasted
++            // block (ready for the next paste), scrolling to keep it in view.
++            _m.sel_step         = min(_grid_len - 1, _m.sel_step + _ps_max + 1);
+             _m.sel_anchor_voice = _m.sel_voice;
+             _m.sel_anchor_step  = _m.sel_step;
+-            _m.sel_voice        = min(2, _m.sel_voice + _pv_max);
+-            _m.sel_step         = min(_grid_len - 1, _m.sel_step + _ps_max);
+-            global.undo_dirty   = true;
++            if (_m.sel_step >= _m.list_scroll + _vis) {
++                _m.list_scroll = _m.sel_step - _vis + 1;
++            }
++            global.undo_dirty      = true;
++            global.addresses_dirty = true;
+         }
+ 
+         for (var _pki = 0; _pki < array_length(_pk_map) && !_kb_ctrl && _cur_step != noone && _m.sel_sub == 0; _pki++) {
+             var _pk = _pk_map[_pki];
++            // Shift+'=' is '+' (key on), not the piano's F#.
++            if (_pk[0] == _vk_equals && keyboard_check(vk_shift)) {
++                continue;
++            }
+             if (keyboard_check_pressed(_pk[0])) {
+                 var _pk_oct  = clamp(_m.cur_octave + _pk[2], 0, 7);
+                 var _pk_name = _pk_names[_pk[1]];
+@@ -1222,7 +1302,28 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my)
+             }
+         }
+ 
+-        if (_cur_step != noone && _m.sel_sub == 0 && keyboard_check_pressed(ord("1"))) {
++        // "-" (or "1") = --- note stop (gate off); "+" (Shift+= or keypad +) =
++        // +++ key on (gate back on, same note). Plain "=" stays the piano's F#.
++        // Both drop a row, like a typed note.
++        var _key_rest = keyboard_check_pressed(ord("1")) || keyboard_check_pressed(189) || keyboard_check_pressed(vk_subtract);
++        var _key_kon  = (keyboard_check_pressed(_vk_equals) && keyboard_check(vk_shift)) || keyboard_check_pressed(vk_add);
++        if (_cur_step != noone && _m.sel_sub == 0 && !_kb_ctrl && _key_kon) {
++            _se_push_undo(_m, _se_snap);
++            _cur_step.note      = "+++";
++            _cur_step.instr_idx = -1;
++            _cur_step.empty     = false;
++            global.undo_dirty      = true;
++            global.addresses_dirty = true;
++            if (_m.sel_step + 1 < _cur_pat.pattern_len) {
++                _m.sel_step += 1;
++            }
++            if (_m.sel_step >= _m.list_scroll + _vis) {
++                _m.list_scroll = _m.sel_step - _vis + 1;
++            }
++            _m.sel_anchor_voice = _m.sel_voice;
++            _m.sel_anchor_step  = _m.sel_step;
++        }
++        if (_cur_step != noone && _m.sel_sub == 0 && !_kb_ctrl && _key_rest) {
+             _se_push_undo(_m, _se_snap);
+             _cur_step.note      = "---";
+             _cur_step.instr_idx = -1;
+@@ -1965,6 +2066,22 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my)
+     var _ix0 = _ox0 + _ord_full_w + 50;
+     scr_sound_editor_draw_instruments(_m, _ix0, _oy0, _mx, _my, _vx2 - 16, _vy2 - 12);
+ 
++    // ── 9XX warning tooltip (last, so it sits over everything) ──
++    if (_pw_tip != "") {
++        draw_set_font_l(fnt_c64_pico);
++        var _tt_w = string_width_l(_pw_tip) + 16;
++        var _tt_h = string_height(_pw_tip) + 12;
++        var _tt_x = min(_mx + 14, _vx2 - _tt_w - 4);
++        var _tt_y = _my + 18;
++        draw_set_color(make_color_rgb(40, 10, 10));
++        draw_rectangle(_tt_x, _tt_y, _tt_x + _tt_w, _tt_y + _tt_h, false);
++        draw_set_color(c_red);
++        draw_rectangle(_tt_x, _tt_y, _tt_x + _tt_w, _tt_y + _tt_h, true);
++        draw_set_color(c_white);
++        draw_text_l(_tt_x + 8, _tt_y + 6, _pw_tip);
++        draw_set_font_l(fnt_c64_tiny);
++    }
++
+     draw_set_alpha(1.0);
+     draw_set_color(c_white);
+     draw_set_halign(fa_left);

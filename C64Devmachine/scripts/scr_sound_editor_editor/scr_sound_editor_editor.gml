@@ -100,6 +100,9 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
     if (!variable_struct_exists(_m, "sel_voice"))   _m.sel_voice   = 0;
     // 0 = the note column, 1 = the command column of the selected voice.
     if (!variable_struct_exists(_m, "sel_sub"))     _m.sel_sub     = 0;
+    // Instrument panel's command dropdowns ("" = none open) and ? help table.
+    if (!variable_struct_exists(_m, "cmd_menu_open")) _m.cmd_menu_open = "";
+    if (!variable_struct_exists(_m, "cmd_help_open")) _m.cmd_help_open = false;
     // Command being typed: digits so far, and the cell they belong to.
     if (!variable_struct_exists(_m, "cmd_entry_str"))   _m.cmd_entry_str   = "";
     if (!variable_struct_exists(_m, "cmd_entry_voice")) _m.cmd_entry_voice = -1;
@@ -343,7 +346,9 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
                          || _m.instr_name_edit_active || _m.song_name_edit_active;
     // GoatTracker function keys: F1 song from the start, F2 this pattern from
     // the cursor row (looping), F3 this pattern from the top (looping), F4 stop.
-    if (!_transport_typing) {
+    // They type nothing, so they also work while an instrument's text is open.
+    var _fkeys_ok = !_m.edit_active && !_m.instr_name_edit_active && !_m.song_name_edit_active;
+    if (_fkeys_ok) {
         if (keyboard_check_pressed(vk_f1)) {
             _transport_action = "SONG";
         } else if (keyboard_check_pressed(vk_f2)) {
@@ -415,7 +420,7 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
                     continue;   // NRs: this voice finished early, stays silent
                 }
                 var _p_step = _col_pat[_pv].steps[_pv_local];
-                if (_p_step.empty) {
+                if (_p_step.empty || _p_step.note == "+++") {
                     // Empty row — hold, same as the runtime's $FE.
                 } else if (_p_step.note == "" || _p_step.note == "---") {
                     scr_sound_preview_free_channel(_pv);
@@ -464,7 +469,7 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
                     _sv_local_row = _m.song_master_row;
                 }
                 var _sv_step = _sv_pat.steps[_sv_local_row];
-                if (_sv_step.empty) {
+                if (_sv_step.empty || _sv_step.note == "+++") {
                     // Empty row — leave whatever is ringing alone, matching
                     // the runtime's $FE hold.
                 } else if (_sv_step.note == "" || _sv_step.note == "---") {
@@ -508,7 +513,7 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
     draw_set_font_l(fnt_c64_tiny);
     draw_set_color(make_color_rgb(120, 140, 190));
     draw_text_l(_vx1 + 20, _cy,
-        "CLICK A CELL, TYPE A NOTE (C-4, C#3, ---)   |   ENTER COMMITS + DROPS A ROW   |   DEL CLEARS   |   BKSP PULLS UP   |   INS PUSHES DOWN   |   UP/DOWN MOVES   |   TAB NOTE/CMD   |   F1 SONG   F2 PAT FROM ROW   F3 PAT   F4 STOP");
+        "CLICK A CELL, TYPE A NOTE (C-4, C#3, ---)   |   ENTER COMMITS + DROPS A ROW   |   DEL CLEARS   |   BKSP PULLS UP   |   INS PUSHES DOWN   |   UP/DOWN MOVES   |   TAB NOTE/CMD   |   - STOP  + KEY ON   |   F1 SONG   F2 PAT FROM ROW   F3 PAT   F4 STOP");
    
     draw_set_font_l(fnt_c64_tiny);
     var _status_y = _cy + 50;
@@ -793,6 +798,54 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
     var _sel_s_hi = max(_m.sel_anchor_step,  _m.sel_step);
     var _sel_multi = (_sel_v_lo != _sel_v_hi) || (_sel_s_lo != _sel_s_hi);
 
+    // ── 9XX RANGE CHECK ── walks the three patterns the way the player does
+    // (instrument PW on a note, 8XX sets, 9XX adds XX per frame for one row's
+    // worth of frames at the current tempo, FXX changes the tempo) and marks
+    // any 9XX that drives the pulse width into $000 / $FFF, where the pulse
+    // wave is silent. -1 = fine; otherwise the width it hit. Rows before the
+    // first note in a pattern have an unknown width and aren't judged.
+    var _pw_warn = [array_create(_grid_len, -1), array_create(_grid_len, -1), array_create(_grid_len, -1)];
+    var _pw_now  = [-1, -1, -1];
+    var _pw_spd  = clamp(real(_m.play_speed), 1, 255);
+    for (var _pwr = 0; _pwr < _grid_len; _pwr++) {
+        var _pw_next_spd = _pw_spd;
+        for (var _pwv = 0; _pwv < 3; _pwv++) {
+            var _pw_pat = _col_pat[_pwv];
+            if (_pw_pat == noone || _pwr >= _pw_pat.pattern_len || _pwr >= array_length(_pw_pat.steps)) {
+                continue;
+            }
+            var _pw_st = _pw_pat.steps[_pwr];
+            var _pw_is_note = (!_pw_st.empty && _pw_st.note != "" && _pw_st.note != "---" && _pw_st.note != "+++");
+            if (_pw_is_note && _pw_st.cmd != 3
+            && _pw_st.instr_idx >= 0 && _pw_st.instr_idx < array_length(_m.instruments)) {
+                _pw_now[_pwv] = floor(scr_sid64_instr_field(_m.instruments[_pw_st.instr_idx], "pulse_width", 0x800)) & 0xFFF;
+            }
+            if (_pw_st.cmd == 8) {
+                _pw_now[_pwv] = (_pw_st.cmd_val << 4) & 0xFFF;
+            }
+            if (_pw_st.cmd == 0x0F && _pw_st.cmd_val > 0) {
+                _pw_next_spd = _pw_st.cmd_val;   // takes effect from the next row
+            }
+            if (_pw_st.cmd == 9 && _pw_now[_pwv] >= 0) {
+                var _pw_d = _pw_st.cmd_val;
+                if (_pw_d >= 0x80) {
+                    _pw_d -= 256;
+                }
+                var _pw_new = _pw_now[_pwv] + _pw_d * _pw_spd;
+                if (_pw_new <= 0) {
+                    _pw_warn[_pwv][_pwr] = 0x000;
+                    _pw_new = 0;
+                } else if (_pw_new >= 0xFFF) {
+                    _pw_warn[_pwv][_pwr] = 0xFFF;
+                    _pw_new = 0xFFF;
+                }
+                _pw_now[_pwv] = _pw_new;
+            }
+        }
+        _pw_spd = _pw_next_spd;
+    }
+    var _pw_tip = "";   // hover text for a flagged 9XX, drawn last
+
     for (var _r = 0; _r < _vis; _r++) {
         var _row = _r + _m.list_scroll;
         if (_row >= _grid_len) {
@@ -878,6 +931,9 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
             } else if (_step.note == "---" || _step.note == "") {
                 draw_set_color(make_color_rgb(140, 90, 90));
                 draw_text_transformed_l(_cx1 + 8, _ry + 8, "---", _txt_scale, _txt_scale, 0);
+            } else if (_step.note == "+++") {
+                draw_set_color(make_color_rgb(90, 150, 90));
+                draw_text_transformed_l(_cx1 + 8, _ry + 8, "+++", _txt_scale, _txt_scale, 0);
             } else {
                 var _missing   = (_step.instr_idx >= 0 && _step.instr_idx >= array_length(_m.instruments));
                 var _has_instr = (_step.instr_idx >= 0 && !_missing);
@@ -913,6 +969,21 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
                 var _cv_hex = string_upper(decimal_to_hex(_step.cmd_val));
                 while (string_length(_cv_hex) < 2) { _cv_hex = "0" + _cv_hex; }
                 draw_set_color(make_color_rgb(255, 170, 90));
+                if (_row < _grid_len && _pw_warn[_cv][_row] >= 0) {
+                    draw_set_color(c_red);
+                    if (point_in_rectangle(_mx, _my, _cmd_x - 6, _ry, _cx2, _ry + _row_h)) {
+                        // 901-97F sweep up, 980-9FF sweep down (9FF = -1, 980 = -128 per frame).
+                        if (_pw_warn[_cv][_row] > 0) {
+                            _pw_tip = "SILENT: THIS SWEEP PUSHES THE PULSE WIDTH PAST ITS TOP ($FFF)."
+                                    + "\nUSE A SMALLER VALUE OR FEWER ROWS, RESET IT WITH 8XX,"
+                                    + "\nOR SWEEP BACK DOWN WITH 980-9FF (9FF = -1, 9F0 = -16 PER FRAME).";
+                        } else {
+                            _pw_tip = "SILENT: THIS SWEEP PUSHES THE PULSE WIDTH PAST ITS BOTTOM ($000)."
+                                    + "\nUSE A SMALLER DROP OR FEWER ROWS, RESET IT WITH 8XX,"
+                                    + "\nOR SWEEP BACK UP WITH 901-97F (901 = +1, 910 = +16 PER FRAME).";
+                        }
+                    }
+                }
                 draw_text_transformed_l(_cmd_x, _ry + 8, string_upper(decimal_to_hex(_st_cmd)) + _cv_hex, _txt_scale, _txt_scale, 0);
             } else {
                 draw_set_color(make_color_rgb(60, 60, 70));
@@ -1186,15 +1257,24 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
                     _ps_max = max(_ps_max, _pr);
                 }
             }
+            // Cursor stays in its voice and drops to the row after the pasted
+            // block (ready for the next paste), scrolling to keep it in view.
+            _m.sel_step         = min(_grid_len - 1, _m.sel_step + _ps_max + 1);
             _m.sel_anchor_voice = _m.sel_voice;
             _m.sel_anchor_step  = _m.sel_step;
-            _m.sel_voice        = min(2, _m.sel_voice + _pv_max);
-            _m.sel_step         = min(_grid_len - 1, _m.sel_step + _ps_max);
-            global.undo_dirty   = true;
+            if (_m.sel_step >= _m.list_scroll + _vis) {
+                _m.list_scroll = _m.sel_step - _vis + 1;
+            }
+            global.undo_dirty      = true;
+            global.addresses_dirty = true;
         }
 
         for (var _pki = 0; _pki < array_length(_pk_map) && !_kb_ctrl && _cur_step != noone && _m.sel_sub == 0; _pki++) {
             var _pk = _pk_map[_pki];
+            // Shift+'=' is '+' (key on), not the piano's F#.
+            if (_pk[0] == _vk_equals && keyboard_check(vk_shift)) {
+                continue;
+            }
             if (keyboard_check_pressed(_pk[0])) {
                 var _pk_oct  = clamp(_m.cur_octave + _pk[2], 0, 7);
                 var _pk_name = _pk_names[_pk[1]];
@@ -1222,7 +1302,28 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
             }
         }
 
-        if (_cur_step != noone && _m.sel_sub == 0 && keyboard_check_pressed(ord("1"))) {
+        // "-" (or "1") = --- note stop (gate off); "+" (Shift+= or keypad +) =
+        // +++ key on (gate back on, same note). Plain "=" stays the piano's F#.
+        // Both drop a row, like a typed note.
+        var _key_rest = keyboard_check_pressed(ord("1")) || keyboard_check_pressed(189) || keyboard_check_pressed(vk_subtract);
+        var _key_kon  = (keyboard_check_pressed(_vk_equals) && keyboard_check(vk_shift)) || keyboard_check_pressed(vk_add);
+        if (_cur_step != noone && _m.sel_sub == 0 && !_kb_ctrl && _key_kon) {
+            _se_push_undo(_m, _se_snap);
+            _cur_step.note      = "+++";
+            _cur_step.instr_idx = -1;
+            _cur_step.empty     = false;
+            global.undo_dirty      = true;
+            global.addresses_dirty = true;
+            if (_m.sel_step + 1 < _cur_pat.pattern_len) {
+                _m.sel_step += 1;
+            }
+            if (_m.sel_step >= _m.list_scroll + _vis) {
+                _m.list_scroll = _m.sel_step - _vis + 1;
+            }
+            _m.sel_anchor_voice = _m.sel_voice;
+            _m.sel_anchor_step  = _m.sel_step;
+        }
+        if (_cur_step != noone && _m.sel_sub == 0 && !_kb_ctrl && _key_rest) {
             _se_push_undo(_m, _se_snap);
             _cur_step.note      = "---";
             _cur_step.instr_idx = -1;
@@ -1964,6 +2065,22 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
     // 50px clear of the order table: its button row runs ~30px past the table.
     var _ix0 = _ox0 + _ord_full_w + 50;
     scr_sound_editor_draw_instruments(_m, _ix0, _oy0, _mx, _my, _vx2 - 16, _vy2 - 12);
+
+    // ── 9XX warning tooltip (last, so it sits over everything) ──
+    if (_pw_tip != "") {
+        draw_set_font_l(fnt_c64_pico);
+        var _tt_w = string_width_l(_pw_tip) + 16;
+        var _tt_h = string_height(_pw_tip) + 12;
+        var _tt_x = min(_mx + 14, _vx2 - _tt_w - 4);
+        var _tt_y = _my + 18;
+        draw_set_color(make_color_rgb(40, 10, 10));
+        draw_rectangle(_tt_x, _tt_y, _tt_x + _tt_w, _tt_y + _tt_h, false);
+        draw_set_color(c_red);
+        draw_rectangle(_tt_x, _tt_y, _tt_x + _tt_w, _tt_y + _tt_h, true);
+        draw_set_color(c_white);
+        draw_text_l(_tt_x + 8, _tt_y + 6, _pw_tip);
+        draw_set_font_l(fnt_c64_tiny);
+    }
 
     draw_set_alpha(1.0);
     draw_set_color(c_white);
