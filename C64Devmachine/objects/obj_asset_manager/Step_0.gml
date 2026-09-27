@@ -1,3 +1,6 @@
+scr_sid_asset_update();
+if (!viewer_open) { manifest_preview_name = ""; manifest_preview_owner = undefined; }
+if (!viewer_open && scr_workspace_input_blocked()) exit;
 /// @desc obj_asset_manager Step
 // Find the max whole-number scale that fits inside the current window size
 
@@ -28,7 +31,7 @@ panel_w = 244;
 panel_x = _gui_w - panel_w - 30;
 panel_y = 410;
 global.mouse_in_asset_panel = false;
-global.mouse_in_asset_panel = point_in_rectangle(_mx, _my, panel_x, panel_y, panel_x + panel_w, panel_y + panel_h);
+global.mouse_in_asset_panel = point_in_rectangle(_mx, _my, panel_x, panel_y, _panel_right, _panel_bottom);
 
 var _mouse_in_panel = global.mouse_in_asset_panel
 
@@ -47,17 +50,25 @@ if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list))
         _wide_modal = true;
         _vx1 = 30;
         _vx2 = panel_x + 20;
-        if (_vb_type == "MUSIC_MAKER") {
+        if (_vb_type == "MUSIC_MAKER" || _vb_type == "SPRITE_MASK") {
             _vx2 = _gui_w - _vx1;   // full width, centred — must match Draw
         }
     }
 }
 var _mouse_in_viewer = viewer_open && point_in_rectangle(_mx, _my, _vx1, _vy1, _vx2, _vy2);
 
+// The manifest's media panel is part of its editor, not an outside click.
+if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list)) {
+    var _pv_owner = ds_list_find_value(asset_list, viewer_asset);
+    if ((_pv_owner.type == "LOAD_REU" || _pv_owner.type == "LOAD_ORG")
+    && manifest_preview_owner == _pv_owner && manifest_preview_name != ""
+    && point_in_rectangle(_mx,_my,manifest_preview_rect[0],manifest_preview_rect[1],manifest_preview_rect[2],manifest_preview_rect[3])) _mouse_in_viewer = true;
+}
+
 // A wide editor is modal: while it is open the asset panel takes no hover,
 // scroll, drag, right-click or left-click, and a click outside the editor is
 // swallowed rather than closing it. CLOSE / ESC are the only ways out.
-if (_wide_modal) {
+if (viewer_open) {
     global.mouse_in_asset_panel = false;
     _mouse_in_panel = false;
 }
@@ -79,7 +90,7 @@ if (viewer_open && viewer_asset == manifest_split_owner && viewer_asset >= 0 && 
         }
         if (manifest_split_drag) {
             var _split_reu = (_split_asset.type == "LOAD_REU");
-            var _split_max = max(100, _vx2 - _vx1 - (_split_reu ? 430 : 510));
+            var _split_max = max(100, _vx2 - _vx1 - (_split_reu ? 480 : 510));
             var _split_offset = clamp(_mx - _vx1 - manifest_split_grab, 100, _split_max);
             if (_split_reu) manifest_reu_split = _split_offset;
             else manifest_disk_split = _split_offset;
@@ -828,7 +839,7 @@ if (_mouse_in_panel && _my >= panel_y + 66 && _my <= _panel_bottom - 38) {
         var _iy1 = panel_y + 66 + (_pos * item_h) - panel_scroll;
         var _iy2 = _iy1 + item_h;
         if (_iy2 < panel_y + 66 || _iy1 > _panel_bottom - 38) continue;
-        if (point_in_rectangle(_mx, _my, panel_x, _iy1, panel_x + panel_w, _iy2)) {
+        if (point_in_rectangle(_mx, _my, panel_x, _iy1, _panel_right, _iy2)) {
             hover_pos = _pos;
             // Group headers are not assets; they are hit-tested from
             // asset_group_rows, which Draw_64 rebuilds each frame.
@@ -2440,8 +2451,11 @@ if (_asset.type == "META_TILESET") {
 
         // LOAD_REU viewer clicks
         if (_asset.type == "LOAD_REU") {
+            if (!variable_instance_exists(id, "reu_name_click")) reu_name_click = undefined;
+            var _previous_name_click = reu_name_click;
+            reu_name_click = undefined;
             var _links=variable_struct_exists(_asset,"linked_assets")?_asset.linked_assets:[];
-            var _cm=_vx1+clamp(manifest_reu_split,100,max(100,_vx2-_vx1-430))+283;
+            var _cm=_vx1+manifest_reu_offset(_vx2-_vx1)+283;
             // A click on the scrollbar is handled by the scroll block above and
             // must not fall through to a row.
             if (load_reu_sb_drag) exit;
@@ -2449,11 +2463,98 @@ if (_asset.type == "META_TILESET") {
                 if(_li < load_reu_scroll) continue;
                 if(_li >= load_reu_scroll + load_reu_rows_visible) continue;
                 var _ry = load_reu_list_y1 + ((_li - load_reu_scroll) * 22);
+                var _name_right = _vx1 + manifest_reu_offset(_vx2-_vx1) - 6;
+                if (point_in_rectangle(_mx, _my, _vx1 + 30, _ry, _name_right, _ry + 20)) {
+                    var _linked_name = _links[_li].asset_name;
+                    var _double_name = is_struct(_previous_name_click)
+                        && _previous_name_click.owner == viewer_asset
+                        && _previous_name_click.name == _linked_name
+                        && _previous_name_click.row == _li
+                        && _previous_name_click.scroll == load_reu_scroll
+                        && current_time - _previous_name_click.time < 350
+                        && point_distance(_mx, _my, _previous_name_click.x, _previous_name_click.y) <= 6;
+                    reu_name_click = { owner: viewer_asset, name: _linked_name, row: _li,
+                        scroll: load_reu_scroll, time: current_time, x: _mx, y: _my };
+                    if (_double_name) {
+                        reu_name_click = undefined;
+                        for (var _open_i = 0; _open_i < ds_list_size(asset_list); _open_i++) {
+                            var _opened = ds_list_find_value(asset_list, _open_i);
+                            if (_opened.name != _linked_name) continue;
+                            scr_asset_inline_editor_close_all();
+                            viewer_asset = _open_i;
+                            viewer_open = true;
+                            bb_return_asset = -1;
+                            reu_drag_row = -1;
+                            reu_drag_over = -1;
+                            load_reu_picker_open = false;
+                            keyboard_string = "";
+                            // META_TILESET: default-select first stamp if one exists and nothing is selected
+                            if (_opened.type == "META_TILESET" &&
+                                variable_struct_exists(_opened.meta, "stamp_count") &&
+                                _opened.meta.stamp_count > 0 &&
+                                (!variable_struct_exists(_opened.meta, "edit_stamp") || _opened.meta.edit_stamp < 0)) {
+                                var _om = _opened.meta;
+                                _om.edit_stamp = 0;
+                                var _def_cells = _om.stamp_w * _om.stamp_h;
+                                _om.active_stamp_grid_char = array_create(_def_cells, 0);
+                                _om.active_stamp_grid_col  = array_create(_def_cells, 1);
+                                _om.active_stamp_grid_ov   = array_create(_def_cells, 0);
+                                for (var _dci = 0; _dci < _def_cells; _dci++) {
+                                    var _ddidx = _dci * 3;
+                                    if (_ddidx + 2 < array_length(_om.stamp_data)) {
+                                        _om.active_stamp_grid_char[_dci] = _om.stamp_data[_ddidx];
+                                        _om.active_stamp_grid_col[_dci]  = _om.stamp_data[_ddidx + 1];
+                                        _om.active_stamp_grid_ov[_dci]   = _om.stamp_data[_ddidx + 2];
+                                    }
+                                }
+                            }
+                            if (_opened.type == "MAP_DATA" &&
+                                variable_struct_exists(_opened, "meta") &&
+                                variable_struct_exists(_opened.meta, "char_grid")) {
+                                var _chr_name = variable_struct_exists(_opened.meta, "chr_asset") ? _opened.meta.chr_asset : "";
+                                if (_chr_name == "" && ds_list_size(asset_list) == 1) {
+                                    for (var _ci = 0; _ci < ds_list_size(asset_list); _ci++) {
+                                        var _ca = ds_list_find_value(asset_list, _ci);
+                                        if (_ca.type == "CHAR_SET") { _opened.meta.chr_asset = _ca.name; break; }
+                                    }
+                                }
+                            }
+                            // SPRITE_SET viewer-open: ensure thumbnails are built from the
+                            // buffer even if no source file is present on disk. Standard
+                            // scr_asset_spr_cache_sprites bails when file == "" — but the
+                            // buffer itself is the source of truth, so rebuild from there
+                            // if any thumbnails are missing.
+                            if (_opened.type == "SPRITE_SET"
+                            && buffer_exists(_opened.buffer)
+                            && variable_struct_exists(_opened.meta, "spr_sprites")) {
+                                var _needs_rebuild = false;
+                                var _used = variable_struct_exists(_opened.meta, "used_count")
+                                    ? _opened.meta.used_count : 1;
+                                for (var _ti = 0; _ti < _used; _ti++) {
+                                    if (_opened.meta.spr_sprites[_ti] == -1
+                                    || !sprite_exists(_opened.meta.spr_sprites[_ti])) {
+                                        _needs_rebuild = true;
+                                        break;
+                                    }
+                                }
+                                if (_needs_rebuild) {
+                                    scr_spred64_v2_rebuild_thumbs_from_buffer(_opened);
+                                }
+                            }
+                            mouse_clear(mb_left);
+                            break;
+                        }
+                    }
+                    exit;
+                }
                 if(point_in_rectangle(_mx,_my,_vx1+8,_ry+2,_vx1+22,_ry+18)){
                     reu_drag_row=_li; reu_drag_over=_li;
                     var _drag_asset=scr_reu_find_asset(_links[_li].asset_name);
                     reu_drag_type=is_undefined(_drag_asset)?"":_drag_asset.type;
                     exit;
+                }
+                if(point_in_rectangle(_mx,_my,_vx2-70,_ry+2,_vx2-30,_ry+18)){
+                    scr_reu_delete_project_asset(_links[_li].asset_name); exit;
                 }
                 if(point_in_rectangle(_mx,_my,_vx2-26,_ry+2,_vx2-8,_ry+18)){array_delete(_links,_li,1);scr_reu_repack(_asset);exit;}
                 if(point_in_rectangle(_mx,_my,_cm,_ry+2,_cm+45,_ry+18)){_links[_li].auto_pack=!_links[_li].auto_pack;scr_reu_repack(_asset);exit;}

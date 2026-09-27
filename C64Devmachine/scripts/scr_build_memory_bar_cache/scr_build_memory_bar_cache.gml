@@ -8,6 +8,19 @@ var _addr_total = 65536;
     ];
 
     var _segments = [];
+    global.memory_code_conflicts = [];
+    var _runtime_assets = ds_map_create();
+    // A streamed asset may share RAM with other streamed data, but loading it
+    // over executable code is still a real collision.
+    with(obj_c64_node) {
+        if (!is_connected) continue;
+        for(var _ri=0;_ri<array_length(instructions);_ri++) {
+            for(var _si=1;_si<array_length(instructions[_ri]);_si++) {
+                var _v=instructions[_ri][_si];
+                if(is_string(_v)) ds_map_replace(_runtime_assets,_v,true);
+            }
+        }
+    }
 
     // ORG aggregates — emitted independently of is_connected, since ORG nodes
     // are scaffolding (is_connected = false) but their address spans must
@@ -189,7 +202,7 @@ var _addr_total = 65536;
                         array_push(_segments, { addr: _csc.addr, size: _csc.size, lines: _csc.lines, col: make_color_rgb(180, 120, 255), type: "CODE", name: _mc_name, node_id: id, no_conflict: _csc.no_conflict, conflict: false });
                     }
                     if (total_node_size > 0) {
-                        array_push(_segments, { addr: pc_address, size: total_node_size, col: make_color_rgb(180, 120, 255), type: "CODE", name: _mc_name, lines: [], node_id: id, no_conflict: true, conflict: false });
+                        array_push(_segments, { addr: pc_address, size: total_node_size, col: make_color_rgb(180, 120, 255), type: "CODE", name: _mc_name, lines: [], node_id: id, no_conflict: false, conflict: false });
                     }
                 }
             } break;
@@ -878,10 +891,17 @@ var _addr_total = 65536;
                 var _s2_logical = (_s2.type == "CODE" || _s2.type == "MACRO");
                 var _s1_asset   = (_s1.type == "ASSET");
                 var _s2_asset   = (_s2.type == "ASSET");
-                if ((_s1_logical && _s2_asset) || (_s2_logical && _s1_asset)) _is_shared = true;
-                if (_s1_logical && _s2_logical) _is_shared = true;
+
+
             }
-            if (!_is_shared && (_s1.no_conflict || _s2.no_conflict)) _is_shared = true;
+            var _code_asset_pair = (_s1.type == "CODE" && _s2.type == "ASSET") || (_s2.type == "CODE" && _s1.type == "ASSET");
+            var _runtime_code_clash = false;
+            if (_code_asset_pair) {
+                var _code_seg = _s1.type == "CODE" ? _s1 : _s2;
+                var _asset_seg = _s1.type == "ASSET" ? _s1 : _s2;
+                _runtime_code_clash = !_code_seg.no_conflict && ds_map_exists(_runtime_assets,_asset_seg.name);
+            }
+            if (!_is_shared && (_s1.no_conflict || _s2.no_conflict) && !_runtime_code_clash) _is_shared = true;
             if (!_is_shared) {
                 var _screen_block_offset = _cstart & 0x03FF;
                 if (_screen_block_offset >= 0x03F8 && _screen_block_offset <= 0x03FF) _is_shared = true;
@@ -908,6 +928,10 @@ var _addr_total = 65536;
                     _target_cf = { start: _cstart, finish: _cfinish, is_var_clash: false };
                     array_push(_conflicts, _target_cf);
                 }
+                if (_s1.type == "CODE" && !_s1.no_conflict)
+                    array_push(global.memory_code_conflicts,{node:_s1.node_id,first:_cstart,last:_cfinish,name:_s2.name});
+                if (_s2.type == "CODE" && !_s2.no_conflict)
+                    array_push(global.memory_code_conflicts,{node:_s2.node_id,first:_cstart,last:_cfinish,name:_s1.name});
                 _s1.conflict = true;
                 _s2.conflict = true;
                 if (_s1.name == "VARIABLES" || _s2.name == "VARIABLES") {
@@ -930,8 +954,10 @@ var _addr_total = 65536;
     }
 
     global.memory_bar_segments  = _segments;
+    scr_workspace_usage_refresh(_segments);
     global.memory_bar_conflicts = _conflicts;
     global.memory_bar_dirty     = false;
+    ds_map_destroy(_runtime_assets);
 }
 
 // Refresh even if the asset panel draws before the memory bar (or the bar is hidden).
@@ -940,4 +966,81 @@ function scr_memory_bar_asset_conflicted(_asset_index) {
         scr_build_memory_bar_cache();
     return _asset_index >= 0 && _asset_index < array_length(global.memory_bar_asset_conflicts)
         && global.memory_bar_asset_conflicts[_asset_index];
+}
+
+// Same physical allocation warnings used by the memory bar and code gutter.
+function scr_memory_code_conflict(_node,_addr) {
+    if (global.memory_bar_dirty || !variable_global_exists("memory_code_conflicts")) scr_build_memory_bar_cache();
+    for(var _i=0;_i<array_length(global.memory_code_conflicts);_i++) {
+        var _c=global.memory_code_conflicts[_i];
+        if(_c.node==_node && (_addr<0 || (_addr>=_c.first && _addr<_c.last)))
+            return _c.name+" ($"+string_upper(decimal_to_hex(_c.first))+"-$"+string_upper(decimal_to_hex(_c.last-1))+")";
+    }
+    return "";
+}
+
+// Allocation totals refresh with the memory map, not once per drawn frame.
+function scr_workspace_usage_refresh(_segments) {
+    var _ram=0, _end=0, _boot_end=global.start_pc;
+    for(var _i=0;_i<array_length(_segments);_i++) {
+        var _s=_segments[_i];
+        if (_s.type=="CODE" && _s.no_conflict) continue; // operand references
+        if(instance_exists(_s.node_id) && _s.node_id.node_type=="ORG") continue;
+        var _a=clamp(_s.addr,0,65536), _b=clamp(_s.addr+_s.size,0,65536);
+        _ram+=max(0,_b-max(_end,_a)); _end=max(_end,_b);
+        if(!(variable_struct_exists(_s,"load_later") && _s.load_later)) _boot_end=max(_boot_end,_b);
+    }
+    global.workspace_ram_used=_ram;
+    global.workspace_reu_used=0;
+    global.workspace_reu_capacity=0x1000000;
+    global.workspace_disk_mode=false;
+    global.workspace_disk_exact=false;
+    var _blocks=ceil(max(15,15+_boot_end-global.start_pc)/254);
+    var _has_manifest=false, _has_loader=false;
+    with(obj_c64_node) {
+        if(is_connected && (node_type=="MACRO_LOADER" || node_type=="MACRO_SAVE_GAME" || node_type=="MACRO_LOAD_GAME")) _has_loader=true;
+    }
+    if(instance_exists(obj_asset_manager)) {
+        var _am=obj_asset_manager;
+        for(var _i=0;_i<ds_list_size(_am.asset_list);_i++) {
+            var _m=ds_list_find_value(_am.asset_list,_i);
+            if(_m.type=="LOAD_REU") {
+                // Match the manifest's allocated extent, including alignment gaps.
+                scr_reu_repack(_m);
+                global.workspace_reu_used=max(global.workspace_reu_used,_m.reu_used);
+                global.workspace_reu_capacity=variable_struct_exists(_m,"reu_size")?real(_m.reu_size):0x1000000;
+            }
+            if(_m.type!="LOAD_ORG") continue;
+            _has_manifest=true;
+            if(!variable_struct_exists(_m,"linked_assets")) continue;
+            for(var _j=0;_j<array_length(_m.linked_assets);_j++) {
+                var _link=_m.linked_assets[_j];
+                if(variable_struct_exists(_link,"load_later") && _link.load_later) continue;
+                var _a=scr_reu_find_asset(_link.asset_name);
+                if(is_undefined(_a)) continue;
+                var _size=0;
+                if(_a.type=="SFX_DATA" && variable_struct_exists(_a.meta,"instruments")) {
+                    for(var _k=0;_k<array_length(_a.meta.instruments);_k++) _size+=array_length(scr_sfx_data_instrument_blob(_a.meta.instruments[_k]));
+                    _size=max(1,_size)+2;
+                } else if(buffer_exists(_a.buffer) && buffer_get_size(_a.buffer)>=2) {
+                    _size=buffer_get_size(_a.buffer)+2;
+                    if(_a.type=="BITMAP") {
+                        var _bank=floor(_a.address/0x4000), _base=_bank*0x4000;
+                        var _screen=(_bank==2)?_base+0x3c00:((_bank==3)?_base+0x400:_a.address+0x2000);
+                        _size=_screen-_a.address+2002;
+                    } else if(_a.type=="MAP_DATA" && variable_struct_exists(_a.meta,"raw_chars") && is_real(_a.meta.raw_chars) && real(_a.meta.raw_chars)==1) {
+                        _size=min(buffer_get_size(_a.buffer),_a.meta.map_w*_a.meta.map_h)+2;
+                    }
+                }
+                _blocks+=ceil(_size/254);
+            }
+        }
+    }
+    global.workspace_disk_mode=_has_manifest && _has_loader;
+    global.workspace_disk_blocks=_blocks;
+}
+
+function scr_workspace_usage_text(_bytes) {
+    if(_bytes>=1048576) return string_format(_bytes/1048576,0,2)+" MB";
+    return string_format(_bytes/1024,0,1)+" KB";
 }

@@ -1324,7 +1324,7 @@ function scr_show_code_draw() {
         // ---- press ------------------------------------------------------
         // The scrollbar sits inside the body and claims its own presses further
         // down; the edge tests below must not steal one.
-        if (scr_primary_pressed() && !showcode_sb_drag) {
+        if (( !scr_workspace_input_blocked() && scr_primary_pressed() ) && !showcode_sb_drag) {
             if (_on_min) {
                 showcode_open = !showcode_open;
                 // Nothing was built while it was shut, so ask for the pass that
@@ -1366,7 +1366,7 @@ function scr_show_code_draw() {
 
         // ---- resize -----------------------------------------------------
         if (showcode_resize != 0) {
-            if (scr_primary_held()) {
+            if (( !scr_workspace_input_blocked() && scr_primary_held() )) {
                 if (showcode_resize == 1) {
                     var _newx = clamp(_mx, 0, showcode_rs_edge - SHOWCODE_W_MIN);
                     showcode_w = clamp(showcode_rs_edge - _newx, SHOWCODE_W_MIN, SHOWCODE_W_MAX);
@@ -1395,7 +1395,7 @@ function scr_show_code_draw() {
 
         // ---- drag ------------------------------------------------------
         if (showcode_dragging) {
-            if (scr_primary_held()) {
+            if (( !scr_workspace_input_blocked() && scr_primary_held() )) {
                 showcode_x = _mx - showcode_drag_dx;
                 showcode_y = _my - showcode_drag_dy;
                 showcode_x = clamp(showcode_x, 0, max(0, _gw - _pw));
@@ -1535,8 +1535,8 @@ function scr_show_code_draw() {
 
         // Wheel scrolls the listing whenever the pointer is over the panel.
         if (_over && showcode_resize == 0) {
-            if (mouse_wheel_up())   { showcode_scroll = max(0,     showcode_scroll - 3); }
-            if (mouse_wheel_down()) { showcode_scroll = min(_maxs, showcode_scroll + 3); }
+            if (scr_workspace_mouse_wheel_up())   { showcode_scroll = max(0,     showcode_scroll - 3); }
+            if (scr_workspace_mouse_wheel_down()) { showcode_scroll = min(_maxs, showcode_scroll + 3); }
         }
 
         // Column origins. ASM mode drops the raw byte column and pulls the
@@ -1627,7 +1627,7 @@ function scr_show_code_draw() {
                     draw_rectangle(_px + 6, _ry, _px + _pw - 14, _ry + _row_h - 1, false);
                     draw_set_alpha(1.0);
 
-                    if (scr_primary_pressed()) {
+                    if (( !scr_workspace_input_blocked() && scr_primary_pressed() )) {
                         _clicked_key = _row.key;
                     }
                 }
@@ -1753,7 +1753,7 @@ function scr_show_code_draw() {
                            _my >= _tr_y1    && _my <= _tr_y2);
             var _on_thumb = (_sb_hit && _my >= _thy && _my <= _thy + _thh);
 
-            if (scr_primary_pressed() && _sb_hit && !showcode_dragging && showcode_resize == 0) {
+            if (( !scr_workspace_input_blocked() && scr_primary_pressed() ) && _sb_hit && !showcode_dragging && showcode_resize == 0) {
                 if (_on_thumb) {
                     showcode_sb_drag = true;
                     showcode_sb_off  = _my - _thy;
@@ -1768,7 +1768,7 @@ function scr_show_code_draw() {
             }
 
             if (showcode_sb_drag) {
-                if (scr_primary_held()) {
+                if (( !scr_workspace_input_blocked() && scr_primary_held() )) {
                     var _want = clamp(_my - showcode_sb_off, _tr_y1, _tr_y1 + _span);
                     showcode_scroll = round(((_want - _tr_y1) / _span) * _maxs);
                     showcode_scroll = clamp(showcode_scroll, 0, _maxs);

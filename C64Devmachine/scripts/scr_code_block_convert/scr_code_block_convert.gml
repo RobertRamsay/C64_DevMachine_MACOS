@@ -1517,5 +1517,5 @@ function scr_cbc_draw_button() {
 // macOS build: routed through the same input abstraction as everything else,
 // so an OPT-click drives the CONVERT button exactly as it drives the nodes.
 function scr_cbc_primary_pressed() {
-    return scr_primary_pressed();
+    return ( !scr_workspace_input_blocked() && scr_primary_pressed() );
 }
