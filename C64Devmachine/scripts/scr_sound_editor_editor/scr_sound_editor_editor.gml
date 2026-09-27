@@ -32,6 +32,16 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
             { name: "PATTERN 02", steps: [], pattern_len: 64 }
         ];
     }
+    // Steps saved before the command column existed get cmd -1 (no command).
+    for (var _cbp = 0; _cbp < array_length(_m.patterns); _cbp++) {
+        var _cb_steps = _m.patterns[_cbp].steps;
+        for (var _cbs = 0; _cbs < array_length(_cb_steps); _cbs++) {
+            if (is_undefined(_cb_steps[_cbs][$ "cmd"])) {
+                _cb_steps[_cbs].cmd     = -1;
+                _cb_steps[_cbs].cmd_val = 0;
+            }
+        }
+    }
     if (!variable_struct_exists(_m, "bank_sel_pattern")) _m.bank_sel_pattern = 0;
     _m.bank_sel_pattern = clamp(_m.bank_sel_pattern, 0, array_length(_m.patterns) - 1);
 
@@ -88,6 +98,12 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
     if (!variable_struct_exists(_m, "order_scroll")) _m.order_scroll = 0;
 
     if (!variable_struct_exists(_m, "sel_voice"))   _m.sel_voice   = 0;
+    // 0 = the note column, 1 = the command column of the selected voice.
+    if (!variable_struct_exists(_m, "sel_sub"))     _m.sel_sub     = 0;
+    // Command being typed: digits so far, and the cell they belong to.
+    if (!variable_struct_exists(_m, "cmd_entry_str"))   _m.cmd_entry_str   = "";
+    if (!variable_struct_exists(_m, "cmd_entry_voice")) _m.cmd_entry_voice = -1;
+    if (!variable_struct_exists(_m, "cmd_entry_step"))  _m.cmd_entry_step  = -1;
     if (!variable_struct_exists(_m, "sel_step"))    _m.sel_step    = 0;
     if (!variable_struct_exists(_m, "list_scroll")) _m.list_scroll = 0;
     if (!variable_struct_exists(_m, "undo_stack"))  _m.undo_stack  = [];
@@ -118,6 +134,9 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
         if (!variable_struct_exists(_adb_instr, "sustain"))     _adb_instr.sustain     = 8;
         if (!variable_struct_exists(_adb_instr, "release"))     _adb_instr.release     = 0;
         if (!variable_struct_exists(_adb_instr, "pulse_width")) _adb_instr.pulse_width = 2048; // $0800 (50% square)
+        if (!variable_struct_exists(_adb_instr, "vib_delay"))   _adb_instr.vib_delay   = 0;
+        if (!variable_struct_exists(_adb_instr, "vib_speed"))   _adb_instr.vib_speed   = 0;
+        if (!variable_struct_exists(_adb_instr, "vib_depth"))   _adb_instr.vib_depth   = 0;
     }
 
     // Row-audition playback (Space / Shift+Space) — loops the current order row
@@ -169,7 +188,15 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
     // pattern_len. Called on every pattern this frame actually touches.
     var _se_ensure_steps = function(_pat) {
         while (array_length(_pat.steps) < _pat.pattern_len) {
-            array_push(_pat.steps, { instr_idx: -1, note: "", empty: true });
+            array_push(_pat.steps, { instr_idx: -1, note: "", empty: true, cmd: -1, cmd_val: 0 });
+        }
+        // Steps saved before the command column existed: cmd -1 = no command.
+        for (var _bfi = 0; _bfi < array_length(_pat.steps); _bfi++) {
+            var _bf_st = _pat.steps[_bfi];
+            if (is_undefined(_bf_st[$ "cmd"])) {
+                _bf_st.cmd     = -1;
+                _bf_st.cmd_val = 0;
+            }
         }
         if (array_length(_pat.steps) > _pat.pattern_len) {
             array_resize(_pat.steps, _pat.pattern_len);
@@ -186,7 +213,8 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
             var _steps = [];
             for (var _si = 0; _si < array_length(_src.steps); _si++) {
                 var _st = _src.steps[_si];
-                array_push(_steps, { instr_idx: _st.instr_idx, note: _st.note, empty: _st.empty });
+                array_push(_steps, { instr_idx: _st.instr_idx, note: _st.note, empty: _st.empty,
+                                     cmd: _st.cmd, cmd_val: _st.cmd_val });
             }
             array_push(_pats, { name: _src.name, steps: _steps, pattern_len: _src.pattern_len });
         }
@@ -250,6 +278,7 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
     var _row_h    = 36;
     var _vis      = 16;
     var _lane_w   = 180;
+    var _cmd_off  = 116;    // command column's x offset inside a voice lane
     var _gutter_w = 60;
     var _lane_gap = 12;
 
@@ -309,7 +338,27 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
     }
     var _preview_ready = true;
     var _preview_due = 0;
-    if (_m.playing || _m.song_playing) {
+    var _streaming = global.sid64_stream.active;
+    if (_streaming) {
+        // reSID streaming: the player simulation drives position and audio; the
+        // row-by-row loops below stay idle (_preview_due = 0).
+        if (!scr_sid64_stream_update(_m)) {
+            _m.playing = false;
+            _m.song_playing = false;
+        } else {
+            if (_m.song_playing) {
+                _m.song_order_row = _m.preview_display_order;
+                _m.sel_order_row  = _m.preview_display_order;   // grid follows the song
+            }
+            var _st_row = _m.preview_display_step;
+            if (_st_row < _m.list_scroll) {
+                _m.list_scroll = _st_row;
+            }
+            if (_st_row >= _m.list_scroll + _vis) {
+                _m.list_scroll = _st_row - _vis + 1;
+            }
+        }
+    } else if (_m.playing || _m.song_playing) {
         _preview_ready = scr_sound_editor_preview_warm(_m);
         if (_preview_ready) _preview_due = scr_sound_editor_preview_due(_m, get_timer());
     }
@@ -423,7 +472,7 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
     draw_set_font_l(fnt_c64_tiny);
     draw_set_color(make_color_rgb(120, 140, 190));
     draw_text_l(_vx1 + 20, _cy,
-        "CLICK A CELL, TYPE A NOTE (C-4, C#3, ---)   |   ENTER COMMITS + DROPS A ROW   |   DEL CLEARS   |   BKSP PULLS UP   |   INS PUSHES DOWN   |   UP/DOWN MOVES   |   SPACE LOOP ROW   |   SHIFT+SPACE FROM START   |   CTRL+SPACE PLAY SONG");
+        "CLICK A CELL, TYPE A NOTE (C-4, C#3, ---)   |   ENTER COMMITS + DROPS A ROW   |   DEL CLEARS   |   BKSP PULLS UP   |   INS PUSHES DOWN   |   UP/DOWN MOVES   |   TAB NOTE/CMD   |   SPACE LOOP ROW   |   SHIFT+SPACE FROM START   |   CTRL+SPACE PLAY SONG");
    
     draw_set_font_l(fnt_c64_tiny);
     var _status_y = _cy + 50;
@@ -812,9 +861,35 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
                 }
             }
 
+            // ── Command column (right of the note): "4 38", dim "..." when empty ──
+            var _cmd_x = _cx1 + _cmd_off;
+            var _st_cmd = _step.cmd;
+            var _typing_here = (_m.cmd_entry_str != "" && _m.cmd_entry_voice == _cv && _m.cmd_entry_step == _row);
+            if (_typing_here) {
+                // Being typed: only the new digits, the rest blank.
+                var _ty_str = _m.cmd_entry_str;
+                while (string_length(_ty_str) < 3) {
+                    _ty_str += "_";
+                }
+                draw_set_color(c_yellow);
+                draw_text_transformed_l(_cmd_x, _ry + 8, _ty_str, _txt_scale, _txt_scale, 0);
+            } else if (_st_cmd >= 0) {
+                var _cv_hex = string_upper(decimal_to_hex(_step.cmd_val));
+                while (string_length(_cv_hex) < 2) { _cv_hex = "0" + _cv_hex; }
+                draw_set_color(make_color_rgb(255, 170, 90));
+                draw_text_transformed_l(_cmd_x, _ry + 8, string_upper(decimal_to_hex(_st_cmd)) + _cv_hex, _txt_scale, _txt_scale, 0);
+            } else {
+                draw_set_color(make_color_rgb(60, 60, 70));
+                draw_text_transformed_l(_cmd_x, _ry + 8, "...", _txt_scale, _txt_scale, 0);
+            }
+
             if (_is_cursor) {
                 draw_set_color(c_yellow);
-                draw_rectangle(_cx1, _ry, _cx2, _ry + _row_h, true);
+                if (_m.sel_sub == 1) {
+                    draw_rectangle(_cmd_x - 6, _ry, _cx2, _ry + _row_h, true);
+                } else {
+                    draw_rectangle(_cx1, _ry, _cmd_x - 8, _ry + _row_h, true);
+                }
             }
 
             if (_hov && mouse_check_button_pressed(mb_left)) {
@@ -837,6 +912,11 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
                     _m.sel_step         = _row;
                     _m.sel_anchor_voice = _cv;
                     _m.sel_anchor_step  = _row;
+                    _m.sel_sub          = 0;
+                    if (_mx >= _cx1 + _cmd_off - 6) {
+                        _m.sel_sub = 1;
+                        _dbl = false;
+                    }
 
                     if (_dbl) {
                         _m.edit_active = true;
@@ -857,6 +937,8 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
                 _step.note      = "";
                 _step.instr_idx = -1;
                 _step.empty     = true;
+                _step.cmd       = -1;
+                _step.cmd_val   = 0;
                 global.undo_dirty = true;
             }
         }
@@ -988,9 +1070,10 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
                     var _cp_row_idx = _sel_s_lo + _cpr;
                     if (_cp_col_pat != noone && _cp_row_idx < _cp_col_pat.pattern_len) {
                         var _cp_src = _cp_col_pat.steps[_cp_row_idx];
-                        array_push(_cp_cols, { note: _cp_src.note, instr_idx: _cp_src.instr_idx, empty: _cp_src.empty });
+                        array_push(_cp_cols, { note: _cp_src.note, instr_idx: _cp_src.instr_idx, empty: _cp_src.empty,
+                                               cmd: _cp_src.cmd, cmd_val: _cp_src.cmd_val });
                     } else {
-                        array_push(_cp_cols, { note: "", instr_idx: -1, empty: true });
+                        array_push(_cp_cols, { note: "", instr_idx: -1, empty: true, cmd: -1, cmd_val: 0 });
                     }
                 }
                 array_push(_cp_rows, _cp_cols);
@@ -998,6 +1081,40 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
             global.se_clipboard = { w: _cp_w, h: _cp_h, rows: _cp_rows };
             _m.warn_msg   = "COPIED " + string(_cp_w) + "x" + string(_cp_h);
             _m.warn_timer = game_get_speed(gamespeed_fps) * 2;
+        }
+
+        // ── UNDO / REDO ── Ctrl+Z / Ctrl+Y (Ctrl+Shift+Z also redoes).
+        // Every pattern edit already pushed a snapshot (notes, instruments per
+        // cell, command column); this is the half that restores them.
+        if (_kb_ctrl && keyboard_check_pressed(ord("Z")) && !keyboard_check(vk_shift)) {
+            if (array_length(_m.undo_stack) > 0) {
+                array_push(_m.redo_stack, _se_snap(_m));
+                var _un_top = array_length(_m.undo_stack) - 1;
+                _m.patterns = _m.undo_stack[_un_top];
+                array_delete(_m.undo_stack, _un_top, 1);
+                _m.bank_sel_pattern = clamp(_m.bank_sel_pattern, 0, array_length(_m.patterns) - 1);
+                _m.warn_msg   = "UNDO";
+                _m.warn_timer = game_get_speed(gamespeed_fps);
+                global.undo_dirty      = true;
+                global.addresses_dirty = true;
+            }
+        }
+        var _redo_key = keyboard_check_pressed(ord("Y"));
+        if (keyboard_check_pressed(ord("Z")) && keyboard_check(vk_shift)) {
+            _redo_key = true;
+        }
+        if (_kb_ctrl && _redo_key) {
+            if (array_length(_m.redo_stack) > 0) {
+                array_push(_m.undo_stack, _se_snap(_m));
+                var _re_top = array_length(_m.redo_stack) - 1;
+                _m.patterns = _m.redo_stack[_re_top];
+                array_delete(_m.redo_stack, _re_top, 1);
+                _m.bank_sel_pattern = clamp(_m.bank_sel_pattern, 0, array_length(_m.patterns) - 1);
+                _m.warn_msg   = "REDO";
+                _m.warn_timer = game_get_speed(gamespeed_fps);
+                global.undo_dirty      = true;
+                global.addresses_dirty = true;
+            }
         }
 
         if (_kb_ctrl && keyboard_check_pressed(ord("V")) && global.se_clipboard != noone) {
@@ -1021,6 +1138,8 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
                     _dst_cell.note      = _src_cell.note;
                     _dst_cell.instr_idx = _src_cell.instr_idx;
                     _dst_cell.empty     = _src_cell.empty;
+                    _dst_cell.cmd       = _src_cell.cmd;
+                    _dst_cell.cmd_val   = _src_cell.cmd_val;
                     _pv_max = max(_pv_max, _pc);
                     _ps_max = max(_ps_max, _pr);
                 }
@@ -1032,7 +1151,7 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
             global.undo_dirty   = true;
         }
 
-        for (var _pki = 0; _pki < array_length(_pk_map) && !_kb_ctrl && _cur_step != noone; _pki++) {
+        for (var _pki = 0; _pki < array_length(_pk_map) && !_kb_ctrl && _cur_step != noone && _m.sel_sub == 0; _pki++) {
             var _pk = _pk_map[_pki];
             if (keyboard_check_pressed(_pk[0])) {
                 var _pk_oct  = clamp(_m.cur_octave + _pk[2], 0, 7);
@@ -1061,7 +1180,7 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
             }
         }
 
-        if (_cur_step != noone && keyboard_check_pressed(ord("1"))) {
+        if (_cur_step != noone && _m.sel_sub == 0 && keyboard_check_pressed(ord("1"))) {
             _se_push_undo(_m, _se_snap);
             _cur_step.note      = "---";
             _cur_step.instr_idx = -1;
@@ -1079,10 +1198,76 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
 
         if (_cur_step != noone && keyboard_check_pressed(vk_delete)) {
             _se_push_undo(_m, _se_snap);
-            _cur_step.note      = "";
-            _cur_step.instr_idx = -1;
-            _cur_step.empty     = true;
+            if (_m.sel_sub == 1) {
+                _cur_step.cmd     = -1;
+                _cur_step.cmd_val = 0;
+            } else {
+                _cur_step.note      = "";
+                _cur_step.instr_idx = -1;
+                _cur_step.empty     = true;
+            }
             global.undo_dirty   = true;
+            global.addresses_dirty = true;
+        }
+
+        // ── COMMAND COLUMN ENTRY ── the first digit blanks the cell and the
+        // command is typed fresh, left to right: 4, 3, 8 = 438. The third
+        // digit stores it and drops a row; Enter stores what's typed so far
+        // (missing digits are 0) and drops a row. Moving away discards it.
+        if (_m.cmd_entry_str != "") {
+            if (_m.sel_sub != 1 || _m.cmd_entry_voice != _m.sel_voice || _m.cmd_entry_step != _m.sel_step) {
+                _m.cmd_entry_str = "";
+            }
+        }
+        if (_cur_step != noone && _m.sel_sub == 1 && !_kb_ctrl) {
+            var _cmd_commit = false;
+            var _hex_keys = "0123456789ABCDEF";
+            for (var _hk = 1; _hk <= 16; _hk++) {
+                if (keyboard_check_pressed(ord(string_char_at(_hex_keys, _hk)))) {
+                    if (_m.cmd_entry_str == "") {
+                        _m.cmd_entry_voice = _m.sel_voice;
+                        _m.cmd_entry_step  = _m.sel_step;
+                    }
+                    _m.cmd_entry_str += string_char_at(_hex_keys, _hk);
+                    if (string_length(_m.cmd_entry_str) >= 3) {
+                        _cmd_commit = true;
+                    }
+                    break;
+                }
+            }
+            var _cmd_down = false;
+            if (keyboard_check_pressed(vk_enter)) {
+                _cmd_down = true;
+                if (_m.cmd_entry_str != "") {
+                    _cmd_commit = true;
+                }
+            }
+            if (_cmd_commit) {
+                while (string_length(_m.cmd_entry_str) < 3) {
+                    _m.cmd_entry_str += "0";
+                }
+                var _hv = 0;
+                for (var _hci = 1; _hci <= 3; _hci++) {
+                    _hv = (_hv << 4) | (string_pos(string_char_at(_m.cmd_entry_str, _hci), _hex_keys) - 1);
+                }
+                _se_push_undo(_m, _se_snap);
+                _cur_step.cmd     = (_hv >> 8) & 0x0F;
+                _cur_step.cmd_val = _hv & 0xFF;
+                _m.cmd_entry_str  = "";
+                global.undo_dirty      = true;
+                global.addresses_dirty = true;
+                _cmd_down = true;
+            }
+            if (_cmd_down) {
+                if (_m.sel_step + 1 < _cur_pat.pattern_len) {
+                    _m.sel_step += 1;
+                }
+                if (_m.sel_step >= _m.list_scroll + _vis) {
+                    _m.list_scroll = _m.sel_step - _vis + 1;
+                }
+                _m.sel_anchor_voice = _m.sel_voice;
+                _m.sel_anchor_step  = _m.sel_step;
+            }
         }
 
         if (_cur_step != noone && keyboard_check(vk_backspace)) {
@@ -1105,11 +1290,15 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
                     _bs_dst.note      = _bs_src.note;
                     _bs_dst.instr_idx = _bs_src.instr_idx;
                     _bs_dst.empty     = _bs_src.empty;
+                    _bs_dst.cmd       = _bs_src.cmd;
+                    _bs_dst.cmd_val   = _bs_src.cmd_val;
                 }
                 var _bs_last = _cur_pat.steps[_cur_pat.pattern_len - 1];
                 _bs_last.note      = "";
                 _bs_last.instr_idx = -1;
                 _bs_last.empty     = true;
+                _bs_last.cmd       = -1;
+                _bs_last.cmd_val   = 0;
                 global.undo_dirty  = true;
             }
         } else {
@@ -1144,11 +1333,15 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
                     _is_dst.note      = _is_src.note;
                     _is_dst.instr_idx = _is_src.instr_idx;
                     _is_dst.empty     = _is_src.empty;
+                    _is_dst.cmd       = _is_src.cmd;
+                    _is_dst.cmd_val   = _is_src.cmd_val;
                 }
                 var _is_cur = _cur_pat.steps[_m.sel_step];
                 _is_cur.note      = "";
                 _is_cur.instr_idx = -1;
                 _is_cur.empty     = true;
+                _is_cur.cmd       = -1;
+                _is_cur.cmd_val   = 0;
                 global.undo_dirty = true;
             }
         } else {
@@ -1203,16 +1396,32 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
             _m.sel_anchor_step  = _m.sel_step;
         }
 
+        // Plain Right/Tab walk note -> command -> next voice's note; Left
+        // walks back. With Shift they extend the selection by whole voices.
         if (keyboard_check_pressed(vk_right) || (keyboard_check_pressed(vk_tab) && !_kb_shift_col)) {
-            _m.sel_voice = _kb_shift_col ? min(2, _m.sel_voice + 1) : ((_m.sel_voice + 1) mod 3);
+            if (_kb_shift_col) {
+                _m.sel_voice = min(2, _m.sel_voice + 1);
+            } else if (_m.sel_sub == 0) {
+                _m.sel_sub = 1;
+            } else {
+                _m.sel_sub = 0;
+                _m.sel_voice = (_m.sel_voice + 1) mod 3;
+            }
             if (!_kb_shift_col) { _m.sel_anchor_voice = _m.sel_voice; _m.sel_anchor_step = _m.sel_step; }
         }
         if (keyboard_check_pressed(vk_left) || (keyboard_check_pressed(vk_tab) && _kb_shift_col)) {
-            _m.sel_voice = _kb_shift_col ? max(0, _m.sel_voice - 1) : ((_m.sel_voice + 2) mod 3);
+            if (_kb_shift_col && keyboard_check_pressed(vk_left)) {
+                _m.sel_voice = max(0, _m.sel_voice - 1);
+            } else if (_m.sel_sub == 1) {
+                _m.sel_sub = 0;
+            } else {
+                _m.sel_sub = 1;
+                _m.sel_voice = (_m.sel_voice + 2) mod 3;
+            }
             if (!_kb_shift_col) { _m.sel_anchor_voice = _m.sel_voice; _m.sel_anchor_step = _m.sel_step; }
         }
 
-        if (_cur_step != noone && keyboard_check_pressed(vk_enter)) {
+        if (_cur_step != noone && _m.sel_sub == 0 && keyboard_check_pressed(vk_enter)) {
             _m.edit_active = true;
             _m.edit_voice  = _m.sel_voice;
             _m.edit_step   = _m.sel_step;
@@ -1290,6 +1499,8 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
                 _cs_step.note      = "";
                 _cs_step.instr_idx = -1;
                 _cs_step.empty     = true;
+                _cs_step.cmd       = -1;
+                _cs_step.cmd_val   = 0;
             }
 
             if (_cl_refs > 1) {
@@ -1303,6 +1514,13 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
             global.addresses_dirty = true;
         }
     }
+
+    // ── Command legend ──
+    draw_set_font_l(fnt_c64_pico);
+    draw_set_color(make_color_rgb(150, 120, 90));
+    draw_text_l(_col_gutter_x, _clr_y + 28,
+        "CMD (1-4 LAST ONE ROW)  1XX PORTA UP  2XX DOWN  3XX SLIDE TO NOTE  4XY VIBRATO  5XX AD  6XX SR  7XX WAVE  DXX $D418  FXX TEMPO");
+    draw_set_font_l(fnt_c64_tiny);
 
     // ═════════════════════════════════════════════════════════════════════
     // RIGHT PANEL — SONG ORDER TABLE
