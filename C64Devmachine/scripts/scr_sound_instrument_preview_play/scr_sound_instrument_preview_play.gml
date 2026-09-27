@@ -1,8 +1,3 @@
-/// macOS NOTE: the Windows build renders Music Maker / SFX Maker previews
-/// through reSID (the sid64 extension + scr_sid64_audio). That extension is
-/// only built as a Windows DLL so far, so macOS keeps the GML approximation
-/// below. reSID itself is portable: building libsid64.dylib from
-/// tools/sid64 (Windows repo) and porting scr_sid64_audio brings it across.
 /// @function scr_sound_instrument_preview_play(_instr, _note_name, _channel)
 /// @desc Auditions an instrument's compiled bytecode against a note, walking
 ///       WAVE/NOTE/HOLD/LOOP commands the same way the 6502 interpreter
@@ -50,6 +45,23 @@ function scr_sound_instrument_preview_play(_instr, _note_name, _channel = 0, _ma
         global.snd_preview_buffer[_channel]   = _hit.buf;
         global.snd_preview_instance[_channel] = audio_play_sound(_hit.snd, 1, false);
         return;
+    }
+
+    // ── reSID RENDER ──
+    // The note is walked exactly as the compiled player walks it and the
+    // resulting SID register writes are rendered by the sid64 extension.
+    // Falls through to the GML synth below only when the extension is absent.
+    if (global.sid64_ok) {
+        var _sid_out = scr_sid64_render_note(_instr, _note_name, _max_sec);
+        if (is_struct(_sid_out)) {
+            if (!_prepare_only) scr_sound_preview_free_channel(_channel);
+            scr_sound_preview_cache_store(_ck, _sid_out.snd, _sid_out.buf);
+            if (_prepare_only) return;
+            global.snd_preview_asset[_channel]    = _sid_out.snd;
+            global.snd_preview_buffer[_channel]   = _sid_out.buf;
+            global.snd_preview_instance[_channel] = audio_play_sound(_sid_out.snd, 1, false);
+            return;
+        }
     }
 
     // ── WALK THE BYTECODE, BUILDING A LIST OF {wave, hz, n} SEGMENTS ──
