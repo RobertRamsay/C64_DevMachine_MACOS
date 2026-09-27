@@ -1,3 +1,8 @@
+/// macOS NOTE: the Windows build renders Music Maker / SFX Maker previews
+/// through reSID (the sid64 extension + scr_sid64_audio). That extension is
+/// only built as a Windows DLL so far, so macOS keeps the GML approximation
+/// below. reSID itself is portable: building libsid64.dylib from
+/// tools/sid64 (Windows repo) and porting scr_sid64_audio brings it across.
 /// @function scr_sound_instrument_preview_play(_instr, _note_name, _channel)
 /// @desc Auditions an instrument's compiled bytecode against a note, walking
 ///       WAVE/NOTE/HOLD/LOOP commands the same way the 6502 interpreter
