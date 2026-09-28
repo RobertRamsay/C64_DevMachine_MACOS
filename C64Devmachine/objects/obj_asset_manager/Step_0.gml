@@ -46,7 +46,7 @@ var _wide_modal = false;
 if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list)) {
     var _vb_type = ds_list_find_value(asset_list, viewer_asset).type;
     if (_vb_type == "BITMAP_BUILDER" || _vb_type == "MUSIC_MAKER" || _vb_type == "SFX_MAKER"
-    ||  _vb_type == "HUD" || _vb_type == "ROOM_MAP" || _vb_type == "SPRITE_MASK") {
+    ||  _vb_type == "HUD" || (_vb_type == "ROOM_MAP" || _vb_type == "ANIMATION") || _vb_type == "SPRITE_MASK") {
         _wide_modal = true;
         _vx1 = 30;
         _vx2 = panel_x + 20;
@@ -54,6 +54,10 @@ if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list))
             _vx2 = _gui_w - _vx1;   // full width, centred — must match Draw
         }
     }
+}
+// Music Maker's piano extends its viewer vertically; other editors keep their bounds.
+if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list)) {
+    if (asset_list[|viewer_asset].type == "MUSIC_MAKER") { _vy1=40; _vy2=_gui_h-40; }
 }
 var _mouse_in_viewer = viewer_open && point_in_rectangle(_mx, _my, _vx1, _vy1, _vx2, _vy2);
 
@@ -636,6 +640,12 @@ for (var _di = 0; _di < ds_list_size(asset_list); _di++) {
 			var _old_name             = _asset.name;
 			_asset.name               = _proposed;
 
+            if (_asset.type == "SPRITE_SET") {
+                for(var _ani=0;_ani<ds_list_size(asset_list);_ani++) {
+                    var _aa=asset_list[|_ani];
+                    if(_aa.type=="ANIMATION" && variable_struct_exists(_aa.meta,"anim_sprite") && _aa.meta.anim_sprite==_old_name) _aa.meta.anim_sprite=_proposed;
+                }
+            }
             // Patch asset-meta cross-references when the renamed asset is
             // something other assets point to by name:
             //   CHAR_SET name      ← referenced by MAP_DATA.meta.chr_asset and META_TILESET.meta.chr_asset
@@ -682,7 +692,10 @@ for (var _di = 0; _di < ds_list_size(asset_list); _di++) {
             // Update all node references to the old asset name
 			with (obj_c64_node) {
                 switch (node_type) {
-					case "MACRO_BMP":
+					case "MACRO_ANIM_SET":
+                        if(array_length(instructions[0])>3 && string(instructions[0][3])==_old_name) instructions[0][3]=_proposed;
+                        break;
+                    case "MACRO_BMP":
                     case "MACRO_SPR":
                     case "MACRO_SID":
                     case "MACRO_SFX":
@@ -2032,7 +2045,7 @@ if (mouse_check_button_pressed(mb_left) && !global.any_picker_open && !(_wide_mo
 			    reu_used      : (_type == "LOAD_REU") ? 0x100 : 0,
 			    linked_assets : (_type == "LOAD_ORG" || _type == "LOAD_REU") ? [] : [],
 			};
-			
+			if (_type == "ANIMATION") scr_anim_asset_ensure(_new_asset);
 			if (_type == "SPRITE_SET") {
 			    // Fresh sprite asset starts with a single blank sprite.
 			    // 64 bytes = one C64 sprite block, zeroed. Arrays sized to 1;
@@ -2253,6 +2266,9 @@ if (mouse_check_button_pressed(mb_left) && !global.any_picker_open && !(_wide_mo
             alarm[2]                 = 60;
             exit;
         }
+
+// Animation editor handles its own buttons and frame picker in Draw GUI.
+if (_asset.type == "ANIMATION") exit;
 
 // CHARSET viewer interactions
 if (_asset.type == "CHAR_SET") {
@@ -2613,7 +2629,7 @@ if (_asset.type == "META_TILESET") {
 
         // ADDRESS click in viewer — LOAD_ORG is a manifest, BITMAP_BUILDER is an
         // internal authoring asset. Neither has an editable load address.
-        if (_asset.type != "LOAD_ORG" &&
+        if (_asset.type != "ANIMATION" && _asset.type != "LOAD_ORG" &&
     _asset.type != "LOAD_REU" &&
     _asset.type != "BITMAP_BUILDER" &&
     _asset.type != "MUSIC_MAKER" && _asset.type != "SFX_MAKER" &&
@@ -2646,7 +2662,7 @@ if (_asset.type == "META_TILESET") {
         if (_asset.type == "SPRITE_SET" && _asset.file != "")
             scr_asset_spr_cache_sprites(_asset);
 
-        if (_asset.type != "LOAD_ORG" &&
+        if (_asset.type != "ANIMATION" && _asset.type != "LOAD_ORG" &&
     _asset.type != "LOAD_REU" &&
     _asset.type != "BITMAP_BUILDER" &&
     _asset.type != "MUSIC_MAKER" && _asset.type != "SFX_MAKER" &&
@@ -2808,6 +2824,10 @@ if (mouse_check_button_pressed(mb_right) && _mouse_in_panel && hover_idx >= 0) {
     with (obj_c64_node) {
         var _ref_name = "";
         switch (node_type) {
+            case "MACRO_ANIM_SET":
+                if(array_length(instructions[0])>3) _ref_name=string(instructions[0][3]);
+                break;
+
             case "MACRO_BMP": case "MACRO_SPR": case "MACRO_SID": case "MACRO_SFX": case "MACRO_MAP": case "MACRO_CHR": case "MACRO_SID_SONG":
                 if (array_length(instructions[0]) > 1)
                     _ref_name = string(instructions[0][1]);
@@ -2874,6 +2894,12 @@ if (mouse_check_button_pressed(mb_right) && _mouse_in_panel && hover_idx >= 0) {
         }
     }
 
+    if(!_is_referenced) {
+        for(var _ani=0;_ani<ds_list_size(asset_list);_ani++) {
+            var _aa=asset_list[|_ani];
+            if(_aa.type=="ANIMATION" && variable_struct_exists(_aa.meta,"anim_sprite") && _aa.meta.anim_sprite==_asset.name) {_is_referenced=true;_delete_block_title=_aa.name;break;}
+        }
+    }
     // Also block deletion if the asset lives inside any LOAD_ORG's manifest.
     // (Cosmetic delete cleanup further down also wipes these refs, but we
     //  want the user to consciously remove from the LOAD_ORG first.)
