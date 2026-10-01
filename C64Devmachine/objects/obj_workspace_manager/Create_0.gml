@@ -1,5 +1,5 @@
 /// @desc Setup Workspace, Palette & C64 Environment
-global.lite=1;
+global.lite=0;
 
 global.text_prompt = undefined;
 // Language first: every text wrapper below depends on it.
