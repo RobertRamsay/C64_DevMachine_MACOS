@@ -17,6 +17,26 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
     var _vy2_full = _vy2;
     _vy2 = _vy2 - _pno_h;
     var _m = _asset.meta;
+    _m.pattern_hover_tip = "";
+    // Pattern-command guide: while it's open nothing behind it reacts to the
+    // mouse or keys; only its CLOSE button or Escape closes it.
+    var _cg_mx = _mx;
+    var _cg_my = _my;
+    var _cg_click = mouse_check_button_pressed(mb_left);
+    var _cg_esc = keyboard_check_pressed(vk_escape);
+    var _cg_open = global.music_cmd_guide_open;
+    if (_cg_open) {
+        _mx = -100000;
+        _my = -100000;
+        io_clear();
+    }
+    if (!variable_struct_exists(_m, "order_pattern_edit_active")) _m.order_pattern_edit_active = false;
+    // A click elsewhere cancels the pending entry before another control receives focus.
+    if (_m.order_pattern_edit_active && mouse_check_button_pressed(mb_left)) {
+        _m.order_pattern_edit_active = false;
+        keyboard_string = "";
+    }
+    var _order_typing = _m.order_pattern_edit_active;
 
     // ── BACKFILL ──
     if (!variable_struct_exists(_m, "instruments"))  _m.instruments = [];
@@ -37,15 +57,18 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
             { name: "PATTERN 02", steps: [], pattern_len: 64 }
         ];
     }
-    // Steps saved before the command column existed get cmd -1 (no command).
-    for (var _cbp = 0; _cbp < array_length(_m.patterns); _cbp++) {
-        var _cb_steps = _m.patterns[_cbp].steps;
-        for (var _cbs = 0; _cbs < array_length(_cb_steps); _cbs++) {
-            if (is_undefined(_cb_steps[_cbs][$ "cmd"])) {
-                _cb_steps[_cbs].cmd     = -1;
-                _cb_steps[_cbs].cmd_val = 0;
+    // Migrate old assets once; active patterns are also checked by _se_ensure_steps.
+    if (_pat_needs_reset || !variable_struct_exists(_m, "cmd_fields_migrated")) {
+        for (var _cbp = 0; _cbp < array_length(_m.patterns); _cbp++) {
+            var _cb_steps = _m.patterns[_cbp].steps;
+            for (var _cbs = 0; _cbs < array_length(_cb_steps); _cbs++) {
+                if (is_undefined(_cb_steps[_cbs][$ "cmd"])) {
+                    _cb_steps[_cbs].cmd     = -1;
+                    _cb_steps[_cbs].cmd_val = 0;
+                }
             }
         }
+        _m.cmd_fields_migrated = true;
     }
     if (!variable_struct_exists(_m, "bank_sel_pattern")) _m.bank_sel_pattern = 0;
     _m.bank_sel_pattern = clamp(_m.bank_sel_pattern, 0, array_length(_m.patterns) - 1);
@@ -97,6 +120,10 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
     // THE selected song. Everything below reads _cur_song.order directly —
     // there is no _m.song_order, deliberately (see scr_sound_editor_create).
     var _cur_song = _m.songs[_m.sel_song];
+    if (!variable_struct_exists(_m, "sid_page")) _m.sid_page = 0;
+    _m.sid_page = clamp(_m.sid_page, 0, scr_music_sid_count(_m) - 1);
+    var _voice_offset = _m.sid_page * 3;
+    var _page_keys = ["v" + string(_voice_offset + 1), "v" + string(_voice_offset + 2), "v" + string(_voice_offset + 3)];
 
     if (!variable_struct_exists(_m, "sel_order_row")) _m.sel_order_row = 0;
     _m.sel_order_row = clamp(_m.sel_order_row, 0, array_length(_cur_song.order) - 1);
@@ -161,6 +188,16 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
     if (!variable_struct_exists(_m, "filt_mode"))   _m.filt_mode   = 0;
     if (!variable_struct_exists(_m, "filt_res"))    _m.filt_res    = 0;
     if (!variable_struct_exists(_m, "filt_cut"))    _m.filt_cut    = 1024;
+    if (!variable_struct_exists(_m, "note_table"))  _m.note_table  = [];
+    if (!variable_struct_exists(_m, "free_voices")) _m.free_voices = false;
+    if (!variable_struct_exists(_m, "chip_model"))  _m.chip_model  = 1;
+    // The preview chip follows the song's saved choice.
+    if (global.sid64_ok && global.sid64_model != _m.chip_model) {
+        global.sid64_model = _m.chip_model;
+        scr_sid64_reconfigure();
+        _m.playing = false;
+        _m.song_playing = false;
+    }
     // 1 is frantic, 24 is a dirge; the emitter clamps to 1-255 anyway, but
     // there's no musical reason to go past this from the UI.
     _m.play_speed = clamp(real(_m.play_speed), 1, 24);
@@ -242,6 +279,7 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
     // Moves the cursor (and the order row / scroll it needs) to an undo entry's
     // location, dropping any selection or half-typed command.
     var _se_undo_goto = function(_mm, _ent, _visrows) {
+        if (variable_struct_exists(_ent, "chip")) _mm.sid_page = clamp(_ent.chip, 0, scr_music_sid_count(_mm) - 1);
         _mm.sel_order_row = _ent.ord;
         _mm.sel_voice     = _ent.voice;
         _mm.sel_step      = _ent.step;
@@ -260,6 +298,7 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
             voice : _mm.sel_voice,
             step  : _mm.sel_step,
             sub   : _mm.sel_sub,
+            chip  : _mm.sid_page,
             ord   : _mm.sel_order_row
         });
         if (array_length(_mm.undo_stack) > 50) {
@@ -273,9 +312,49 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
         global.addresses_dirty = true;
     };
 
+    if (_order_typing) {
+        if (_m.order_pattern_edit_song != _cur_song || _m.order_pattern_edit_page != _m.sid_page) {
+            _m.order_pattern_edit_active = false;
+        } else {
+            var _typed = scr_strip_key_ghosts(keyboard_string);
+            for (var _ti = 1; _ti <= string_length(_typed); _ti++) {
+                var _tc = string_char_at(_typed, _ti);
+                if ((_tc >= "0" && _tc <= "9") || _tc == "-") {
+                    if (_m.order_pattern_edit_replace) { _m.order_pattern_edit_buf = ""; _m.order_pattern_edit_replace = false; }
+                    if (string_length(_m.order_pattern_edit_buf) < 5) _m.order_pattern_edit_buf += _tc;
+                }
+            }
+            if (keyboard_check_pressed(vk_backspace) || keyboard_check_pressed(vk_delete)) {
+                if (_m.order_pattern_edit_replace || keyboard_check_pressed(vk_delete)) _m.order_pattern_edit_buf = "";
+                else _m.order_pattern_edit_buf = string_delete(_m.order_pattern_edit_buf, string_length(_m.order_pattern_edit_buf), 1);
+                _m.order_pattern_edit_replace = false;
+            }
+            if (keyboard_check_pressed(vk_escape)) _m.order_pattern_edit_active = false;
+            if (keyboard_check_pressed(vk_enter)) {
+                var _entry = _m.order_pattern_edit_buf;
+                var _valid = true;
+                var _number = -1;
+                if (_entry != "" && _entry != "-" && _entry != "--") {
+                    for (var _ei = 1; _ei <= string_length(_entry); _ei++) {
+                        var _ec = string_char_at(_entry, _ei);
+                        if (_ec < "0" || _ec > "9") _valid = false;
+                    }
+                    if (_valid) _number = real(_entry);
+                }
+                if (_valid && _number < array_length(_m.patterns)) {
+                    _m.order_pattern_edit_row[$ _m.order_pattern_edit_key] = _number;
+                    global.undo_dirty = true;
+                    global.addresses_dirty = true;
+                    _m.order_pattern_edit_active = false;
+                }
+            }
+        }
+        keyboard_string = "";
+    }
+
     // ── RESOLVE THE 3 ACTIVE PATTERNS FOR THE CURRENT ORDER ROW ──
     var _order_row = _cur_song.order[_m.sel_order_row];
-    var _col_pat_idx = [_order_row.v1, _order_row.v2, _order_row.v3];
+    var _col_pat_idx = [scr_music_sid_pattern(_order_row, _voice_offset), scr_music_sid_pattern(_order_row, _voice_offset + 1), scr_music_sid_pattern(_order_row, _voice_offset + 2)];
     var _col_pat = [noone, noone, noone];
     for (var _cpi = 0; _cpi < 3; _cpi++) {
         if (_col_pat_idx[_cpi] >= 0 && _col_pat_idx[_cpi] < array_length(_m.patterns)) {
@@ -294,24 +373,7 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
         }
     }
 
-    var _se_row_target_len = function(_mm, _row) {
-        // FORCE overrides outright when set — it's a hard row length, not a
-        // minimum. Without it, the target is the longest pattern present.
-        if (_row.force_len > 0) {
-            return _row.force_len;
-        }
-        var _r_len = 0;
-        var _voices = [_row.v1, _row.v2, _row.v3];
-        for (var _vi = 0; _vi < 3; _vi++) {
-            if (_voices[_vi] >= 0 && _voices[_vi] < array_length(_mm.patterns)) {
-                _r_len = max(_r_len, _mm.patterns[_voices[_vi]].pattern_len);
-            }
-        }
-        if (_r_len <= 0) {
-            _r_len = 64;
-        }
-        return _r_len;
-    };
+    var _se_row_target_len = function(_mm, _row) { return scr_music_sid_length(_mm, _row); };
 
     // ── LAYOUT ──
     var _txt_scale = 2;
@@ -334,9 +396,10 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
     draw_text_l(_vx1+540,_transport_y+5,"VOICES:");
     for(var _mv=0;_mv<3;_mv++) {
         var _bit=1<<_mv;
-        if(scr_sfx_maker_button(_vx1+620+_mv*100,_transport_y,90,string(_mv+1)+((_m.voice_mask&_bit)?" ON":" OFF"),_mx,_my)) {
-            _m.voice_mask=_m.voice_mask^_bit;
-            if(!(_m.voice_mask&_bit)) scr_sound_preview_free_channel(_mv);
+        if(scr_sfx_maker_button(_vx1+620+_mv*100,_transport_y,90,string(_voice_offset+_mv+1)+((scr_music_sid_mask(_m, _m.sid_page)&_bit)?" ON":" OFF"),_mx,_my)) {
+            var _mask_key = (_m.sid_page == 0) ? "voice_mask" : "sid_mask_" + string(_m.sid_page);
+            _m[$ _mask_key] = scr_music_sid_mask(_m, _m.sid_page) ^ _bit;
+            if (!(_m[$ _mask_key] & _bit)) scr_sound_preview_free_channel(_mv);
             global.addresses_dirty=true;global.undo_dirty=true;
         }
     }
@@ -416,17 +479,19 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
         }
         _fsx = _fup + 26;
     }
-    // Preview chip (session setting, not saved with the song).
+    // Preview / export chip, saved with the song.
     if (global.sid64_ok) {
         var _chip_lbl = "CHIP: 6581";
-        if (global.sid64_model == 1) {
+        if (_m.chip_model == 1) {
             _chip_lbl = "CHIP: 8580";
         }
         if (scr_sfx_maker_button(_fsx + 10, _fl_y - 1, 96, _chip_lbl, _mx, _my)) {
-            global.sid64_model = 1 - global.sid64_model;
+            _m.chip_model = 1 - _m.chip_model;
+            global.sid64_model = _m.chip_model;
             scr_sid64_reconfigure();
             _m.playing = false;
             _m.song_playing = false;
+            global.undo_dirty = true;
         }
     }
     // Standalone .sid of this asset (the MACRO_SID_SONG player, assembled at a
@@ -435,8 +500,9 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
         scr_sound_editor_export_sid(_asset);
     }
 
-    var _transport_labels = ["PLAY PAT (F3)", "PLAY SONG (F1)", "PLAY HERE", "STOP (F4)"];
-    var _transport_actions = ["PAT", "SONG", "HERE", "STOP"];
+    // In function-key order: F1 SONG, F2 HERE, F3 PAT, F4 STOP.
+    var _transport_labels = ["PLAY SONG (F1)", "PLAY HERE (F2)", "PLAY PAT (F3)", "STOP (F4)"];
+    var _transport_actions = ["SONG", "HERE", "PAT", "STOP"];
     draw_set_font_l(fnt_c64_tiny);
     draw_set_halign(fa_left);
     for (var _tb = 0; _tb < 4; _tb++) {
@@ -445,35 +511,46 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
         var _thover = point_in_rectangle(_mx, _my, _tx, _transport_y, _tx + _tw, _transport_y + 24);
         draw_set_color(_thover ? make_color_rgb(65, 130, 155) : make_color_rgb(28, 60, 80));
         draw_rectangle(_tx, _transport_y, _tx + _tw, _transport_y + 24, false);
-        draw_set_color((_tb == 0 && _m.playing) || ((_tb == 1 || _tb == 2) && _m.song_playing) ? c_lime : c_white);
+        var _t_lit = false;
+        if (_transport_actions[_tb] == "PAT" && _m.playing) _t_lit = true;
+        if ((_transport_actions[_tb] == "SONG" || _transport_actions[_tb] == "HERE") && _m.song_playing) _t_lit = true;
+        if (_t_lit) {
+            draw_set_color(c_lime);
+        } else {
+            draw_set_color(c_white);
+        }
         draw_text_l(_tx + 10, _transport_y + 7, _transport_labels[_tb]);
         if (_thover && mouse_check_button_pressed(mb_left)) _transport_action = _transport_actions[_tb];
     }
     // Space in a text field belongs to that field, never to the transport.
     var _transport_typing = _m.edit_active || _m.instr_edit_active
-                         || _m.instr_name_edit_active || _m.song_name_edit_active;
-    // GoatTracker function keys: F1 song from the start, F2 this pattern from
-    // the cursor row (looping), F3 this pattern from the top (looping), F4 stop.
+                         || _m.instr_name_edit_active || _m.song_name_edit_active || _order_typing;
+    // Function keys: F1 song from the start, F2 song from the cursor row (same
+    // as PLAY HERE — carries on through the order list), F3 this pattern from
+    // the top (looping), F4 stop.
     // They type nothing, so they also work while an instrument's text is open.
-    var _fkeys_ok = !_m.edit_active && !_m.instr_name_edit_active && !_m.song_name_edit_active;
+    var _fkeys_ok = !_m.edit_active && !_m.instr_name_edit_active && !_m.song_name_edit_active && !_order_typing;
     if (_fkeys_ok) {
         if (keyboard_check_pressed(vk_f1)) {
             _transport_action = "SONG";
         } else if (keyboard_check_pressed(vk_f2)) {
-            _transport_action = "ROW_HERE";
+            _transport_action = "HERE";
         } else if (keyboard_check_pressed(vk_f3)) {
             _transport_action = "PAT";
         } else if (keyboard_check_pressed(vk_f4)) {
             _transport_action = "STOP";
         }
     }
+    // Space only ever auditions the selected instrument — C in the current
+    // octave (plain pulse if no instrument is selected). Playback is F1-F4.
+    // While an instrument's text is open, scr_sound_editor_draw_instruments
+    // handles Space instead (it plays the text as typed).
     if (!_transport_typing && keyboard_check_pressed(vk_space)) {
-        if (keyboard_check(vk_control) || scr_cmd_held()) {
-            _transport_action = _m.song_playing ? "STOP" : "SONG";
-        } else if (keyboard_check(vk_shift)) {
-            _transport_action = "PAT";
+        var _sp_note = "C-" + string(_m.cur_octave);
+        if (_m.sel_instr >= 0 && _m.sel_instr < array_length(_m.instruments)) {
+            scr_sound_instrument_preview_play(_m.instruments[_m.sel_instr], _sp_note, _m.sel_voice);
         } else {
-            _transport_action = (_m.playing || _m.song_playing) ? "STOP" : "ROW_HERE";
+            scr_sound_preview_play(_sp_note, "SQUARE", _m.sel_voice);
         }
     }
     if (_transport_action != "") {
@@ -610,6 +687,41 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
 
     } // elapsed-time full-song row loop
 
+    // Playback may have changed the selected order after the initial layout.
+    // Refresh before drawing: never highlight a new row over the old patterns.
+    _order_row = _cur_song.order[_m.sel_order_row];
+    _grid_len = 16;
+    for (var _refresh_v = 0; _refresh_v < 3; _refresh_v++) {
+        var _refresh_p = scr_music_sid_pattern(_order_row, _voice_offset + _refresh_v);
+        _col_pat_idx[_refresh_v] = _refresh_p;
+        _col_pat[_refresh_v] = noone;
+        if (_refresh_p >= 0 && _refresh_p < array_length(_m.patterns)) {
+            _col_pat[_refresh_v] = _m.patterns[_refresh_p];
+            _se_ensure_steps(_col_pat[_refresh_v]);
+            _grid_len = max(_grid_len, _col_pat[_refresh_v].pattern_len);
+        }
+    }
+    // TIMING: PER VOICE playback: each column shows the pattern its own voice
+    // is on, with that voice's own row lit (they no longer move together).
+    var _voice_hl = [-1, -1, -1];
+    var _voice_pos = undefined;
+    if (_m.playing || _m.song_playing) _voice_pos = scr_sound_editor_voice_positions(_m);
+    if (is_array(_voice_pos)) {
+        _grid_len = 16;
+        for (var _fv = 0; _fv < 3; _fv++) {
+            var _f_ord = clamp(_voice_pos[_fv][0], 0, array_length(_cur_song.order) - 1);
+            var _f_p = scr_music_sid_pattern(_cur_song.order[_f_ord], _voice_offset + _fv);
+            _col_pat_idx[_fv] = _f_p;
+            _col_pat[_fv] = noone;
+            if (_f_p >= 0 && _f_p < array_length(_m.patterns)) {
+                _col_pat[_fv] = _m.patterns[_f_p];
+                _se_ensure_steps(_col_pat[_fv]);
+                _grid_len = max(_grid_len, _col_pat[_fv].pattern_len);
+                _voice_hl[_fv] = _voice_pos[_fv][1];
+            }
+        }
+    }
+
     // ═════════════════════════════════════════════════════════════════════
     // HEADER ROWS
     // ═════════════════════════════════════════════════════════════════════
@@ -621,7 +733,7 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
     draw_set_font_l(fnt_c64_tiny);
     draw_set_color(make_color_rgb(120, 140, 190));
     draw_text_l(_vx1 + 20, _cy,
-        "CLICK A CELL, TYPE A NOTE (C-4, C#3, ---)   |   ENTER COMMITS + DROPS A ROW   |   DEL CLEARS   |   BKSP PULLS UP   |   INS PUSHES DOWN   |   UP/DOWN MOVES   |   TAB NOTE/CMD   |   - STOP  + KEY ON   |   F1 SONG   F2 PAT FROM ROW   F3 PAT   F4 STOP");
+        "CLICK A CELL, TYPE A NOTE (C-4, C#3, ---)   |   ENTER COMMITS + DROPS A ROW   |   BKSP CLEARS   |   DEL PULLS UP   |   INS PUSHES DOWN   |   UP/DOWN MOVES   |   TAB NOTE/CMD   |   - STOP  + KEY ON   |   F1 SONG   F2 SONG FROM HERE   F3 PAT   F4 STOP   |   SPACE HEAR INSTRUMENT");
    
     draw_set_font_l(fnt_c64_tiny);
     var _status_y = _cy + 50;
@@ -649,6 +761,25 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
     } else {
         draw_set_color(make_color_rgb(130, 155, 180));
         draw_text_l(_vx1 + 20, _status_y, "HERE: ORDER " + string(_m.sel_order_row) + L("   STEP ") + string(_m.sel_step));
+    }
+    // ── Compiled size by section (all SID chips), refreshed after edits settle ──
+    var _size = scr_music_size_cached(_asset);
+    if (is_struct(_size) && _size.ok) {
+        var _sz_parts = [["INSTR", _size.instr], ["TABLES", _size.tables], ["SHARED", _size.shared],
+            ["PATTERNS", _size.patterns], ["ORDER", _size.order], ["NOTES", _size.notes],
+            ["PLAYER", _size.player], ["VARS", _size.vars]];
+        var _sz_x = _vx1 + 460;
+        draw_set_color(make_color_rgb(150, 170, 200));
+        draw_text_l(_sz_x, _status_y, "BYTES:");
+        _sz_x += string_width_l("BYTES: ") + 6;
+        for (var _szi = 0; _szi < array_length(_sz_parts); _szi++) {
+            var _sz_txt = _sz_parts[_szi][0] + " " + string(_sz_parts[_szi][1]);
+            draw_set_color(make_color_rgb(120, 140, 170));
+            draw_text_l(_sz_x, _status_y, _sz_txt);
+            _sz_x += string_width_l(_sz_txt) + 14;
+        }
+        draw_set_color(c_yellow);
+        draw_text_l(_sz_x, _status_y, "TOTAL " + string(_size.total));
     }
     draw_set_font_l(fnt_c64_tiny);
 
@@ -709,11 +840,12 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
     var _bdx1 = _bax2 + 8;
     var _bdx2 = _bdx1 + 90;
     var _bd_referenced = false;
-    for (var _bri = 0; _bri < array_length(_cur_song.order); _bri++) {
-        var _br = _cur_song.order[_bri];
-        if (_br.v1 == _m.bank_sel_pattern || _br.v2 == _m.bank_sel_pattern || _br.v3 == _m.bank_sel_pattern) {
-            _bd_referenced = true;
-            break;
+    for (var _song_i = 0; _song_i < array_length(_m.songs); _song_i++) {
+        for (var _bri = 0; _bri < array_length(_m.songs[_song_i].order); _bri++) {
+            var _br = _m.songs[_song_i].order[_bri];
+            for (var _vref = 0; _vref < 24; _vref++) {
+                if (scr_music_sid_pattern(_br, _vref) == _m.bank_sel_pattern) _bd_referenced = true;
+            }
         }
     }
     var _bd_lock = (array_length(_m.patterns) <= 1) || _bd_referenced;
@@ -725,6 +857,15 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
     draw_text_l((_bdx1 + _bdx2) * 0.5, _rowy + 4, "DEL");
     draw_set_halign(fa_left);
     if (_bd_hov && mouse_check_button_pressed(mb_left)) {
+        for (var _ds = 0; _ds < array_length(_m.songs); _ds++) {
+            for (var _dr = 0; _dr < array_length(_m.songs[_ds].order); _dr++) {
+                var _drow = _m.songs[_ds].order[_dr];
+                for (var _dv = 0; _dv < 24; _dv++) {
+                    var _dpi = scr_music_sid_pattern(_drow, _dv);
+                    if (_dpi > _m.bank_sel_pattern) _drow[$ "v" + string(_dv + 1)] = _dpi - 1;
+                }
+            }
+        }
         array_delete(_m.patterns, _m.bank_sel_pattern, 1);
         _m.bank_sel_pattern = clamp(_m.bank_sel_pattern, 0, array_length(_m.patterns) - 1);
         global.undo_dirty      = true;
@@ -825,16 +966,65 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
     draw_set_font_l(fnt_c64_pico);
     draw_set_color(make_color_rgb(90, 90, 120));
     var _tp_bpm = round((50 * 60) / (real(_m.play_speed) * 4));
-    draw_text_l(_tp_ux2 + 12, _rowy + 6, L("FRAMES/ROW  (~") + string(_tp_bpm) + " BPM @ 4 ROWS/BEAT)");
+    var _tp_txt = L("FRAMES/ROW  (~") + string(_tp_bpm) + " BPM @ 4 ROWS/BEAT)";
+    draw_text_l(_tp_ux2 + 12, _rowy + 6, _tp_txt);
+    var _tm_x = _tp_ux2 + 12 + string_width_l(_tp_txt) + 18;
     draw_set_font_l(fnt_c64_tiny);
 
-    _rowy += 24;
+    // ── TIMING ── SHARED: one row clock for all voices (FXX sets it). PER
+    // VOICE: each voice walks its own column of the order list at its own
+    // speed (FXX sets that voice's speed from its row on), so voices can
+    // change notes at different times — the GoatTracker / sequence model.
+    var _tm_label = "TIMING: SHARED";
+    if (_m.free_voices) _tm_label = "TIMING: PER VOICE";
+    if (scr_sfx_maker_button(_tm_x, _rowy, 170, _tm_label, _mx, _my)) {
+        scr_sound_editor_transport(_m, _cur_song, "STOP");
+        _m.free_voices = !_m.free_voices;
+        global.addresses_dirty = true;
+        global.undo_dirty      = true;
+    }
+    if (_m.free_voices) {
+        draw_set_font_l(fnt_c64_pico);
+        draw_set_color(make_color_rgb(90, 90, 120));
+        draw_text_l(_tm_x + 180, _rowy + 6, "EACH VOICE: OWN ORDER COLUMN, OWN FXX SPEED, OWN PATTERN LENGTH");
+        draw_set_font_l(fnt_c64_tiny);
+    }
+
+    _rowy += 26;
+    var _sid_count = scr_music_sid_count(_m);
+    if (scr_sfx_maker_button(_vx1 + 20, _rowy, 32, "-", _mx, _my) && _sid_count > 1) {
+        scr_sound_editor_transport(_m, _cur_song, "STOP");
+        scr_music_sid_page(_m, min(_m.sid_page, _sid_count - 2), _col_pat, _se_push_undo, _se_snap);
+        _m.sid_count = _sid_count - 1;
+        global.undo_dirty = true; global.addresses_dirty = true;
+    }
+    draw_text_l(_vx1 + 62, _rowy + 6, string(_sid_count) + " SIDS / " + string(_sid_count * 3) + " VOICES");
+    if (scr_sfx_maker_button(_vx1 + 260, _rowy, 32, "+", _mx, _my) && _sid_count < 8) {
+        scr_sound_editor_transport(_m, _cur_song, "STOP");
+        _m.sid_count = _sid_count + 1;
+        global.undo_dirty = true; global.addresses_dirty = true;
+    }
+    if (scr_sfx_maker_button(_vx1 + 310, _rowy, 38, "<<", _mx, _my))
+        scr_music_sid_page(_m, _m.sid_page - 1, _col_pat, _se_push_undo, _se_snap);
+    draw_text_l(_vx1 + 360, _rowy + 6, "SID " + string(_voice_offset div 3 + 1) + "  $" + string_upper(decimal_to_hex(0xD400 + (_voice_offset div 3) * 0x20)));
+    if (scr_sfx_maker_button(_vx1 + 525, _rowy, 38, ">>", _mx, _my))
+        scr_music_sid_page(_m, _m.sid_page + 1, _col_pat, _se_push_undo, _se_snap);
+    if (scr_sfx_maker_button(_vx1 + 590, _rowy, 150, "GENERATE NODES", _mx, _my)) {
+        scr_sound_editor_commit_cell(_m, _se_push_undo, _se_snap, _col_pat);
+        if (_m.instr_edit_active && _m.sel_instr >= 0) scr_sound_editor_commit_instrument(_m, _m.instruments[_m.sel_instr]);
+        scr_music_sid_generate(_asset);
+    }
+    draw_set_font_l(fnt_c64_pico);
+    draw_text_l(_vx1 + 755, _rowy + 7, "ULTIMATE: MAP SIDS AT $D400 + $20 EACH. REDUCING COUNT KEEPS HIDDEN LANES.");
+    draw_set_font_l(fnt_c64_tiny);
+    _rowy += 28;
 
     // ═════════════════════════════════════════════════════════════════════
     // LEFT PANEL — PATTERN GRID (3 columns = whatever the selected order
     // row's v1/v2/v3 currently point at)
     // ═════════════════════════════════════════════════════════════════════
     var _gy0 = _rowy + 44;
+    _vis = max(1, min(16, floor((_vy2 - _gy0 - 80) / _row_h)));
     var _gx0 = _vx1 + 20;
 
     var _col_gutter_x = _gx0;
@@ -850,7 +1040,7 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
     for (var _lh = 0; _lh < 3; _lh++) {
         draw_set_color(_lane_colours[_lh]);
         draw_set_halign(fa_center);
-		        var _lh_label = "V O I C E  " + string(_lh + 1);
+		        var _lh_label = "V O I C E  " + string(_voice_offset + _lh + 1);
 				
         draw_text_transformed_l(_col_x[_lh] + (_lane_w * 0.5), _gy0 - 20, _lh_label, _txt_scale, _txt_scale, 0);
         draw_set_halign(fa_left);
@@ -973,7 +1163,25 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
         }
         _pw_spd = _pw_next_spd;
     }
-    var _pw_tip = "";   // hover text for a flagged 9XX, drawn last
+    var _pw_tip = "";   // sweep warning takes priority over command help
+
+    // TIMING: PER VOICE playback: rows stay lined up with the row numbers,
+    // but a column whose playing row would leave the view (a longer pattern,
+    // or a voice ahead of the one being followed) scrolls just enough to keep
+    // it in sight, like the grid itself does. Back to 0 when playback stops.
+    var _col_off = global.music_col_scroll;
+    for (var _cov = 0; _cov < 3; _cov++) {
+        if (!is_array(_voice_pos) || _voice_hl[_cov] < 0) {
+            _col_off[_cov] = 0;
+            continue;
+        }
+        var _cfirst = _m.list_scroll + _col_off[_cov];
+        if (_voice_hl[_cov] < _cfirst) {
+            _col_off[_cov] = _voice_hl[_cov] - _m.list_scroll;
+        } else if (_voice_hl[_cov] >= _cfirst + _vis) {
+            _col_off[_cov] = _voice_hl[_cov] - _vis + 1 - _m.list_scroll;
+        }
+    }
 
     for (var _r = 0; _r < _vis; _r++) {
         var _row = _r + _m.list_scroll;
@@ -992,7 +1200,9 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
         draw_rectangle(_col_gutter_x, _ry, _col_gutter_x + _grid_full_w, _ry + _row_h, false);
 
         var _highlight_row = -1;
-        if (_m.playing) {
+        if (is_array(_voice_pos)) {
+            // per-voice highlight is drawn in each cell below
+        } else if (_m.playing) {
             _highlight_row = _m.preview_display_step;
         } else if (_m.song_playing && _m.preview_display_order == _m.sel_order_row) {
             _highlight_row = _order_row.repeat_short ? (_m.preview_display_step mod max(1, _grid_len)) : _m.preview_display_step;
@@ -1007,11 +1217,13 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
         draw_set_color((_row mod 16 == 0) ? make_color_rgb(220, 200, 120) : make_color_rgb(90, 90, 120));
         draw_text_transformed_l(_col_gutter_x + 8, _ry + 6, string(_row), _txt_scale, _txt_scale, 0);
 
+        var _row_base = _row;
         for (var _cv = 0; _cv < 3; _cv++) {
+            _row = _row_base + _col_off[_cv];
             var _cx1 = _col_x[_cv];
             var _cx2 = _cx1 + _lane_w;
             var _has_pat = (_col_pat[_cv] != noone);
-            var _in_range = _has_pat && (_row < _col_pat[_cv].pattern_len);
+            var _in_range = _has_pat && (_row >= 0) && (_row < _col_pat[_cv].pattern_len);
 
             var _is_editing = (_m.edit_active && _m.edit_voice == _cv && _m.edit_step == _row);
             var _hov = _in_range && point_in_rectangle(_mx, _my, _cx1, _ry, _cx2, _ry + _row_h);
@@ -1029,7 +1241,7 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
                 draw_set_color(make_color_rgb(26, 26, 38));
                 draw_rectangle(_cx1, _ry, _cx2, _ry + _row_h, false);
                 draw_set_color(make_color_rgb(110, 110, 130));
-                draw_text_transformed_l(_cx1 + 8, _ry + 8, "END", _txt_scale, _txt_scale, 0);
+                if (_row >= 0) draw_text_transformed_l(_cx1 + 8, _ry + 8, "END", _txt_scale, _txt_scale, 0);
                 continue;
             }
 
@@ -1045,6 +1257,22 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
             } else if (_hov) {
                 draw_set_color(make_color_rgb(30, 30, 46));
                 draw_rectangle(_cx1, _ry, _cx2, _ry + _row_h, false);
+            }
+
+            if (_voice_hl[_cv] == _row) {
+                draw_set_color(make_color_rgb(40, 100, 60));
+                draw_set_alpha(0.5);
+                draw_rectangle(_cx1, _ry, _cx2, _ry + _row_h, false);
+                draw_set_alpha(1.0);
+            }
+            if (_col_off[_cv] != 0) {
+                // this column has scrolled on its own: show its own row number
+                draw_set_font_l(fnt_c64_pico);
+                draw_set_color(make_color_rgb(110, 110, 140));
+                draw_set_halign(fa_right);
+                draw_text_l(_cx2 - 4, _ry + 2, string(_row));
+                draw_set_halign(fa_left);
+                draw_set_font_l(fnt_c64_tiny);
             }
 
             var _step = _col_pat[_cv].steps[_row];
@@ -1086,6 +1314,16 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
             var _cmd_x = _cx1 + _cmd_off;
             var _st_cmd = _step.cmd;
             var _typing_here = (_m.cmd_entry_str != "" && _m.cmd_entry_voice == _cv && _m.cmd_entry_step == _row);
+            if (point_in_rectangle(_mx, _my, _cmd_x - 6, _ry, _cx2, _ry + _row_h)) {
+                var _tip_cmd = _typing_here
+                    ? string_pos(string_char_at(_m.cmd_entry_str, 1), "0123456789ABCDEFGHIJ") - 1
+                    : _st_cmd;
+                _m.pattern_hover_tip = scr_sound_editor_pattern_help(_tip_cmd);
+                if (!_typing_here && _st_cmd == 4) {
+                    _m.pattern_hover_tip += "\nTHIS CELL: SPEED " + string((_step.cmd_val >> 4) & 15)
+                        + ", DEPTH " + string(_step.cmd_val & 15) + ".";
+                }
+            }
             if (_typing_here) {
                 // Being typed: only the new digits, the rest blank.
                 var _ty_str = _m.cmd_entry_str;
@@ -1127,7 +1365,7 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
                         }
                     }
                 }
-                draw_text_transformed_l(_cmd_x, _ry + 8, string_upper(decimal_to_hex(_st_cmd)) + _cv_hex, _txt_scale, _txt_scale, 0);
+                draw_text_transformed_l(_cmd_x, _ry + 8, string_char_at("0123456789ABCDEFGHIJ", _st_cmd + 1) + _cv_hex, _txt_scale, _txt_scale, 0);
             } else {
                 draw_set_color(make_color_rgb(60, 60, 70));
                 draw_text_transformed_l(_cmd_x, _ry + 8, "...", _txt_scale, _txt_scale, 0);
@@ -1164,6 +1402,10 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
                     _m.sel_anchor_step  = _row;
                     _m.sel_sub          = 0;
                     if (_mx >= _cx1 + _cmd_off - 6) {
+                        // Clicking the command also leaves a same-row note text edit.
+                        if (_m.edit_active) {
+                            scr_sound_editor_commit_cell(_m, _se_push_undo, _se_snap, _col_pat);
+                        }
                         _m.sel_sub = 1;
                         _dbl = false;
                     }
@@ -1192,6 +1434,7 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
                 global.undo_dirty = true;
             }
         }
+        _row = _row_base;   // per-voice column offsets (PER VOICE playback) end here
     }
 
     // ── TEXT INPUT WHILE EDITING A CELL ──
@@ -1265,7 +1508,7 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
             }
             keyboard_string = "";
         }
-    } else if (!_m.instr_edit_active && !_m.instr_name_edit_active && !_m.song_name_edit_active) {
+    } else if (!_m.instr_edit_active && !_m.instr_name_edit_active && !_m.song_name_edit_active && !_order_typing) {
         // ── CURSOR MODE: PIANO-STYLE NOTE ENTRY ──
         // Stands down entirely while the INSTRUMENTS panel's text or name
         // box has focus — otherwise keyboard_string feeds both handlers at
@@ -1309,6 +1552,25 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
 
         var _kb_ctrl = keyboard_check(vk_control) || scr_cmd_held();
 
+        // GoatTracker transpose keys, scoped to selected notes (never text fields).
+        if (_kb_ctrl && _m.sel_sub == 0) {
+            var _transpose = 0;
+            if (keyboard_check_pressed(ord("Q"))) _transpose = 1;
+            else if (keyboard_check_pressed(ord("A"))) _transpose = -1;
+            else if (keyboard_check_pressed(ord("W"))) _transpose = 12;
+            else if (keyboard_check_pressed(ord("S"))) _transpose = -12;
+            else if (keyboard_check_pressed(_vk_equals) || keyboard_check_pressed(vk_add)) {
+                _transpose = keyboard_check(vk_shift) ? 12 : 1;
+            } else if (keyboard_check_pressed(189) || keyboard_check_pressed(vk_subtract)) {
+                _transpose = keyboard_check(vk_shift) ? -12 : -1;
+            }
+            if (_transpose != 0) {
+                scr_sound_editor_transpose(_m, _col_pat, _col_pat_idx,
+                    _sel_v_lo, _sel_v_hi, _sel_s_lo, _sel_s_hi,
+                    _transpose, _se_push_undo, _se_snap);
+            }
+        }
+
         if (_kb_ctrl && keyboard_check_pressed(ord("C"))) {
             var _cp_w = (_sel_v_hi - _sel_v_lo) + 1;
             var _cp_h = (_sel_s_hi - _sel_s_lo) + 1;
@@ -1343,7 +1605,7 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
                 var _un_top = array_length(_m.undo_stack) - 1;
                 var _un = _m.undo_stack[_un_top];
                 array_delete(_m.undo_stack, _un_top, 1);
-                array_push(_m.redo_stack, { pats: _se_snap(_m), voice: _un.voice, step: _un.step, sub: _un.sub, ord: _un.ord });
+                array_push(_m.redo_stack, { pats: _se_snap(_m), voice: _un.voice, step: _un.step, sub: _un.sub, ord: _un.ord, chip: variable_struct_exists(_un, "chip") ? _un.chip : 0 });
                 _m.patterns = _un.pats;
                 _se_undo_goto(_m, _un, _vis);
                 _m.bank_sel_pattern = clamp(_m.bank_sel_pattern, 0, array_length(_m.patterns) - 1);
@@ -1362,7 +1624,7 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
                 var _re_top = array_length(_m.redo_stack) - 1;
                 var _re = _m.redo_stack[_re_top];
                 array_delete(_m.redo_stack, _re_top, 1);
-                array_push(_m.undo_stack, { pats: _se_snap(_m), voice: _re.voice, step: _re.step, sub: _re.sub, ord: _re.ord });
+                array_push(_m.undo_stack, { pats: _se_snap(_m), voice: _re.voice, step: _re.step, sub: _re.sub, ord: _re.ord, chip: variable_struct_exists(_re, "chip") ? _re.chip : 0 });
                 _m.patterns = _re.pats;
                 _se_undo_goto(_m, _re, _vis);
                 _m.bank_sel_pattern = clamp(_m.bank_sel_pattern, 0, array_length(_m.patterns) - 1);
@@ -1482,16 +1744,14 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
             _m.sel_anchor_step  = _m.sel_step;
         }
 
-        if (_cur_step != noone && keyboard_check_pressed(vk_delete)) {
+        // BACKSPACE clears the note cell (GoatTracker layout). In the command
+        // column Backspace is handled by the command entry below: it deletes a
+        // typed digit, or clears the stored command.
+        if (_cur_step != noone && _m.sel_sub == 0 && keyboard_check_pressed(vk_backspace)) {
             _se_push_undo(_m, _se_snap);
-            if (_m.sel_sub == 1) {
-                _cur_step.cmd     = -1;
-                _cur_step.cmd_val = 0;
-            } else {
-                _cur_step.note      = "";
-                _cur_step.instr_idx = -1;
-                _cur_step.empty     = true;
-            }
+            _cur_step.note      = "";
+            _cur_step.instr_idx = -1;
+            _cur_step.empty     = true;
             global.undo_dirty   = true;
             global.addresses_dirty = true;
         }
@@ -1506,9 +1766,23 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
             }
         }
         if (_cur_step != noone && _m.sel_sub == 1 && !_kb_ctrl) {
+            // Command editing owns Backspace, even when the buffer is empty.
+            // Never let a held key fall through to pattern-row deletion.
+            if (keyboard_check_pressed(vk_backspace)) {
+                if (_m.cmd_entry_str != "") {
+                    _m.cmd_entry_str = string_delete(_m.cmd_entry_str, string_length(_m.cmd_entry_str), 1);
+                } else if (_cur_step.cmd >= 0) {
+                    _se_push_undo(_m, _se_snap);
+                    _cur_step.cmd = -1;
+                    _cur_step.cmd_val = 0;
+                    global.undo_dirty = true;
+                    global.addresses_dirty = true;
+                }
+            }
+            if (keyboard_check_pressed(vk_escape)) _m.cmd_entry_str = "";
             var _cmd_commit = false;
-            var _hex_keys = "0123456789ABCDEF";
-            for (var _hk = 1; _hk <= 16; _hk++) {
+            var _hex_keys = "0123456789ABCDEFGHIJ";
+            for (var _hk = 1; _hk <= ((_m.cmd_entry_str == "") ? 20 : 16); _hk++) {
                 if (keyboard_check_pressed(ord(string_char_at(_hex_keys, _hk)))) {
                     if (_m.cmd_entry_str == "") {
                         _m.cmd_entry_voice = _m.sel_voice;
@@ -1537,7 +1811,7 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
                     _hv = (_hv << 4) | (string_pos(string_char_at(_m.cmd_entry_str, _hci), _hex_keys) - 1);
                 }
                 _se_push_undo(_m, _se_snap);
-                _cur_step.cmd     = (_hv >> 8) & 0x0F;
+                _cur_step.cmd     = (_hv >> 8) & 0xFF;
                 _cur_step.cmd_val = _hv & 0xFF;
                 _m.cmd_entry_str  = "";
                 global.undo_dirty      = true;
@@ -1556,9 +1830,11 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
             }
         }
 
-        if (_cur_step != noone && keyboard_check(vk_backspace)) {
+        // DELETE pulls every row below the cursor up one (GoatTracker layout),
+        // from either column; held, it repeats.
+        if (_cur_step != noone && keyboard_check(vk_delete)) {
             var _do_bksp = false;
-            if (keyboard_check_pressed(vk_backspace)) {
+            if (keyboard_check_pressed(vk_delete)) {
                 _do_bksp      = true;
                 _m.bksp_timer = round(game_get_speed(gamespeed_fps) * 0.33);
             } else {
@@ -1570,6 +1846,7 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
             }
             if (_do_bksp) {
                 _se_push_undo(_m, _se_snap);
+                _m.cmd_entry_str = "";
                 for (var _bsi = _m.sel_step; _bsi < _cur_pat.pattern_len - 1; _bsi++) {
                     var _bs_src = _cur_pat.steps[_bsi + 1];
                     var _bs_dst = _cur_pat.steps[_bsi];
@@ -1586,15 +1863,16 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
                 _bs_last.cmd       = -1;
                 _bs_last.cmd_val   = 0;
                 global.undo_dirty  = true;
+                global.addresses_dirty = true;
             }
         } else {
             _m.bksp_timer = 0;
         }
 
-        // ── INSERT ── mirror of backspace: push every step from the cursor
+        // ── INSERT ── mirror of delete: push every step from the cursor
         // DOWN one row, leaving the cursor row blank. The pattern's own length
         // is fixed, so the last step falls off the end and is discarded —
-        // same trade-off backspace makes at the top.
+        // same trade-off delete makes at the top.
         //
         // Walks backwards from the end so each destination is written before
         // it is read as a source; a forward loop would smear the cursor row
@@ -1637,7 +1915,48 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
         var _nav_delay = round(game_get_speed(gamespeed_fps) * 0.33);
         var _kb_shift_col = keyboard_check(vk_shift);
 
-        if (keyboard_check(vk_up)) {
+        // Ctrl+Up (Cmd on Mac): top of the pattern. Ctrl+Down: on to the next
+        // 16-row boundary (16, 32, 48 ...; held, it keeps stepping by 16).
+        // Shift+Up/Down still extend the selection.
+        var _kb_ctrl_nav = keyboard_check(vk_control) || scr_cmd_held();
+        if (_kb_ctrl_nav) {
+            var _jump = false;
+            if (keyboard_check_pressed(vk_up)) {
+                _m.sel_step = 0;
+                _jump = true;
+            }
+            if (keyboard_check(vk_down)) {
+                var _dn_go = false;
+                if (keyboard_check_pressed(vk_down)) {
+                    _dn_go = true;
+                    _m.nav_down_timer = _nav_delay;
+                } else {
+                    _m.nav_down_timer -= 1;
+                    if (_m.nav_down_timer <= 0) {
+                        _dn_go = true;
+                        _m.nav_down_timer = 6;
+                    }
+                }
+                if (_dn_go) {
+                    _m.sel_step = min(_grid_len - 1, ((_m.sel_step div 16) + 1) * 16);
+                    _jump = true;
+                }
+            } else {
+                _m.nav_down_timer = 0;
+            }
+            if (_jump) {
+                if (_m.sel_step < _m.list_scroll) {
+                    _m.list_scroll = _m.sel_step;
+                }
+                if (_m.sel_step >= _m.list_scroll + _vis) {
+                    _m.list_scroll = _m.sel_step - _vis + 1;
+                }
+                _m.sel_anchor_voice = _m.sel_voice;
+                _m.sel_anchor_step  = _m.sel_step;
+            }
+        }
+
+        if (keyboard_check(vk_up) && !_kb_ctrl_nav) {
             if (keyboard_check_pressed(vk_up)) {
                 _m.sel_step = max(0, _m.sel_step - 1);
                 if (_m.sel_step < _m.list_scroll) { _m.list_scroll = _m.sel_step; }
@@ -1656,7 +1975,7 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
             _m.nav_up_timer = 0;
         }
 
-        if (keyboard_check(vk_down)) {
+        if (keyboard_check(vk_down) && !_kb_ctrl_nav) {
             if (keyboard_check_pressed(vk_down)) {
                 _m.sel_step = min(_grid_len - 1, _m.sel_step + 1);
                 if (_m.sel_step >= _m.list_scroll + _vis) { _m.list_scroll = _m.sel_step - _vis + 1; }
@@ -1671,8 +1990,8 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
                     if (!_kb_shift_col) { _m.sel_anchor_voice = _m.sel_voice; _m.sel_anchor_step = _m.sel_step; }
                 }
             }
-        } else {
-            _m.nav_down_timer = 0;
+        } else if (!keyboard_check(vk_down)) {
+            _m.nav_down_timer = 0;   // (Ctrl+Down's own repeat keeps it while held)
         }
 
         if (keyboard_check_pressed(vk_home)) {
@@ -1774,9 +2093,9 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
                 var _cr_song = _m.songs[_crs];
                 for (var _cro = 0; _cro < array_length(_cr_song.order); _cro++) {
                     var _cr_row = _cr_song.order[_cro];
-                    if (_cr_row.v1 == _col_pat_idx[_cli]) { _cl_refs += 1; }
-                    if (_cr_row.v2 == _col_pat_idx[_cli]) { _cl_refs += 1; }
-                    if (_cr_row.v3 == _col_pat_idx[_cli]) { _cl_refs += 1; }
+                    for (var _refv = 0; _refv < 24; _refv++) {
+                        if (scr_music_sid_pattern(_cr_row, _refv) == _col_pat_idx[_cli]) _cl_refs += 1;
+                    }
                 }
             }
 
@@ -1805,10 +2124,26 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
     draw_set_font_l(fnt_c64_pico);
     draw_set_color(make_color_rgb(150, 120, 90));
     draw_text_l(_col_gutter_x, _clr_y + 28,
-        "CMD 1XX UP 2XX DN 3XX SLIDE 4XY VIB 5XX AD 6XX SR 7XX WAVE 8XX PW 9XX PW SWEEP DXX $D418 FXX TEMPO | 1-4,9,C ONE ROW");
+        "CMD HELP: 1XX UP 2XX DOWN 3XX SLIDE 4XY VIBRATO | 5AD ATTACK/DECAY 6SR SUSTAIN/RELEASE");
     draw_text_l(_col_gutter_x, _clr_y + 40,
-        "FILTER  AXX CUTOFF (XX*8)  BX0 RESONANCE X  CXX CUTOFF SWEEP (01-7F UP, 80-FF DOWN)  EXX MODE (1 LP 2 BP 4 HP 8 V3 OFF)");
+        "7XX WAVE 8XX PULSE WIDTH 9XX PULSE SWEEP | AXX CUTOFF (XX*8) BX0 RESONANCE CXX CUTOFF SWEEP");
+    draw_text_l(_col_gutter_x, _clr_y + 52,
+        "EXX FILTER MODE (1 LP 2 BP 4 HP 8 V3 OFF) DXX $D418 FXX TEMPO | GXX FINE HXX PITCH IXX PULSE J00 TIE | 1-4,9,C ONE ROW");
     draw_set_font_l(fnt_c64_tiny);
+    // Small GUIDE button at the legend's right edge: opens the full command guide.
+    draw_set_font_l(fnt_c64_pico);
+    var _gb_w = string_width_l("GUIDE") + 14;
+    var _gb_x = _col_gutter_x + _grid_full_w - _gb_w;
+    var _gb_y = _clr_y + 27;
+    var _gb_hot = point_in_rectangle(_mx, _my, _gb_x, _gb_y, _gb_x + _gb_w, _gb_y + 15);
+    draw_set_color(_gb_hot ? make_color_rgb(65, 80, 100) : make_color_rgb(30, 38, 52));
+    draw_rectangle(_gb_x, _gb_y, _gb_x + _gb_w, _gb_y + 15, false);
+    draw_set_color(c_white);
+    draw_text_l(_gb_x + 7, _gb_y + 2, "GUIDE");
+    draw_set_font_l(fnt_c64_tiny);
+    if (_gb_hot && mouse_check_button_pressed(mb_left)) {
+        global.music_cmd_guide_open = true;
+    }
 
     // ═════════════════════════════════════════════════════════════════════
     // RIGHT PANEL — SONG ORDER TABLE
@@ -1971,9 +2306,9 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
     }
 
     draw_set_color(make_color_rgb(255, 200, 100));
-    draw_text_l(_ox0, _oy0 - 34, "SONG ORDER");
+    draw_text_l(_ox0, _oy0 - 34, _m.order_pattern_edit_active ? "ENTER: SET / ESC: CANCEL" : "SONG ORDER");
 
-    var _ord_hdr = ["#", "V1", "V2", "V3", " REPEAT", " SIZE"];
+    var _ord_hdr = ["#", "V" + string(_voice_offset + 1), "V" + string(_voice_offset + 2), "V" + string(_voice_offset + 3), " REPEAT", " SIZE"];
     for (var _ohi = 0; _ohi < array_length(_ord_hdr); _ohi++) {
         draw_set_color(make_color_rgb(120, 120, 160));
         draw_set_halign(fa_center);
@@ -2003,6 +2338,9 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
         var _ory  = _oy0 + _orv * _ord_row_h;
 
         var _ord_active = (_m.song_playing && _ord_i == _m.preview_display_order);
+        // TIMING: PER VOICE: voices sit on different order rows, so each
+        // voice's own cell is lit below instead of the whole row.
+        if (is_array(_voice_pos)) _ord_active = false;
         var _ord_selected = (_ord_i == _m.sel_order_row);
 
         if (_ord_active) {
@@ -2024,45 +2362,60 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
         draw_text_l(_ord_x[0] + (_ord_col_w[0] * 0.5), _ory + 6, string(_ord_i));
         draw_set_halign(fa_left);
 
-        var _voice_keys = ["v1", "v2", "v3"];
+        var _voice_keys = _page_keys;
         var _voice_colours = [make_color_rgb(120, 220, 255), make_color_rgb(255, 200, 120), make_color_rgb(180, 255, 150)];
         for (var _ovi = 0; _ovi < 3; _ovi++) {
             var _ocx = _ord_x[1 + _ovi];
             var _ocw = _ord_col_w[1 + _ovi];
-            var _oc_hov = point_in_rectangle(_mx, _my, _ocx, _ory, _ocx + _ocw, _ory + _ord_row_h);
-            var _oc_val = _orow[$ _voice_keys[_ovi]];
-
+            if (is_array(_voice_pos) && _voice_pos[_ovi][0] == _ord_i) {
+                draw_set_color(make_color_rgb(30, 90, 55));
+                draw_rectangle(_ocx, _ory, _ocx + _ocw, _ory + _ord_row_h, false);
+            }
+            var _oc_val = scr_music_sid_pattern(_orow, _voice_offset + _ovi);
+            var _minus = _mx >= _ocx && _mx < _ocx + 15 && _my >= _ory && _my < _ory + _ord_row_h;
+            var _plus = _mx >= _ocx + _ocw - 15 && _mx < _ocx + _ocw && _my >= _ory && _my < _ory + _ord_row_h;
+            var _number_hov = _mx >= _ocx + 15 && _mx < _ocx + _ocw - 15 && _my >= _ory && _my < _ory + _ord_row_h;
+            var _editing = _m.order_pattern_edit_active && _m.order_pattern_edit_row == _orow && _m.order_pattern_edit_key == _voice_keys[_ovi];
+            draw_set_color(make_color_rgb(65, 85, 120));
+            if (_minus) draw_rectangle(_ocx + 1, _ory + 2, _ocx + 14, _ory + _ord_row_h - 2, false);
+            if (_plus) draw_rectangle(_ocx + _ocw - 14, _ory + 2, _ocx + _ocw - 1, _ory + _ord_row_h - 2, false);
             draw_set_halign(fa_center);
-            if (_oc_val < 0) {
-                draw_set_color(make_color_rgb(80, 80, 90));
-                draw_text_l(_ocx + (_ocw * 0.5), _ory + 6, "--");
-            } else {
-                draw_set_color(_voice_colours[_ovi]);
-                var _oc_str = string(_oc_val);
-                while (string_length(_oc_str) < 2) { _oc_str = "0" + _oc_str; }
-                draw_text_l(_ocx + (_ocw * 0.5), _ory + 6, _oc_str);
+            draw_set_color(_minus ? c_white : make_color_rgb(125, 135, 155));
+            draw_text_l(_ocx + 7, _ory + 6, "-");
+            draw_set_color(_plus ? c_white : make_color_rgb(125, 135, 155));
+            draw_text_l(_ocx + _ocw - 7, _ory + 6, "+");
+            var _oc_str = _oc_val < 0 ? "--" : string(_oc_val);
+            while (string_length(_oc_str) < 2) _oc_str = "0" + _oc_str;
+            if (_editing) {
+                draw_set_color(make_color_rgb(255, 210, 90));
+                draw_rectangle(_ocx + 15, _ory + 1, _ocx + _ocw - 15, _ory + _ord_row_h - 1, true);
+                _oc_str = _m.order_pattern_edit_buf;
             }
+            draw_set_color(_editing ? c_yellow : _voice_colours[_ovi]);
+            draw_text_l(_ocx + _ocw * 0.5, _ory + 6, _oc_str);
             draw_set_halign(fa_left);
-
-            if (_oc_hov && mouse_check_button_pressed(mb_left)) {
-                _se_push_undo(_m, _se_snap);
-                if (keyboard_check(vk_control) || scr_cmd_held()) {
-                    _orow[$ _voice_keys[_ovi]] = -1;
-                } else {
-                    _orow[$ _voice_keys[_ovi]] = (_oc_val + 1) mod array_length(_m.patterns);
-                }
-                _m.sel_order_row  = _ord_i;
+            if ((_minus || _plus) && mouse_check_button_pressed(mb_left)) {
+                var _next = _oc_val + (_plus ? 1 : -1);
+                if (_next >= array_length(_m.patterns)) _next = -1;
+                if (_next < -1) _next = array_length(_m.patterns) - 1;
+                _orow[$ _voice_keys[_ovi]] = _next;
                 global.undo_dirty = true;
+                global.addresses_dirty = true;
             }
-            if (_oc_hov && mouse_check_button_pressed(mb_right)) {
-                _se_push_undo(_m, _se_snap);
-                var _oc_next = _oc_val - 1;
-                if (_oc_next < -1) {
-                    _oc_next = array_length(_m.patterns) - 1;
-                }
-                _orow[$ _voice_keys[_ovi]] = _oc_next;
-                _m.sel_order_row  = _ord_i;
-                global.undo_dirty = true;
+            if (_number_hov && mouse_check_button_pressed(mb_left)) {
+                if (_m.instr_edit_active && _m.sel_instr >= 0) scr_sound_editor_commit_instrument(_m, _m.instruments[_m.sel_instr]);
+                _m.edit_active = false;
+                _m.instr_edit_active = false;
+                _m.instr_name_edit_active = false;
+                _m.song_name_edit_active = false;
+                _m.order_pattern_edit_active = true;
+                _m.order_pattern_edit_song = _cur_song;
+                _m.order_pattern_edit_page = _m.sid_page;
+                _m.order_pattern_edit_row = _orow;
+                _m.order_pattern_edit_key = _voice_keys[_ovi];
+                _m.order_pattern_edit_buf = _oc_val < 0 ? "--" : string(_oc_val);
+                _m.order_pattern_edit_replace = true;
+                keyboard_string = "";
             }
         }
 
@@ -2071,7 +2424,14 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
         var _rs_hov = point_in_rectangle(_mx, _my, _rsx, _ory, _rsx + _rsw, _ory + _ord_row_h);
         draw_set_color(_orow.repeat_short ? c_lime : make_color_rgb(140, 90, 90));
         draw_set_halign(fa_center);
-        draw_text_l(_rsx + (_rsw * 0.5), _ory + 6, _orow.repeat_short ? "RPT" : L("NO"));
+        if (_m.free_voices) {
+            // no shared row count to repeat a short pattern into
+            draw_set_color(make_color_rgb(80, 80, 100));
+            draw_text_l(_rsx + (_rsw * 0.5), _ory + 6, "--");
+            _rs_hov = false;
+        } else {
+            draw_text_l(_rsx + (_rsw * 0.5), _ory + 6, _orow.repeat_short ? "RPT" : L("NO"));
+        }
         draw_set_halign(fa_left);
         if (_rs_hov && mouse_check_button_pressed(mb_left)) {
             _se_push_undo(_m, _se_snap);
@@ -2088,14 +2448,24 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
         var _fl_hov_dn = point_in_rectangle(_mx, _my, _fl_dnx1, _ory, _fl_dnx2, _ory + _ord_row_h);
         var _fl_hov_up = point_in_rectangle(_mx, _my, _fl_upx1, _ory, _fl_upx2, _ory + _ord_row_h);
 
-        draw_set_color(_fl_hov_dn ? c_aqua : make_color_rgb(100, 100, 100));
-        draw_text_l(_fl_dnx1 + 4, _ory + 6, "-");
-        draw_set_color(_fl_hov_up ? c_aqua : make_color_rgb(100, 100, 100));
-        draw_text_l(_fl_upx1 + 4, _ory + 6, "+");
+        if (!_m.free_voices) {
+            draw_set_color(_fl_hov_dn ? c_aqua : make_color_rgb(100, 100, 100));
+            draw_text_l(_fl_dnx1 + 4, _ory + 6, "-");
+            draw_set_color(_fl_hov_up ? c_aqua : make_color_rgb(100, 100, 100));
+            draw_text_l(_fl_upx1 + 4, _ory + 6, "+");
+        }
 
         draw_set_color((_orow.force_len > 0) ? c_aqua : make_color_rgb(90, 90, 110));
         draw_set_halign(fa_center);
-        draw_text_l(_flx + (_flw * 0.5), _ory + 6, (_orow.force_len > 0) ? string(_orow.force_len) : L("OFF"));
+        if (_m.free_voices) {
+            // TIMING: PER VOICE ignores SIZE: each pattern plays its own LEN.
+            draw_set_color(make_color_rgb(80, 80, 100));
+            draw_text_l(_flx + (_flw * 0.5), _ory + 6, "AUTO");
+            _fl_hov_dn = false;
+            _fl_hov_up = false;
+        } else {
+            draw_text_l(_flx + (_flw * 0.5), _ory + 6, (_orow.force_len > 0) ? string(_orow.force_len) : L("OFF"));
+        }
         draw_set_halign(fa_left);
 
         if (_fl_hov_dn && mouse_check_button_pressed(mb_left)) {
@@ -2217,23 +2587,126 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
     scr_sound_editor_piano(_m, _vx1 + 20, _vy2 + 14, _vx2 - 20, _vy2_full - 12, _mx, _my,
                            _col_pat, _vis, _se_push_undo, _se_snap);
 
-    // ── 9XX warning tooltip (last, so it sits over everything) ──
-    if (_pw_tip != "") {
+    // Draw help last, retaining the existing sweep warnings and their red border.
+    var _tip_text = (_pw_tip != "") ? _pw_tip : _m.pattern_hover_tip;
+    if (_tip_text != "") {
         draw_set_font_l(fnt_c64_pico);
-        var _tt_w = string_width_l(_pw_tip) + 16;
-        var _tt_h = string_height(_pw_tip) + 12;
-        var _tt_x = min(_mx + 14, _vx2 - _tt_w - 4);
-        var _tt_y = _my + 18;
-        draw_set_color(make_color_rgb(40, 10, 10));
+        var _tt_w = min(string_width_l(_tip_text) + 16, max(32, _vx2 - _vx1 - 16));
+        var _tt_h = string_height_ext_l(_tip_text, -1, _tt_w - 16) + 12;
+        var _tt_x = max(_vx1 + 4, min(_mx + 14, _vx2 - _tt_w - 4));
+        var _tt_y = max(_cy, min(_my + 18, _vy2_full - _tt_h - 4));
+        draw_set_color((_pw_tip != "") ? make_color_rgb(40, 10, 10) : make_color_rgb(18, 26, 40));
         draw_rectangle(_tt_x, _tt_y, _tt_x + _tt_w, _tt_y + _tt_h, false);
-        draw_set_color(c_red);
+        draw_set_color((_pw_tip != "") ? c_red : c_aqua);
         draw_rectangle(_tt_x, _tt_y, _tt_x + _tt_w, _tt_y + _tt_h, true);
         draw_set_color(c_white);
-        draw_text_l(_tt_x + 8, _tt_y + 6, _pw_tip);
+        draw_text_ext_l(_tt_x + 8, _tt_y + 6, _tip_text, -1, _tt_w - 16);
         draw_set_font_l(fnt_c64_tiny);
+    }
+
+    if (_cg_open) {
+        scr_sound_editor_cmd_guide(_vx1, _vy1, _vx2, _vy2_full, _cg_mx, _cg_my, _cg_click, _cg_esc);
     }
 
     draw_set_alpha(1.0);
     draw_set_color(c_white);
     draw_set_halign(fa_left);
+}
+
+/// The pattern-command guide panel: every command in full, over the editor.
+/// Closes with its CLOSE button or Escape (the editor gets no input meanwhile).
+function scr_sound_editor_cmd_guide(_x1, _y1, _x2, _y2, _mx, _my, _click, _esc) {
+    draw_set_alpha(0.75);
+    draw_set_color(c_black);
+    draw_rectangle(_x1, _y1, _x2, _y2, false);
+    draw_set_alpha(1.0);
+    var _pw = min(_x2 - _x1 - 40, 1500);
+    var _ph = min(_y2 - _y1 - 40, 900);
+    var _px = _x1 + floor((_x2 - _x1 - _pw) / 2);
+    var _py = _y1 + floor((_y2 - _y1 - _ph) / 2);
+    draw_set_color(make_color_rgb(14, 14, 24));
+    draw_rectangle(_px, _py, _px + _pw, _py + _ph, false);
+    draw_set_color(make_color_rgb(120, 120, 170));
+    draw_rectangle(_px, _py, _px + _pw, _py + _ph, true);
+    draw_set_font_l(fnt_c64_tiny);
+    draw_set_halign(fa_left);
+    draw_set_color(make_color_rgb(255, 200, 100));
+    draw_text_l(_px + 16, _py + 12, "PATTERN COMMANDS  -  TYPE THE LETTER, THEN TWO HEX DIGITS (00-FF)");
+    // Two columns of commands, each entry the full hover help text.
+    var _order = [0, 1, 2, 3, 4, 9, 12, 16, 17, 18, 5, 6, 7, 8, 10, 11, 13, 14, 15, 19];
+    var _letters = "0123456789ABCDEFGHIJ";
+    var _colw = floor((_pw - 48) / 2);
+    var _cx = [_px + 16, _px + 32 + _colw];
+    var _cy = [_py + 40, _py + 40];
+    draw_set_font_l(fnt_c64_pico);
+    for (var _i = 0; _i < array_length(_order); _i++) {
+        var _c = _order[_i];
+        var _col = 0;
+        if (_i >= 10) _col = 1;
+        var _txt = scr_sound_editor_pattern_help(_c);
+        var _h = string_height_ext_l(_txt, -1, _colw - 40) + 10;
+        if (_cy[_col] + _h > _py + _ph - 44) continue;
+        draw_set_color(make_color_rgb(255, 170, 90));
+        draw_text_l(_cx[_col], _cy[_col], string_char_at(_letters, _c + 1) + "XX");
+        draw_set_color(make_color_rgb(205, 205, 225));
+        draw_text_ext_l(_cx[_col] + 40, _cy[_col], _txt, -1, _colw - 40);
+        _cy[_col] += _h;
+    }
+    draw_set_color(make_color_rgb(150, 150, 180));
+    draw_text_l(_px + 16, _py + _ph - 30, "1-4, 9 AND C LAST ONE ROW. G-J AND THE SETTINGS (5-8, A, B, D, E) STAY UNTIL CHANGED. ESC OR CLOSE TO RETURN.");
+    draw_set_font_l(fnt_c64_tiny);
+    // Own button: the editor's input was cleared for this frame, so the click
+    // captured before that is what counts here.
+    var _cbx = _px + _pw - 110;
+    var _cby = _py + _ph - 34;
+    var _cb_hot = point_in_rectangle(_mx, _my, _cbx, _cby, _cbx + 96, _cby + 26);
+    draw_set_color(_cb_hot ? make_color_rgb(65, 80, 100) : make_color_rgb(30, 38, 52));
+    draw_rectangle(_cbx, _cby, _cbx + 96, _cby + 26, false);
+    draw_set_color(c_white);
+    draw_text_l(_cbx + 8, _cby + 5, "CLOSE");
+    if ((_cb_hot && _click) || _esc) {
+        global.music_cmd_guide_open = false;
+        keyboard_clear(vk_escape);
+    }
+}
+/// Transpose each selected stored note once, even when lanes share a pattern.
+/// Validate the whole operation first so boundary notes never squash intervals.
+function scr_sound_editor_transpose(_m, _patterns, _indices, _v0, _v1, _s0, _s1, _delta, _push_undo, _snapshot) {
+    var _seen = [];
+    var _changes = [];
+    var _names = ["C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-"];
+    for (var _v = _v0; _v <= _v1; _v++) {
+        var _pat = _patterns[_v];
+        if (_pat == noone) continue;
+        var _duplicate = false;
+        for (var _i = 0; _i < array_length(_seen); _i++) {
+            if (_seen[_i] == _indices[_v]) _duplicate = true;
+        }
+        if (_duplicate) continue;
+        array_push(_seen, _indices[_v]);
+        for (var _r = _s0; _r <= _s1 && _r < _pat.pattern_len; _r++) {
+            var _step = _pat.steps[_r];
+            if (_step.empty) continue;
+            var _note = scr_sid_song_note_index(_step.note);
+            if (_note < 0) continue; // Holds, key-off/on and invalid notes stay intact.
+            var _next = _note + _delta;
+            if (_next < 0 || _next > 95) {
+                _m.warn_msg = "TRANSPOSE CANCELLED: NOTES MUST STAY BETWEEN C-0 AND B-7";
+                _m.warn_timer = game_get_speed(gamespeed_fps) * 3;
+                return 0;
+            }
+            array_push(_changes, { step: _step, note: _names[_next mod 12] + string(floor(_next / 12)) });
+        }
+    }
+    if (array_length(_changes) == 0) return 0;
+    _push_undo(_m, _snapshot);
+    for (var _c = 0; _c < array_length(_changes); _c++) {
+        _changes[_c].step.note = _changes[_c].note;
+    }
+    global.undo_dirty = true;
+    global.addresses_dirty = true;
+    _m.warn_msg = "TRANSPOSED " + string(array_length(_changes)) + " NOTES: "
+        + ((_delta > 0) ? "+" : "") + string(_delta) + " SEMITONES";
+    _m.warn_timer = game_get_speed(gamespeed_fps) * 2;
+    return array_length(_changes);
 }

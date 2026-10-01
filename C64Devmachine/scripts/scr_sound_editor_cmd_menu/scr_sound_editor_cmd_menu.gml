@@ -20,6 +20,7 @@ function scr_sound_editor_cmd_menus(_lines) {
     if (array_length(_loop) == 0) {
         array_push(_loop, { ins: "L0", label: "BACK TO THE FIRST STEP" });
     }
+    array_push(_loop,{ins:"R3:0",label:"REPEAT FROM STEP 0 THREE MORE TIMES"});
     return [
         { id: "WAVE", items: [
             { ins: "$11", label: "TRIANGLE" },
@@ -61,6 +62,20 @@ function scr_sound_editor_cmd_menus(_lines) {
             { ins: "D255", label: "~5 SECONDS (SUSTAIN)" }
         ] },
         { id: "LOOP", items: _loop },
+        { id: "FINE", items: [
+            { ins: "F+1", label: "ADD 1 SID PITCH UNIT" },
+            { ins: "F-1", label: "SUBTRACT 1 SID PITCH UNIT" },
+            { ins: "F+40", label: "FINE RISE (FOLLOW WITH D1 / LOOP)" },
+            { ins: "P$800", label: "PULSE WIDTH $800 (0-$FFF)" },
+            { ins: "S+40", label: "SLIDE PITCH +40 EACH FRAME" },
+            { ins: "S0", label: "STOP INSTRUMENT PITCH SLIDE" },
+            { ins: "Q+32", label: "SWEEP PULSE +32 EACH FRAME" },
+            { ins: "Q0", label: "STOP INSTRUMENT PULSE SWEEP" },
+            { ins: "G$40", label: "GATE OFF, CONTINUE THE PROGRAM" },
+            { ins: "G$41", label: "PULSE GATE ON, CONTINUE" },
+            { ins: "H0", label: "KEEP ENVELOPE: BYPASS HARD RESTART" },
+            { ins: "H1", label: "USE THE PLAYER HARD RESTART SETTING" }
+        ] },
         { id: "END", items: [
             { ins: "---", label: "GATE OFF + STOP (NOTE RELEASES)" }
         ] }
@@ -269,9 +284,24 @@ function scr_sound_editor_cmd_help(_x0, _y0, _x1, _y1) {
         ["N", "play the pattern's note"],
         ["N+n / N-n", "the note shifted n semitones"],
         ["", "N+12 octave up, N+7 fifth, N+4 3rd"],
+        ["F+n / F-n", "add/subtract SID pitch units once"],
+        ["S+n / S-n", "pitch slide each frame; S0 stops"],
+        ["P$xxx", "exact pulse width $000-$FFF"],
+        ["Q+n / Q-n", "pulse sweep each frame; Q0 stops"],
+        ["G$xx", "raw waveform + gate; keeps stepping"],
+        ["H0 / H1", "bypass / inherit player hard restart"],
         ["Dn", "wait n frames before the next step"],
         ["", "50 frames = 1 second (PAL)"],
         ["Ln", "jump back to step n (loops forever)"],
+        ["R3:8", "repeat from step 8 three MORE times, then continue"],
+        ["~PITCH", "table of S/D/L lines, runs beside the program"],
+        ["~PULSE", "table of Q/D/L lines, runs beside the program"],
+        ["~PITCH+", "same, but carries on across new notes / ties"],
+        ["~FILTER", "table of C/D/L lines: cutoff speed per frame"],
+        ["C$400", "set the filter cutoff ($000-$7FF)"],
+        ["~PITCH4", "table stepping 4x a frame: Dn counts quarter frames"],
+        [">nn", "end a table by carrying on in instrument nn's table"],
+        ["", "the program must keep running (Dn / Ln) to hear them"],
         ["---", "gate off + stop: the note releases"],
         ["", ""],
         ["EXAMPLES", ""],
@@ -308,6 +338,23 @@ function scr_sound_editor_instr_comment(_line, _lines) {
         return { text: "", bad: false };
     }
 
+    // ~PITCH / ~PULSE : table sections that run alongside the program
+    if (string_char_at(_up, 1) == "~") {
+        if (_up == "~PITCH") return { text: "pitch table: S/D/L lines on their own counter", bad: false };
+        if (_up == "~PULSE") return { text: "pulse table: Q/D/L lines on their own counter", bad: false };
+        if (_up == "~PITCH+") return { text: "pitch table that keeps running across notes", bad: false };
+        if (_up == "~PULSE+") return { text: "pulse table that keeps running across notes", bad: false };
+        if (_up == "~FILTER") return { text: "filter table: C/D/L lines move the cutoff", bad: false };
+        if (_up == "~FILTER+") return { text: "filter table that keeps running across notes", bad: false };
+        if (string_char_at(_up, string_length(_up)) == "4" || string_copy(_up, string_length(_up) - 1, 2) == "4+") {
+            return { text: "table stepping 4x a frame (Dn = quarter frames)", bad: false };
+        }
+        return { text: "? tables are ~PITCH, ~PULSE or ~FILTER", bad: true };
+    }
+    if (string_copy(_up, 1, 2) == "C$") {
+        return { text: "set filter cutoff to " + string_delete(_up, 1, 1), bad: false };
+    }
+
     // --- : end
     var _all_dash = true;
     for (var _di = 1; _di <= string_length(_up); _di++) {
@@ -323,6 +370,30 @@ function scr_sound_editor_instr_comment(_line, _lines) {
     var _c0 = string_char_at(_up, 1);
     var _rest = string_delete(_up, 1, 1);
 
+    if (_up == "H0" || _up == "H1") {
+        return { text: _up == "H0" ? "instrument setting: bypass hard restart (keep envelope)" : "instrument setting: use player hard restart", bad: false };
+    }
+    if (_c0 == "G") {
+        var _gp = scr_instrument_parse(_raw);
+        return { text: array_length(_gp.errors) > 0 ? "? use G$00..G$FF" : "raw gate/wave byte; program continues", bad: array_length(_gp.errors) > 0 };
+    }
+    if ((_c0 == "F" && (string_char_at(_up, 2) == "+" || string_char_at(_up, 2) == "-")) || _c0 == "P" || _c0 == "S" || _c0 == "Q") {
+        var _parsed = scr_instrument_parse(_raw);
+        if (array_length(_parsed.errors) > 0) return { text: _parsed.errors[0], bad: true };
+        var _desc = "fine pitch change (SID units)";
+        if (_c0 == "P") _desc = "set exact pulse width (0-$FFF)";
+        if (_c0 == "S") _desc = "pitch slide per frame; S0 stops";
+        if (_c0 == "Q") _desc = "pulse sweep per frame; Q0 stops (wraps 12-bit)";
+        return { text: _desc + "; Dn sets duration", bad: false };
+    }
+    // >nn : carry on in another instrument's table
+    if (_c0 == ">") {
+        return { text: "continue in instrument " + string_delete(_up, 1, 1) + "'s table of this kind", bad: false };
+    }
+    // C+n / C-n : a ~FILTER table's cutoff speed
+    if (_c0 == "C" && (string_char_at(_up, 2) == "+" || string_char_at(_up, 2) == "-")) {
+        return { text: "cutoff speed per frame (in a ~FILTER table); Dn sets duration", bad: false };
+    }
     // N / N+n / N-n : note
     if (_c0 == "N") {
         if (_rest == "" || _rest == "+0" || _rest == "-0") {
@@ -371,6 +442,11 @@ function scr_sound_editor_instr_comment(_line, _lines) {
         return { text: "hold " + string(_d) + _fr + " (" + string_trim(_secs) + " s)", bad: false };
     }
 
+    if (_c0 == "R") {
+        var _rp = string_split(_rest,":");
+        if (array_length(_rp) != 2) return {text:"? write Rcount:step, e.g. R3:8",bad:true};
+        return {text:"repeat from step " + _rp[1] + " another " + _rp[0] + " times, then continue",bad:false};
+    }
     // Ln : loop
     if (_c0 == "L") {
         var _ln = string_digits(_rest);
@@ -418,4 +494,61 @@ function scr_sound_editor_instr_comment(_line, _lines) {
         _txt += " (gate forced on)";
     }
     return { text: _txt, bad: false };
+}
+
+/// Pattern commands use hexadecimal digits; instrument VIB fields are decimal.
+function scr_sound_editor_vibrato_help() {
+    return "INSTRUMENT VIB (DECIMAL VALUES)"
+        + "\nDL = DELAY IN FRAMES BEFORE VIBRATO STARTS."
+        + "\nSP = SPEED: FRAMES PER HALF-SWING. HIGHER = SLOWER."
+        + "\nDP = DEPTH: PITCH CHANGE OF DP * 4 PER FRAME."
+        + "\nSP OR DP = 0 DISABLES INSTRUMENT VIBRATO."
+        + "\n4XY OVERRIDES IT FOR THAT ROW; IT CAN RESUME AFTERWARD.";
+}
+
+/// Shared by command-cell hover and the command legend's reference tooltip.
+function scr_sound_editor_pattern_help(_cmd) {
+    switch (_cmd) {
+        case 0: return "0XX: NO PATTERN EFFECT THIS ROW (XX IS IGNORED).\nINSTRUMENT VIBRATO CAN STILL RUN.";
+        case 1: return "1XX: SLIDE PITCH UP BY XX * 4 PER FRAME, THIS ROW ONLY.";
+        case 2: return "2XX: SLIDE PITCH DOWN BY XX * 4 PER FRAME, THIS ROW ONLY.";
+        case 3: return "3XX: SLIDE TOWARD THE NOTE AT XX * 4 PER FRAME.\nTHIS ROW ONLY; STOPS AT THE TARGET PITCH.";
+        case 4: return "4XY: VIBRATO (HEX DIGITS 0-F)"
+            + "\nX = SPEED: FRAMES PER HALF-SWING. HIGHER = SLOWER."
+            + "\nY = DEPTH: PITCH CHANGE OF Y * 4 PER FRAME. HIGHER = WIDER."
+            + "\nBOTH X AND Y AFFECT THE TOTAL SWING; LOW NOTES SOUND WIDER."
+            + "\n448: 4 FRAMES PER HALF-SWING, DEPTH 8 (32 UNITS PER FRAME)."
+            + "\nFIRST SWING STARTS PARTWAY THROUGH THE CYCLE."
+            + "\n400 (OR X/Y = 0): NO VIBRATO THIS ROW."
+            + "\n4XY LASTS ONE ROW; REPEAT IT ON FOLLOWING ROWS TO CONTINUE.";
+        case 5: return "5AD: SET ATTACK (A) AND DECAY (D), HEX 0-F EACH.";
+        case 6: return "6SR: SET SUSTAIN (S) AND RELEASE (R), HEX 0-F EACH.";
+        case 7: return "7XX: SET SID WAVEFORM / CONTROL BYTE.\n711 TRIANGLE, 721 SAW, 741 PULSE, 781 NOISE (GATE ON).";
+        case 8: return "8XX: SET PULSE WIDTH TO HEX XX * 16.\n800 = ZERO, 880 = HALF, 8FF = NEAR MAXIMUM.";
+        case 9: return "9XX: PULSE-WIDTH SWEEP, THIS ROW ONLY.\n01-7F UP; 80-FF DOWN (FF = -1, F0 = -16 PER FRAME).";
+        case 10: return "AXX: SET FILTER CUTOFF TO HEX XX * 8.\nA00 = ZERO, AFF = 2040. FILTER IS SHARED BY ALL VOICES.";
+        case 11: return "BX0: SET FILTER RESONANCE X (HEX 0-F).\nLAST DIGIT IS IGNORED; VOICE ROUTING IS PRESERVED.";
+        case 12: return "CXX: FILTER CUTOFF SWEEP, THIS ROW ONLY.\n01-7F UP; 80-FF DOWN (FF = -1 PER FRAME).\nSTOPS AT 0 OR 2047; FILTER IS SHARED BY ALL VOICES.";
+        case 13: return "DXX: SET THE FULL SID $D418 BYTE.\nHIGH DIGIT: FILTER MODE; LOW DIGIT: VOLUME (0-F).";
+        case 14: return "EXX: SET FILTER MODE, KEEP VOLUME.\nLOW DIGIT BITS: 1 LOW-PASS, 2 BAND-PASS, 4 HIGH-PASS, 8 VOICE 3 OFF.";
+        case 16: return "GXX: ADD A SIGNED FINE PITCH OFFSET ONCE.\n01-7F UP, 80-FF DOWN (FF = -1). APPLIES AFTER HARD RESTART.";
+        case 17: return "HXX: CONTINUOUS PITCH SWEEP IN SINGLE SID UNITS PER FRAME.\n01-7F UP, 80-FF DOWN. H00 STOPS.\nPERSISTS ACROSS ROWS; A NEW NOTE OR INSTRUMENT S COMMAND REPLACES IT.";
+        case 18: return "IXX: CONTINUOUS PULSE SWEEP, WITH 12-BIT WRAP.\n01-7F UP, 80-FF DOWN. I00 STOPS.\nPERSISTS ACROSS ROWS; A NEW NOTE OR INSTRUMENT Q COMMAND REPLACES IT.";
+        case 15: return "FXX: SET FRAMES PER ROW (HEX). HIGHER = SLOWER. F00 IS IGNORED."
+            + "\nSHARED TIMING: AFFECTS THE WHOLE SONG FROM THE NEXT ROW."
+            + "\nPER VOICE TIMING: THIS VOICE ONLY, FROM THIS ROW ON (F01-F7F);"
+            + "\nF80-FFF SETS SPEED XX-80 AND MAKES THIS ROW TAKE NO TIME.";
+        case 19: return "J00 ON A NOTE: TIE. CHANGE PITCH WITHOUT RESTARTING THE NOTE."
+            + "\nENVELOPE, GATE, PULSE WIDTH, SWEEPS AND RUNNING TABLES CARRY ON."
+            + "\nWITH AN INSTRUMENT IN THE ROW, ITS PROGRAM TAKES OVER (E.G. A NEW ARP)"
+            + "\nAND ITS ~PITCH+/~PULSE+ TABLES CONTINUE IF THEY MATCH THE RUNNING ONES.";
+    }
+    return "PATTERN COMMAND GUIDE"
+        + "\nSELECT NOTES: CTRL+Q/A = SEMITONE UP/DOWN; CTRL+W/S = OCTAVE UP/DOWN."
+        + "\nALSO CTRL+=/- OR NUMPAD +/-: SEMITONE. ADD SHIFT FOR AN OCTAVE."
+        + "\nCLICK A COMMAND CELL, THEN TYPE A COMMAND (0-J), THEN TWO HEX DIGITS (0-F)."
+        + "\nTHIRD DIGIT STORES IT; ENTER PADS WITH ZEROS AND MOVES DOWN."
+        + "\nBACKSPACE ERASES A TYPED DIGIT; WITH NO PENDING DIGITS IT CLEARS THE COMMAND."
+        + "\nDELETE CLEARS THE COMMAND; ESC CANCELS PENDING TYPING. NOTES STAY IN PLACE."
+        + "\nHOVER A COMMAND FOR ITS MEANING. 1-4, 9 AND C LAST ONE ROW.";
 }

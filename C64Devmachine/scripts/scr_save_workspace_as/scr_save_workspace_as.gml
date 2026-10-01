@@ -300,6 +300,7 @@
         }
 
 		 if ((_a.type == "MUSIC_MAKER" || _a.type == "SFX_MAKER")) {
+            scr_music_sid_copy_meta(_a.meta, _meta_out);
             _meta_out.voice_mask = variable_struct_exists(_a.meta, "voice_mask") ? _a.meta.voice_mask : 7;
             _meta_out.sfx_chip = variable_struct_exists(_a.meta, "sfx_chip") ? _a.meta.sfx_chip : 0;
             _meta_out.instruments      = variable_struct_exists(_a.meta, "instruments")      ? _a.meta.instruments      : [];
@@ -310,6 +311,12 @@
             _meta_out.filt_mode        = variable_struct_exists(_a.meta, "filt_mode")        ? _a.meta.filt_mode        : 0;
             _meta_out.filt_res         = variable_struct_exists(_a.meta, "filt_res")         ? _a.meta.filt_res         : 0;
             _meta_out.filt_cut         = variable_struct_exists(_a.meta, "filt_cut")         ? _a.meta.filt_cut         : 1024;
+            _meta_out.chip_model       = 1;
+            if (variable_struct_exists(_a.meta, "chip_model")) _meta_out.chip_model = _a.meta.chip_model;
+            _meta_out.free_voices      = false;
+            if (variable_struct_exists(_a.meta, "free_voices")) _meta_out.free_voices = _a.meta.free_voices;
+            _meta_out.note_table       = [];
+            if (variable_struct_exists(_a.meta, "note_table")) _meta_out.note_table = _a.meta.note_table;
             // songs[] is the source of truth. song_order/song_loop/song_loop_row
             // are legacy and written only so an older build can still open the
             // file; nothing in the current editor or emitter reads them.

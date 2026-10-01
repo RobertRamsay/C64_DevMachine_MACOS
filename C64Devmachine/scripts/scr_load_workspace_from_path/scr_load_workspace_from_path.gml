@@ -1060,6 +1060,7 @@ function scr_load_workspace_from_path_core(_path, _mcp = false) {
 	        if ((_ad.type == "MUSIC_MAKER" || _ad.type == "SFX_MAKER")) {
 	            scr_sound_editor_create(_new_asset);
 	            var _sem = variable_struct_exists(_ad, "meta") ? _ad.meta : {};
+                scr_music_sid_copy_meta(_sem, _new_asset.meta);
                 _new_asset.meta.voice_mask = variable_struct_exists(_sem,"voice_mask") ? _sem.voice_mask : 7;
                 _new_asset.meta.sfx_chip = variable_struct_exists(_sem,"sfx_chip") ? _sem.sfx_chip : 0;
 	            if (variable_struct_exists(_sem, "instruments"))      _new_asset.meta.instruments      = _sem.instruments;
@@ -1072,6 +1073,16 @@ function scr_load_workspace_from_path_core(_path, _mcp = false) {
 	            _new_asset.meta.filt_mode        = variable_struct_exists(_sem, "filt_mode")        ? real(_sem.filt_mode)  : 0;
 	            _new_asset.meta.filt_res         = variable_struct_exists(_sem, "filt_res")         ? real(_sem.filt_res)   : 0;
 	            _new_asset.meta.filt_cut         = variable_struct_exists(_sem, "filt_cut")         ? real(_sem.filt_cut)   : 1024;
+	            // Imported tuning: 96 SID frequency values, or [] for the shared table.
+	            // Preview chip saved with the song (0 = 6581, 1 = 8580; 8580 when absent).
+	            _new_asset.meta.chip_model       = 1;
+	            if (variable_struct_exists(_sem, "chip_model")) _new_asset.meta.chip_model = (real(_sem.chip_model) == 0) ? 0 : 1;
+	            _new_asset.meta.free_voices      = false;
+	            if (variable_struct_exists(_sem, "free_voices")) _new_asset.meta.free_voices = (_sem.free_voices == true);
+	            _new_asset.meta.note_table       = [];
+	            if (variable_struct_exists(_sem, "note_table") && is_array(_sem.note_table) && array_length(_sem.note_table) == 96) {
+	                for (var _nti = 0; _nti < 96; _nti++) array_push(_new_asset.meta.note_table, real(_sem.note_table[_nti]));
+	            }
 	            // songs[] restores first; the editor's migration guard only fires
 	            // when it's absent, so a pre-songs[] file still folds its bare
 	            // song_order into songs[0] on first open.

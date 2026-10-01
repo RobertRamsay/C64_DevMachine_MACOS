@@ -171,6 +171,7 @@ var _base = "unsaved";
                 _mo.show_grid     = _me.show_grid;
             }
             if ((_a.type == "MUSIC_MAKER" || _a.type == "SFX_MAKER")) {
+                scr_music_sid_copy_meta(_me, _mo);
                 _mo.voice_mask = variable_struct_exists(_me, "voice_mask") ? _me.voice_mask : 7;
             _mo.sfx_chip = variable_struct_exists(_me, "sfx_chip") ? _me.sfx_chip : 0;
             _mo.instruments      = variable_struct_exists(_me, "instruments")      ? _me.instruments      : [];
@@ -181,6 +182,12 @@ var _base = "unsaved";
                 _mo.filt_mode        = variable_struct_exists(_me, "filt_mode")        ? _me.filt_mode        : 0;
                 _mo.filt_res         = variable_struct_exists(_me, "filt_res")         ? _me.filt_res         : 0;
                 _mo.filt_cut         = variable_struct_exists(_me, "filt_cut")         ? _me.filt_cut         : 1024;
+                _mo.chip_model       = 1;
+                if (variable_struct_exists(_me, "chip_model")) _mo.chip_model = _me.chip_model;
+                _mo.free_voices      = false;
+                if (variable_struct_exists(_me, "free_voices")) _mo.free_voices = _me.free_voices;
+                _mo.note_table       = [];
+                if (variable_struct_exists(_me, "note_table")) _mo.note_table = _me.note_table;
                 // songs[] is the source of truth. song_order/song_loop/song_loop_row
                 // are legacy and written only so an older build can still open the
                 // file; nothing in the current editor or emitter reads them.

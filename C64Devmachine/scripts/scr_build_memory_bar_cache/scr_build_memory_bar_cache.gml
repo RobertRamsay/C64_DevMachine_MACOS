@@ -70,6 +70,21 @@ var _addr_total = 65536;
                 // nothing to do here.
                 break;
 
+            case "MACRO_SID_SONG":
+                // The sizing pass counts the same player/data emitted for export.
+                // Give it a physical segment: the enclosing ORG is decorative
+                // and deliberately does not participate in overlap warnings.
+                if (total_node_size > 0) {
+                    var _song_name = (node_title != "") ? node_title : "MUSIC MAKER";
+                    array_push(_segments, {
+                        addr: pc_address, size: total_node_size,
+                        col: make_color_rgb(180, 30, 200), type: "CODE",
+                        name: _song_name, lines: [], node_id: id,
+                        no_conflict: false, conflict: false
+                    });
+                }
+                break;
+
             case "INIT":
                 if (total_node_size > 0) {
                     var _init_ah = string_upper(decimal_to_hex(pc_address));
@@ -985,7 +1000,11 @@ function scr_workspace_usage_refresh(_segments) {
     for(var _i=0;_i<array_length(_segments);_i++) {
         var _s=_segments[_i];
         if (_s.type=="CODE" && _s.no_conflict) continue; // operand references
-        if(instance_exists(_s.node_id) && _s.node_id.node_type=="ORG") continue;
+        // ORG spans include emitted code/data (notably the music player).
+        // Merge them with child allocations below, so shared bytes count once.
+        // Hardware register declarations are I/O addresses, not allocated RAM.
+        if(instance_exists(_s.node_id) && _s.node_id.node_type=="ORG"
+            && _s.node_id.node_title=="HW REGISTERS") continue;
         var _a=clamp(_s.addr,0,65536), _b=clamp(_s.addr+_s.size,0,65536);
         _ram+=max(0,_b-max(_end,_a)); _end=max(_end,_b);
         if(!(variable_struct_exists(_s,"load_later") && _s.load_later)) _boot_end=max(_boot_end,_b);

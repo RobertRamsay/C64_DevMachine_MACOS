@@ -14,14 +14,14 @@ showcode_refresh_requested = false;
 editor_layout_refresh_requested = false;
 
 
-global.build_date = "September 26th, 2026"; // edit this string for each release
+global.build_date = "October 1st, 2026"; // edit this string for each release
 
 // sid64 (reSID) preview audio — see scr_sid64_audio. Model/engine changes go
 // through scr_sid64_reconfigure so the preview cache is rebuilt.
 // macOS: needs extensions/sid64/libsid64.dylib, built with tools/sid64/build_mac.sh.
 // Without it global.sid64_ok stays false and previews use the GML synth.
 global.sid64_ok = false;
-global.sid64_model = 0;              // 0 = 6581, 1 = 8580
+global.sid64_model = 1;              // 0 = 6581, 1 = 8580 (each song keeps its own)
 global.sid64_engine = 0;             // 0 = reSID, 1 = reSID-fp
 global.sid64_hard_restart = 2;       // frames, MACRO_SID_SONG's default
 global.sid64_note_freq = array_create(96, 0);
@@ -41,8 +41,19 @@ global.sid64_stream = {
     ring_i          : 0,
     ring_samples    : _sid64_ring_samples,
     pos_ord         : array_create(SID64_POS_RING, 0),
-    pos_row         : array_create(SID64_POS_RING, 0)
+    pos_row         : array_create(SID64_POS_RING, 0),
+    // Sounding note per voice (all chips) for each rendered frame; -1 = none.
+    pos_notes       : array_create(SID64_POS_RING, undefined),
+    // Per-voice [order row, row] (all chips) for each rendered frame — the
+    // grid's per-voice highlight in TIMING: PER VOICE.
+    pos_vpos        : array_create(SID64_POS_RING, undefined)
 };
+// Music Maker byte summary per asset name: { sig, pending, stable_at, next_check, info }.
+global.music_size_cache = {};
+// Music Maker grid: per-column extra scroll while TIMING: PER VOICE plays.
+global.music_col_scroll = [0, 0, 0];
+// Music Maker pattern-command guide panel (modal while open).
+global.music_cmd_guide_open = false;
 for (var _sri = 0; _sri < SID64_RING; _sri++) {
     global.sid64_stream.ring[_sri] = buffer_create(_sid64_ring_samples * 2, buffer_fixed, 2);
 }
@@ -164,19 +175,30 @@ welcome_hide_checked   = false;
 welcome_credits_y      = 0;
 welcome_mode           = 0;      // 0 = welcome / what's new, 1 = guided tour list
 welcome_tour_scroll    = 0;      // first visible row in the tour list
+// ---- WELCOME SCREEN ----
+// welcome_open is set from the saved "hide_welcome" ini pref further down,
+// once settings are loaded. welcome_hide_checked mirrors the checkbox state.
+welcome_open           = false;
+welcome_hide_checked   = false;
+welcome_credits_y      = 0;
+welcome_mode           = 0;      // 0 = welcome / what's new, 1 = guided tour list
+welcome_tour_scroll    = 0;      // first visible row in the tour list
 welcome_whats_new = [
-    "NEW - STARLIGHT UI theme, tidied up other themes added bkg for cyberpunk theme.",
-    "NEW - ROOMS node - for optimised room switching.",
-    "NEW - ANIM SET node - for optimised sprite animtion setting.",
-    "NEW - Templates and Ports with 1 project in each: SHMUP.V and ZYRONS ESCAPE.",
-    "REFINED - REU ORG asset layout improved and preview of the asset when you hover.",
-    "REFINED - MEMORY Bar now can ZOOM into sections via the ALL / SEG / ONE button.",
-    "LITE ACCESS EXPANDED - LITE users can now build with PRO Features present.",
+    "NEW - MUSIC MAKER now using ReSID for more accurate SID Emulation.",
+    "NEW - MUSIC MAKER commands for portaments, vibrato, filter and more.",
+    "NEW - MUSIC MAKER advanced timing and control tables added.",
+    "NEW - MUSIC MAKER multi SID support tested on VICE and C64Ultimate.",
+    "NEW - MUSIC MAKER piano roll added per voice or full.",
+    "NEW - MUSIC MAKER filtering added, some other U.I QOL features.",
+    "NEW - SPRITE ANIM SET EDITOR",
+    "REFINED - Assets Panel list more organised",
+    "REFINED - Extras menu is now Macros 2, Macros now Macros 1",
     "",
     "SHARE your Custom Code blocks like a PRO in the Discord user-code-blocks channel.",
     "SUPPORT the development by leaving a review on ITCH and buying the PRO version.",
     "Thank you for your support!",
     ];
+
     
 welcome_credits_lines = [
     "CODE and DESIGN",
@@ -202,8 +224,7 @@ welcome_credits_lines = [
     "VxV",
     "",
     "And...",
-    "All those who are part of the Discord and those",
-    "who are users and have supported the software!",
+    "all those who are active on the Discord! Keep making!",
 ];
 
 // Fire the check on startup, but only once per session.

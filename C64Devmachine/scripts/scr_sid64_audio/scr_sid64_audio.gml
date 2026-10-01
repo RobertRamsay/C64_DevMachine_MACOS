@@ -18,6 +18,7 @@
 #macro SID64_MAX_FRAMES       300    // 6 s — hard cap on any one audition
 #macro SID64_GATE_CAP         150    // 3 s — a looping instrument's gate drops here on a bare audition
 #macro SID64_PLAIN_GATE       8      // no-instrument note: gate held 8 frames (0.16 s)
+#macro SID64_FRAME_US         (1000000 * SID64_CYCLES_PER_FRAME / SID64_PAL_CLOCK)
 #macro SID64_CHUNK_FRAMES     4      // streamed song audio is rendered 4 frames (80 ms) at a time
 #macro SID64_AHEAD_FRAMES     12     // ... and kept this far ahead of what is playing
 #macro SID64_RING             32     // streaming buffers, reused round-robin
@@ -51,7 +52,7 @@ function scr_sid64_start() {
 }
 
 function scr_sid64_init_slots() {
-    for (var _s = 1; _s >= 0; _s--) {
+    for (var _s = ((sid64_version() >= 3) ? 8 : 1); _s >= 0; _s--) {
         sid64_select(_s);
         sid64_init(SID64_PAL_CLOCK, SID64_RATE, global.sid64_model, global.sid64_engine);
         sid64_set_gain(0.6);
@@ -125,6 +126,7 @@ function scr_sid64_render_note(_instr, _note_name, _max_sec, _plain_pw = 0x0800)
 
     var _vc = _sim.voices[0];
     var _fb = global.sid64_frame_buf;
+    var _follow = [];
     var _nf = 0;
     var _end = _limit;
     var _fired_at = -1;
@@ -157,6 +159,7 @@ function scr_sid64_render_note(_instr, _note_name, _max_sec, _plain_pw = 0x0800)
             _end = min(_limit, _nf + 1 + ceil(_rel_ms[_rel] / 20) + 3);
         }
 
+        array_push(_follow, scr_sid64_voice_display(_vc));
         scr_sid64_sim_put(_sim, _fb, _nf);
         _nf += 1;
     }
@@ -176,7 +179,7 @@ function scr_sid64_render_note(_instr, _note_name, _max_sec, _plain_pw = 0x0800)
     // buffer is empty — audio_create_buffer_sound refuses an "empty" buffer.
     buffer_set_used_size(_buf, _got * 2);
     var _snd = audio_create_buffer_sound(_buf, buffer_s16, SID64_RATE, 0, _got * 2, audio_mono);
-    return { snd: _snd, buf: _buf };
+    return { snd: _snd, buf: _buf, follow: _follow };
 }
 
 // ═══════════════════════════ SONG STREAMING ═══════════════════════════
@@ -187,7 +190,31 @@ function scr_sid64_stream_start(_m, _song, _loop_row, _ord, _row) {
     with (obj_asset_manager) scr_sid_asset_stop();
     scr_sid64_stream_stop();
     var _st = global.sid64_stream;
-    _st.sim = scr_sid64_sim_create(_m, _song, _loop_row, _ord, _row);
+    var _count = scr_music_sid_count(_m);
+    if (_count > 1 && sid64_version() < 3) {
+        _m.playing = false;
+        _m.song_playing = false;
+        _m.warn_msg = "MULTI-SID PREVIEW NEEDS THE UPDATED SID64 EXTENSION";
+        _m.warn_timer = game_get_speed(gamespeed_fps) * 5;
+        return;
+    }
+    _st.sims = [];
+    _st.shared_clock = { next: _m.play_speed };
+    for (var _c = 0; _c < _count; _c++) {
+        var _sim = scr_sid64_sim_create(_m, _song, _loop_row, _ord, _row);
+        _sim.chip = _c;
+        _sim.shared_clock = _st.shared_clock;
+        array_push(_st.sims, _sim);
+        sid64_select(_c + 1);
+        sid64_reset();
+        sid64_settle(0x0F, 100);
+    }
+    _st.sim = _st.sims[0];
+    _st.mix_buf = -1;
+    if (_count > 1) _st.mix_buf = buffer_create(_st.ring_samples * 2, buffer_fixed, 1);
+    _st.logs = [];
+    for (var _c = 0; _c < _count; _c++) array_push(_st.logs, buffer_create(SID64_CHUNK_FRAMES * 32, buffer_fixed, 1));
+    _st.pos_instruments = array_create(SID64_POS_RING, undefined);
     _st.frames_rendered = 0;
     _st.finished_at = -1;
     _st.ring_i = 0;
@@ -204,6 +231,10 @@ function scr_sid64_stream_start(_m, _song, _loop_row, _ord, _row) {
     }
     _st.inst = audio_play_sound(_st.queue, 1, false);
     _st.start_us = get_timer();
+    _st.last_update_us = _st.start_us;
+    _st.max_update_gap_us = 0;
+    _st.max_render_us = 0;
+    _st.underruns = 0;
     _st.active = true;
 }
 
@@ -219,26 +250,70 @@ function scr_sid64_stream_stop() {
     }
     _st.active = false;
     _st.sim = undefined;
+    if (variable_struct_exists(_st, "mix_buf") && buffer_exists(_st.mix_buf)) buffer_delete(_st.mix_buf);
+    _st.mix_buf = -1;
+    _st.sims = [];
+    if (variable_struct_exists(_st, "logs")) {
+        for (var _i = 0; _i < array_length(_st.logs); _i++) {
+            if (buffer_exists(_st.logs[_i])) buffer_delete(_st.logs[_i]);
+        }
+    }
+    _st.logs = [];
 }
 
 /// Runs SID64_CHUNK_FRAMES frames of the sim, renders them and queues the audio.
 function scr_sid64_stream_chunk() {
     var _st = global.sid64_stream;
     var _fb = global.sid64_frame_buf;
+    var _buf = _st.ring[_st.ring_i];
+    _st.ring_i = (_st.ring_i + 1) mod SID64_RING;
+
+    var _count = array_length(_st.sims);
+    // Advance ALL chips before rendering the next frame: FXX shares one clock.
+    var _logs = _st.logs;
+    if (_count > 1) buffer_fill(_buf, 0, buffer_s16, 0, _st.ring_samples * 2);
     for (var _i = 0; _i < SID64_CHUNK_FRAMES; _i++) {
-        scr_sid64_sim_frame(_st.sim);
-        scr_sid64_sim_put(_st.sim, _fb, _i);
+        var _tempo = _st.shared_clock.next;
+        for (var _c = 0; _c < _count; _c++) {
+            _st.sims[_c].spd = _tempo;
+            scr_sid64_sim_frame(_st.sims[_c]);
+            scr_sid64_sim_put(_st.sims[_c], _logs[_c], _i);
+        }
         var _pi = (_st.frames_rendered + _i) mod SID64_POS_RING;
         _st.pos_ord[_pi] = _st.sim.shown_ord;
         _st.pos_row[_pi] = _st.sim.shown_row;
-        if (_st.sim.finished && _st.finished_at < 0) {
-            _st.finished_at = _st.frames_rendered + _i;
+        var _voices = [];
+        for (var _dc = 0; _dc < _count; _dc++) for (var _dv = 0; _dv < 3; _dv++) {
+            array_push(_voices, scr_sid64_voice_display(_st.sims[_dc].voices[_dv]));
         }
+        _st.pos_instruments[_pi] = _voices;
+        var _notes = [];
+        for (var _nc = 0; _nc < _count; _nc++) for (var _nv = 0; _nv < 3; _nv++) {
+            array_push(_notes, scr_sid64_voice_note(_st.sims[_nc], _st.sims[_nc].voices[_nv]));
+        }
+        _st.pos_notes[_pi] = _notes;
+        var _vpos = [];
+        for (var _pc = 0; _pc < _count; _pc++) for (var _pv = 0; _pv < 3; _pv++) {
+            var _pvc = _st.sims[_pc].voices[_pv];
+            array_push(_vpos, [_pvc.shown_ord, _pvc.shown_row]);
+        }
+        _st.pos_vpos[_pi] = _vpos;
+        if (_st.sim.finished && _st.finished_at < 0) _st.finished_at = _st.frames_rendered + _i;
     }
-    var _buf = _st.ring[_st.ring_i];
-    _st.ring_i = (_st.ring_i + 1) mod SID64_RING;
-    sid64_select(1);
-    var _got = sid64_render_log(buffer_get_address(_fb), SID64_CHUNK_FRAMES, buffer_get_address(_buf), _st.ring_samples);
+    var _got = 0;
+    for (var _c = 0; _c < _count; _c++) {
+        sid64_select(_c + 1);
+        var _samples = sid64_render_log(buffer_get_address(_logs[_c]), SID64_CHUNK_FRAMES,
+                                       buffer_get_address(_count == 1 ? _buf : _st.mix_buf), _st.ring_samples);
+        if (_c == 0) _got = _samples;
+        else _got = min(_got, _samples);
+        if (_count > 1) for (var _p = 0; _p < _samples; _p++) {
+            var _sum = buffer_peek(_buf, _p * 2, buffer_s16)
+                + round(buffer_peek(_st.mix_buf, _p * 2, buffer_s16) / _count);
+            buffer_poke(_buf, _p * 2, buffer_s16, clamp(_sum, -32768, 32767));
+        }
+
+    }
     sid64_select(0);
     _st.frames_rendered += SID64_CHUNK_FRAMES;
     if (_got > 0) {
@@ -255,18 +330,30 @@ function scr_sid64_stream_update(_m) {
     if (!_st.active) {
         return false;
     }
-    var _played = floor((get_timer() - _st.start_us) / 20000);
+    var _now = get_timer();
+    _st.max_update_gap_us = max(_st.max_update_gap_us, _now - _st.last_update_us);
+    _st.last_update_us = _now;
+    var _played = floor((_now - _st.start_us) / SID64_FRAME_US);
+    // A drained queue cannot have played frames that were never rendered.
+    // Rebase BEFORE filling: do not synthesize a wall-clock backlog in Draw.
+    if (_played > _st.frames_rendered) {
+        _st.underruns += 1;
+        if (_st.underruns == 1) {
+            show_debug_message("sid64: audio queue ran dry; editor gap "
+                + string(round(_st.max_update_gap_us / 1000)) + " ms, longest refill "
+                + string(round(_st.max_render_us / 1000)) + " ms");
+        }
+        _played = _st.frames_rendered;
+        _st.start_us = _now - _played * SID64_FRAME_US;
+    }
+    var _render_start = get_timer();
     var _guard = 0;
-    while (_st.frames_rendered < _played + SID64_AHEAD_FRAMES && _guard < 16) {
+    var _max_chunks = ceil(SID64_AHEAD_FRAMES / SID64_CHUNK_FRAMES);
+    while (_st.frames_rendered < _played + SID64_AHEAD_FRAMES && _guard < _max_chunks) {
         scr_sid64_stream_chunk();
         _guard += 1;
     }
-    // Fell far behind (window dragged, breakpoint): resync the clock rather
-    // than bursting a backlog into the queue.
-    if (_st.frames_rendered < _played) {
-        _st.start_us = get_timer() - (_st.frames_rendered - SID64_AHEAD_FRAMES) * 20000;
-        _played = _st.frames_rendered - SID64_AHEAD_FRAMES;
-    }
+    _st.max_render_us = max(_st.max_render_us, get_timer() - _render_start);
     var _shown = clamp(_played, 0, _st.frames_rendered - 1);
     var _pi = _shown mod SID64_POS_RING;
     _m.preview_display_order = _st.pos_ord[_pi];
@@ -443,4 +530,36 @@ function scr_sid_asset_controls(_asset, _x, _y, _w) {
     var _status = is_struct(sid_asset_preview) ? "PLAYING  " + string(floor((get_timer()-sid_asset_preview.start)/1000000)) + " s" : "Press PLAY to listen";
     if (sid_asset_message != "") _status = sid_asset_message;
     draw_text_ext_l(_x, _y+54, _status, 14, _w);
+}
+
+/// Start an audition display only after the actual sound starts (also on cache hits).
+function scr_sound_instrument_follow_start(_instr, _channel, _trace, _period) {
+    if (!variable_global_exists("instrument_follow")) global.instrument_follow = [];
+    global.instrument_follow[_channel] = { instr: variable_struct_exists(_instr, "follow_owner") ? _instr.follow_owner : _instr,
+        compiled: scr_instrument_ensure_compiled(_instr), trace: _trace,
+        period: _period, start_us: get_timer(), instance: global.snd_preview_instance[_channel] };
+}
+
+/// Read the same historical frame as the pattern highlight; auditions use their own clocks.
+function scr_sound_instrument_follow_read(_m) {
+    var _out = [];
+    var _st = global.sid64_stream;
+    if (_st.active && _st.sim.m == _m && variable_struct_exists(_st, "pos_instruments")) {
+        var _frame = clamp(floor((get_timer() - _st.start_us) / SID64_FRAME_US), 0, _st.frames_rendered - 1);
+        var _snap = _st.pos_instruments[_frame mod SID64_POS_RING];
+        if (is_array(_snap)) for (var _si = 0; _si < array_length(_snap); _si++) array_push(_out, _snap[_si]);
+    }
+    if (variable_global_exists("instrument_follow")) {
+        for (var _ch = 0; _ch < array_length(global.instrument_follow); _ch++) {
+            var _f = global.instrument_follow[_ch];
+            if (!is_struct(_f)) continue;
+            if (!audio_is_playing(_f.instance)) { global.instrument_follow[_ch] = undefined; continue; }
+            var _fi = floor((get_timer() - _f.start_us) / _f.period);
+            if (_fi >= 0 && _fi < array_length(_f.trace)) {
+                var _v = _f.trace[_fi];
+                if (is_struct(_v)) array_push(_out, { instr: _f.instr, compiled: _f.compiled, pcs: _v.pcs });
+            }
+        }
+    }
+    return _out;
 }
