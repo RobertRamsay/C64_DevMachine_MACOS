@@ -6,7 +6,11 @@
 ///       _sfx adds GoatTracker-compatible sound-effect support (export only):
 ///       <key>sfxt is the trigger routine, see scr_sid_song_emit_sfx.
 ///       Returns false when the asset has nothing to play (nothing pushed).
-function scr_sid_song_build(_list, _id, _se, _asset_name, _auto_init, _zp, _hr, _chip_base, _sfx, _prefix = "") {
+///       _lock (VOICE LOCK, node slot 6) emits <key>vlock: one byte per voice at
+///       +0 / +7 / +14. Non-zero = the game owns that voice - its rows are
+///       dropped and nothing is written to its registers, while the song clock
+///       carries on, so clearing the byte brings the voice back in time.
+function scr_sid_song_build(_list, _id, _se, _asset_name, _auto_init, _zp, _hr, _chip_base, _sfx, _prefix = "", _lock = false) {
     var _sm = _se.meta;
     if (_prefix == "" && scr_music_sid_count(_sm) > 1) {
         return scr_music_sid_build(_list, _id, _se, _asset_name, _auto_init, _zp, _hr, _chip_base);
@@ -340,6 +344,19 @@ function scr_sid_song_build(_list, _id, _se, _asset_name, _auto_init, _zp, _hr, 
     var _lane_sources = [];
     for (var _lsi = 0; _lsi < array_length(_instruments); _lsi++) array_push(_lane_sources, scr_instrument_ensure_compiled(_instruments[_lsi]));
     var _lane_registry = { count: 0, labels: {}, emitted: {}, sources: _lane_sources };
+    var _vib_op_used = false;   // V$xy in an instrument program
+    // V$xy in a program starts the instrument vibrato part-way through a note.
+    for (var _vri = 0; _vri < array_length(_table_pack.streams); _vri++) {
+        for (var _vrj = 0; _vrj < array_length(_table_pack.streams[_vri]); _vrj++) {
+            if (!_table_pack.streams[_vri][_vrj].raw && _table_pack.streams[_vri][_vrj].bytes[0] == 27) _vib_op_used = true;
+        }
+    }
+    for (var _vri = 0; _vri < array_length(_table_pack.tables); _vri++) {
+        for (var _vrj = 0; _vrj < array_length(_table_pack.tables[_vri]); _vrj++) {
+            if (_table_pack.tables[_vri][_vrj].bytes[0] == 27) _vib_op_used = true;
+        }
+    }
+
     var _lbl_dskip = _key + "dskip";
     // Per-voice effect state tables (see section 7).
     var _sng_state_tables = ["fql", "fqh", "fx", "fxv", "tgl", "tgh", "cvs", "cvd",
@@ -649,6 +666,15 @@ function scr_sid_song_build(_list, _id, _se, _asset_name, _auto_init, _zp, _hr, 
         array_push(_list, ["byte", _pfx, _id]);
     }
 
+    // ── DIGI PLAN ── $D418 samples on a CIA2 NMI (scr_sid_song_emit_digi).
+    // Nothing at all is emitted unless some order row triggers a sample. Made
+    // here because a BOOST voice is taken out of the music's voice mask, which
+    // every table and routine below follows.
+    var _dg_plan = scr_sid_song_digi_plan(_sm, _song_order, _n_ord, _free, _asset_name);
+    if (_dg_plan.used && _dg_plan.boost > 0) {
+        _voice_mask = _voice_mask & ~(1 << (_dg_plan.boost - 1));
+    }
+
     // ── 5. ORDER TABLES ──
     // repeat_short / force_len are flattened here: the runtime reads a plain
     // per-row target length and a per-row wrap flag. force_len is a HARD
@@ -725,6 +751,11 @@ function scr_sid_song_build(_list, _id, _se, _asset_name, _auto_init, _zp, _hr, 
         }
     }
 
+    // ── 5b. DIGI TRACK ── data (the plan was made before the order tables).
+    if (_dg_plan.used) {
+        scr_sid_song_digi_emit_data(_list, _id, _key, _dg_plan);
+    }
+
     // ── 6. PER-SONG HEADER TABLES ──
     // Indexed by song number. init/seek copy the three relevant bytes into ZP
     // once, so the row-advance path costs the same as it did single-song.
@@ -770,6 +801,14 @@ function scr_sid_song_build(_list, _id, _se, _asset_name, _auto_init, _zp, _hr, 
     for (var _sci = 0; _sci < array_length(_sng_scratch); _sci++) {
         array_push(_list, ["label", _key + _sng_scratch[_sci]]);
         array_push(_list, ["byte", 0, _id]);
+    }
+
+    if (_lock) {
+        // VOICE LOCK flags, stride 7 so Y/X = voice * 7 indexes them.
+        array_push(_list, ["label", _key + "vlock"]);
+        for (var _vlb = 0; _vlb < 15; _vlb++) {
+            array_push(_list, ["byte", 0, _id]);
+        }
     }
 
     if (_sfx) {
@@ -829,6 +868,9 @@ function scr_sid_song_build(_list, _id, _se, _asset_name, _auto_init, _zp, _hr, 
         array_push(_list, ["sta_abs", _chip_base + 0x18, _id]);   // full volume, filter off
         array_push(_list, ["sta_abs", _key + "f18", _id]);        // DXX keeps this copy
     }
+    if (_dg_plan.used) {
+        array_push(_list, ["jsr",     _key + "dginit", _id]);   // NMI vectors + timer rate
+    }
     array_push(_list, ["pla",     0,      _id]);
     array_push(_list, ["ldx_imm", 0x00,   _id]);   // start at the song's first row
     array_push(_list, ["jmp_abs", _L_seek, _id]);
@@ -842,6 +884,12 @@ function scr_sid_song_build(_list, _id, _se, _asset_name, _auto_init, _zp, _hr, 
     // still ringing and each voice part-way through its old instrument —
     // the same class of stale-state bug as the loop-wrap fix.
     array_push(_list, ["label",   _L_seek]);
+    if (_dg_plan.used) {
+        // Cut any sample still playing from the old position (A preserved).
+        array_push(_list, ["pha",     0, _id]);
+        array_push(_list, ["jsr",     _key + "dgstop", _id]);
+        array_push(_list, ["pla",     0, _id]);
+    }
 
     // Clamp the song index. An out-of-range song would index past the header
     // tables into whatever data follows and set _S_END to garbage.
@@ -924,6 +972,13 @@ function scr_sid_song_build(_list, _id, _se, _asset_name, _auto_init, _zp, _hr, 
 
     // ── PLAY ──
     array_push(_list, ["label",   _L_play]);
+    if (_dg_plan.used) {
+        // The digi NMI keeps the music's filter-mode bits (DXX / EXX may
+        // change them) under the sample's volume nibble.
+        array_push(_list, ["lda_abs", _key + "f18", _id]);
+        array_push(_list, ["and_imm", 0xF0, _id]);
+        array_push(_list, ["sta_abs", _key + "dghi", _id]);
+    }
     if (!_free) {
         array_push(_list, ["dec_zp",  _S_TICK,   _id]);
         array_push(_list, ["beq",     _L_rowadv, _id]);
@@ -972,6 +1027,15 @@ function scr_sid_song_build(_list, _id, _se, _asset_name, _auto_init, _zp, _hr, 
             array_push(_list, ["beq",     _vp + "nosfx",    _id]);
             array_push(_list, ["jmp_abs", _L_vskip,         _id]);
             array_push(_list, ["label",   _vp + "nosfx"]);
+        }
+
+        if (_lock) {
+            // VOICE LOCK: the game owns this voice - drop the row.
+            array_push(_list, ["ldx_imm", _vi * 7,          _id]);
+            array_push(_list, ["lda_abx", _key + "vlock",   _id]);
+            array_push(_list, ["beq",     _vp + "nolock",   _id]);
+            array_push(_list, ["jmp_abs", _L_vskip,         _id]);
+            array_push(_list, ["label",   _vp + "nolock"]);
         }
 
         // No command unless this row's pattern carries one.
@@ -1464,6 +1528,9 @@ function scr_sid_song_build(_list, _id, _se, _asset_name, _auto_init, _zp, _hr, 
     }
     if (_free) array_push(_list, ["jmp_abs", _L_instrs, _id]);
     if (!_free) {
+    if (_dg_plan.used) {
+        array_push(_list, ["jsr", _key + "dgrow", _id]);   // this row's digi step
+    }
     // Advance the master row; roll into the next order row at the target.
     // Same label-operand restriction as the pattern length above — fetch via
     // lda_abx into scratch, then compare ZP-to-ZP.
@@ -1511,6 +1578,9 @@ function scr_sid_song_build(_list, _id, _se, _asset_name, _auto_init, _zp, _hr, 
 
     // STOP — park on this song's last row, silence everything, go inactive.
     array_push(_list, ["label",   _key + "songstop"]);
+    if (_dg_plan.used) {
+        array_push(_list, ["jsr",     _key + "dgstop", _id]);
+    }
     array_push(_list, ["lda_zp",  _S_END, _id]);
     array_push(_list, ["sec",     0,      _id]);
     array_push(_list, ["sbc_imm", 0x01,   _id]);
@@ -1555,6 +1625,14 @@ function scr_sid_song_build(_list, _id, _se, _asset_name, _auto_init, _zp, _hr, 
             array_push(_list, ["beq",     _ip + "nosfx",    _id]);
             array_push(_list, ["jmp_abs", _ip + "sfxskip",  _id]);
             array_push(_list, ["label",   _ip + "nosfx"]);
+        }
+        if (_lock) {
+            // VOICE LOCK: no music writes to a locked voice this frame.
+            array_push(_list, ["ldy_abs", _key + "cv7",   _id]);
+            array_push(_list, ["lda_aby", _key + "vlock", _id]);
+            array_push(_list, ["beq",     _ip + "nolock", _id]);
+            array_push(_list, ["jmp_abs", _ip + "sfxskip", _id]);
+            array_push(_list, ["label",   _ip + "nolock"]);
         }
 
         if (_hr > 0) {
@@ -2088,6 +2166,32 @@ function scr_sid_song_build(_list, _id, _se, _asset_name, _auto_init, _zp, _hr, 
             array_push(_list, ["label", _ip + "notcut"]);
         }
 
+        if (_vib_op_used) {
+            // $1B xy = vibrato from here: speed x, depth y * 4, no delay.
+            array_push(_list, ["cmp_imm", 27, _id]);
+            array_push(_list, ["bne", _ip + "notvib", _id]);
+            array_push(_list, ["ldy_imm", 1, _id]);
+            array_push(_list, ["lda_izy", _S_PTR, _id]);
+            array_push(_list, ["pha", 0, _id]);
+            array_push(_list, ["lsr_a", 0, _id], ["lsr_a", 0, _id], ["lsr_a", 0, _id], ["lsr_a", 0, _id]);
+            array_push(_list, ["sta_abx", _key + "ivs", _id]);
+            array_push(_list, ["pla", 0, _id]);
+            array_push(_list, ["and_imm", 0x0F, _id]);
+            array_push(_list, ["asl_a", 0, _id], ["asl_a", 0, _id]);
+            array_push(_list, ["sta_abx", _key + "ivp", _id]);
+            array_push(_list, ["lda_imm", 0, _id]);
+            array_push(_list, ["sta_abx", _key + "ivdl", _id]);
+            array_push(_list, ["clc", 0, _id]);
+            array_push(_list, ["lda_zp", _S_PTR, _id]);
+            array_push(_list, ["adc_imm", 2, _id]);
+            array_push(_list, ["sta_zp", _S_PTR, _id]);
+            array_push(_list, ["lda_zp", _S_PTR + 1, _id]);
+            array_push(_list, ["adc_imm", 0, _id]);
+            array_push(_list, ["sta_zp", _S_PTR + 1, _id]);
+            array_push(_list, ["jmp_abs", _L_iloop, _id]);
+            array_push(_list, ["label", _ip + "notvib"]);
+        }
+
         // $04, or anything unrecognised = END — gate off, mark inactive.
         //
         // Waveform bits are PRESERVED so the release phase still has an
@@ -2151,7 +2255,7 @@ function scr_sid_song_build(_list, _id, _se, _asset_name, _auto_init, _zp, _hr, 
         array_push(_list, ["ldx_abs", _key + "cv", _id]);
         array_push(_list, ["ldy_abs", _key + "cv7", _id]);
         array_push(_list, ["jsr",     _key + "fxr", _id]);
-        if (_sfx) {
+        if (_sfx || _lock) {
             array_push(_list, ["label",   _ip + "sfxskip"]);
         }
         array_push(_list, ["rts", 0, _id]);
@@ -2376,6 +2480,7 @@ function scr_sid_song_build(_list, _id, _se, _asset_name, _auto_init, _zp, _hr, 
         }
     }
 
+    if (_vib_op_used) _sng_any_vib = true;
     var _sng_use_fx = _sng_any_vib;
     for (var _ufi = 0; _ufi < array_length(_pat_fx_flags); _ufi++) {
         if (_pat_fx_flags[_ufi]) {
@@ -2385,6 +2490,10 @@ function scr_sid_song_build(_list, _id, _se, _asset_name, _auto_init, _zp, _hr, 
     scr_sid_song_emit_fx_routines(_list, _id, _key, _chip_base, _c_base[0], _sng_use_fx, _sng_filt_used, _sng_extended_fx, _free);
     if (_sfx) {
         scr_sid_song_emit_sfx(_list, _id, _key, _chip_base, _S_PTR);
+    }
+
+    if (_dg_plan.used) {
+        scr_sid_song_digi_emit_runtime(_list, _id, _key, _dg_plan, _chip_base, _S_ORD, _S_ROW, _S_PTR);
     }
 
     array_push(_list, ["label", _L_skip]);

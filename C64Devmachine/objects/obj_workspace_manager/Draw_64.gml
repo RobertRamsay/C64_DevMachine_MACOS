@@ -20,7 +20,7 @@ scr_bmp_preview_queue_draw();
 if hideui exit;
 // Block draw + interaction when asset viewer is open
 if (instance_exists(obj_asset_manager) && obj_asset_manager.viewer_open) {
-    scr_draw_memory_bar(shelf_width + 60, global.gui_w - 60, display_get_gui_height() - 40);
+    // An open editor has the screen to itself - no memory bar under it.
     exit;
 }
 
@@ -1217,7 +1217,7 @@ if (gui_menu_open == 7 || gui_menu_open == 8) {
         // ,8 // TOP DOWN (LITE)
         // ,9 // TOP DOWN (PRO)
     ];
-    if (gui_menu_open == 8) _visible_templates = [10]; // ZYRONS ESCAPE
+    if (gui_menu_open == 8) _visible_templates = [10, 11]; // ZYRONS ESCAPE, SPY HUNTER
     var _th = array_length(_visible_templates) * 24 + 24;
     draw_sprite_stretched(spr_glassSlice, niceSliceFrm, _tx, _ty, _tw, _th);
     draw_set_font_l(fnt_C64_Angled);

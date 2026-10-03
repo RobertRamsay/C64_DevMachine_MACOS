@@ -46,7 +46,7 @@ var _wide_modal = false;
 if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list)) {
     var _vb_type = ds_list_find_value(asset_list, viewer_asset).type;
     if (_vb_type == "BITMAP_BUILDER" || _vb_type == "MUSIC_MAKER" || _vb_type == "SFX_MAKER"
-    ||  _vb_type == "HUD" || (_vb_type == "ROOM_MAP" || _vb_type == "ANIMATION") || _vb_type == "SPRITE_MASK") {
+    ||  _vb_type == "HUD" || (_vb_type == "ROOM_MAP" || _vb_type == "ANIMATION") || _vb_type == "SPRITE_MASK" || _vb_type == "SAMPLE") {
         _wide_modal = true;
         _vx1 = 30;
         _vx2 = panel_x + 20;
@@ -58,6 +58,14 @@ if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list))
 // Music Maker's piano extends its viewer vertically; other editors keep their bounds.
 if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list)) {
     if (asset_list[|viewer_asset].type == "MUSIC_MAKER") { _vy1=40; _vy2=_gui_h-40; }
+    // META_TILESET: full screen, same bounds as Draw GUI
+    if (asset_list[|viewer_asset].type == "META_TILESET") {
+        _wide_modal = true;
+        _vx1 = 30;
+        _vx2 = _gui_w - 30;
+        _vy1 = 40;
+        _vy2 = _gui_h - 40;
+    }
 }
 var _mouse_in_viewer = viewer_open && point_in_rectangle(_mx, _my, _vx1, _vy1, _vx2, _vy2);
 
@@ -428,6 +436,115 @@ if (keyboard_check_pressed(vk_enter)) {
 // -------------------------------------------------------
 if (editing_map_dim) {
     global.is_any_text_active = true;
+
+    // ---- META_TILESET map name (double-click a map tab) ----
+    // Letters, digits, space and a few marks, upper case, 12 max. Enter keeps
+    // it, Esc cancels, an empty name puts the tab back to MAP n.
+    if (editing_map_field == "NAME" || editing_map_field == "CHAIN" || editing_map_field == "COLNAME"
+     || editing_map_field == "COLVAL" || editing_map_field == "REPS" || editing_map_field == "ADDR"
+     || editing_map_field == "TABADDR") {
+        if (keyboard_string != "") {
+            var _nk = string_upper(keyboard_string);
+            keyboard_string = "";
+            for (var _nki = 1; _nki <= string_length(_nk); _nki++) {
+                var _nch = string_char_at(_nk, _nki);
+                var _nok = false;
+                if (_nch >= "A" && _nch <= "Z") {
+                    _nok = true;
+                }
+                if (_nch >= "0" && _nch <= "9") {
+                    _nok = true;
+                }
+                if (_nch == " " || _nch == "-" || _nch == "_" || _nch == "." || _nch == "#" || _nch == "$") {
+                    _nok = true;
+                }
+                if (_nok && string_length(editing_map_string) < 12) {
+                    editing_map_string += _nch;
+                }
+            }
+        }
+        if (keyboard_check_pressed(vk_backspace)) {
+            if (string_length(editing_map_string) > 0) {
+                editing_map_string = string_delete(editing_map_string, string_length(editing_map_string), 1);
+            }
+            keyboard_string = "";
+        }
+        var _name_done = false;
+        if (keyboard_check_pressed(vk_enter)) {
+            if (editing_map_asset_idx >= 0 && editing_map_asset_idx < ds_list_size(asset_list)) {
+                var _na = ds_list_find_value(asset_list, editing_map_asset_idx);
+                if (_na.type == "META_TILESET") {
+                    var _nm = _na.meta;
+                    scr_mts_maps_sync(_nm);
+                    var _ni = editing_map_name_idx;
+                    var _nv = scr_mts_parse_num(editing_map_string);
+                    switch (editing_map_field) {
+                        case "NAME":
+                            if (_ni >= 0 && _ni < array_length(_nm.maps)) {
+                                _nm.map_names[_ni] = string_trim(editing_map_string);
+                            }
+                            break;
+                        case "CHAIN":
+                            if (_ni >= 0 && _ni < array_length(_nm.chains)) {
+                                _nm.chains[_ni].name = string_trim(editing_map_string);
+                            }
+                            break;
+                        case "COLNAME":
+                            if (string_trim(editing_map_string) != "") {
+                                if (_ni < 0) {
+                                    array_push(_nm.chain_cols, string_trim(editing_map_string));
+                                    scr_mts_maps_sync(_nm);
+                                } else if (_ni < array_length(_nm.chain_cols)) {
+                                    _nm.chain_cols[_ni] = string_trim(editing_map_string);
+                                }
+                            }
+                            break;
+                        case "COLVAL":
+                            if (_nv >= 0 && _ni >= 0 && _ni < array_length(_nm.chains)) {
+                                if (editing_map_col_idx >= 0 && editing_map_col_idx < array_length(_nm.chains[_ni].cols)) {
+                                    _nm.chains[_ni].cols[editing_map_col_idx] = _nv & 0xFF;
+                                }
+                            }
+                            break;
+                        case "REPS":
+                            if (_nv >= 1 && _ni >= 0 && _ni < array_length(_nm.maps)) {
+                                _nm.map_reps[_ni] = min(255, _nv);
+                            }
+                            break;
+                        case "ADDR":
+                            // empty / AUTO = straight after the previous map
+                            if (_ni >= 0 && _ni < array_length(_nm.maps)) {
+                                _nm.map_addr[_ni] = min(0xFFFF, _nv);
+                            }
+                            break;
+                        case "TABADDR":
+                            _nm.chain_tab_addr = min(0xFFFF, _nv);
+                            break;
+                    }
+                    _nm.is_dirty            = true;
+                    global.undo_dirty       = true;
+                    global.memory_bar_dirty = true;
+                    global.addresses_dirty  = true;
+                }
+            }
+            _name_done = true;
+        }
+        if (keyboard_check_pressed(vk_escape)) {
+            keyboard_clear(vk_escape);
+            _name_done = true;
+        }
+        if (_name_done) {
+            editing_map_dim           = false;
+            editing_map_field         = "";
+            editing_map_string        = "";
+            editing_map_asset_idx     = -1;
+            editing_map_name_idx      = -1;
+            editing_map_col_idx       = -1;
+            global.is_any_text_active = false;
+            keyboard_string           = "";
+        }
+        exit;
+    }
     if (keyboard_string != "") {
         var _k = keyboard_string;
         keyboard_string = "";
@@ -2168,6 +2285,13 @@ if (mouse_check_button_pressed(mb_left) && !global.any_picker_open && !(_wide_mo
             _new_asset.buffer = buffer_create(1, buffer_fixed, 1);
             scr_hud_create(_new_asset);
         }
+        if (_type == "SAMPLE") {
+            // The buffer becomes the imported source PCM; until then it is
+            // the 1-byte placeholder every authoring asset carries.
+            if (buffer_exists(_new_asset.buffer)) buffer_delete(_new_asset.buffer);
+            _new_asset.buffer = buffer_create(1, buffer_fixed, 1);
+            scr_sample_create(_new_asset);
+        }
         if (_type == "ROOM_MAP") {
             // Authoring asset: rooms, exits and arrival points. MACRO_ROOMS
             // turns it into tables; it owns no C64 memory of its own.
@@ -2392,6 +2516,12 @@ if (_asset.type == "BITMAP_BUILDER") {
 // SOUND_EDITOR — same reasoning: all interaction lives in
 // scr_sound_editor_editor (Draw GUI). No file, nothing to import.
 if ((_asset.type == "MUSIC_MAKER" || _asset.type == "SFX_MAKER")) {
+    exit;
+}
+
+// SAMPLE — all interaction (IMPORT WAV included) lives in scr_sample_editor.
+// It has no address, so the generic ADDRESS click must not open an edit.
+if (_asset.type == "SAMPLE") {
     exit;
 }
 
@@ -2668,7 +2798,7 @@ if (_asset.type == "META_TILESET") {
         if (_asset.type != "ANIMATION" && _asset.type != "LOAD_ORG" &&
     _asset.type != "LOAD_REU" &&
     _asset.type != "BITMAP_BUILDER" &&
-    _asset.type != "MUSIC_MAKER" && _asset.type != "SFX_MAKER" &&
+    _asset.type != "MUSIC_MAKER" && _asset.type != "SFX_MAKER" && _asset.type != "SAMPLE" &&
             point_in_rectangle(_mx, _my, _addr_x, _iy, _panel_right, _iy + item_h)) {
             editing_address     = true;
             editing_address_idx = hover_idx;
@@ -2976,6 +3106,12 @@ if (mouse_check_button_pressed(mb_right) && _mouse_in_panel && hover_idx >= 0) {
             // heavy-handed (other assets' entries rebuild on next use) but it is
             // the only teardown path, and deletion is rare.
             scr_sound_preview_cache_clear();
+        }
+
+        if (_asset.type == "SAMPLE") {
+            // A preview of the asset being deleted would otherwise play on.
+            scr_sample_preview_stop();
+            scr_digi_free_sample_sound(_asset);
         }
 
         // Remove stale LOAD_ORG linked_asset references to this asset

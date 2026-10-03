@@ -34,6 +34,18 @@ function scr_sound_editor_piano_keys(_x0, _y0, _x1, _y1, _oct0, _n_oct, _mx, _my
     var _black_semi  = [1, 3, 6, 8, 10];
     var _hover = -1;
 
+    // A playing note in an octave this keyboard doesn't show still lights its
+    // note letter, in the nearest shown octave, with its real octave written
+    // on the key - so every voice's note is always visible during playback.
+    var _lit_in = [];
+    for (var _li = 0; _li < array_length(_lit); _li++) {
+        var _ln = _lit[_li][0];
+        var _lo = _ln div 12;
+        var _fo = clamp(_lo, _oct0, _oct0 + _n_oct - 1);
+        array_push(_lit_in, [_fo * 12 + (_ln mod 12), _lit[_li][1], _lo]);
+    }
+    _lit = _lit_in;
+
     // Black keys win the hover where they overlap the whites.
     for (var _o = 0; _o < _n_oct && _hover < 0; _o++) {
         for (var _b = 0; _b < 5; _b++) {
@@ -66,6 +78,14 @@ function scr_sound_editor_piano_keys(_x0, _y0, _x1, _y1, _oct0, _n_oct, _mx, _my
         draw_rectangle(_wx, _y0, _wx + _ww - 1, _y1, false);
         draw_set_color(make_color_rgb(40, 40, 50));
         draw_rectangle(_wx, _y0, _wx + _ww - 1, _y1, true);
+        var _wro = scr_sound_editor_piano_lit_oct(_lit, _wn);
+        if (_wro != -1 && _wro != (_wn div 12)) {
+            // folded in from another octave: show where it really is
+            draw_set_color(c_black);
+            draw_set_halign(fa_center);
+            draw_text_l(_wx + _ww * 0.5, _y0 + _bh + 2, string(_wro));
+            draw_set_halign(fa_left);
+        }
         if ((_w mod 7) == 0) {
             draw_set_color(make_color_rgb(90, 90, 110));
             draw_text_l(_wx + 3, _y1 - 13, "C" + string(_oct0 + (_w div 7)));
@@ -87,9 +107,26 @@ function scr_sound_editor_piano_keys(_x0, _y0, _x1, _y1, _oct0, _n_oct, _mx, _my
                 draw_set_color(make_color_rgb(25, 25, 32));
             }
             draw_rectangle(_bx2, _y0, _bx2 + _bw, _y0 + _bh, false);
+            var _bro = scr_sound_editor_piano_lit_oct(_lit, _bn);
+            if (_bro != -1 && _bro != (_bn div 12)) {
+                draw_set_color(c_white);
+                draw_set_halign(fa_center);
+                draw_text_l(_bx2 + _bw * 0.5, _y0 + _bh - 14, string(_bro));
+                draw_set_halign(fa_left);
+            }
         }
     }
     return _hover;
+}
+
+/// Real octave of the playing note lit on key _note (after folding), or -1.
+function scr_sound_editor_piano_lit_oct(_lit, _note) {
+    for (var _i = 0; _i < array_length(_lit); _i++) {
+        if (_lit[_i][0] == _note && array_length(_lit[_i]) > 2) {
+            return _lit[_i][2];
+        }
+    }
+    return -1;
 }
 
 /// Colour of a playing note on the keyboard, or -1.
@@ -137,6 +174,23 @@ function scr_sound_editor_voice_positions(_m) {
     return _out;
 }
 
+/// JAM mode: play a note with the selected instrument, writing nothing.
+/// Mono = on _voice, cutting whatever that voice was playing. Poly = on the
+/// next voice in turn across every SID chip (3 per chip), so notes overlap.
+function scr_sound_editor_jam_play(_m, _note_name, _voice, _poly) {
+    var _ch = _voice;
+    if (_poly) {
+        var _n = scr_music_sid_count(_m) * 3;
+        _ch = global.music_poly_next mod _n;
+        global.music_poly_next = (_ch + 1) mod _n;
+    }
+    if (_m.sel_instr >= 0 && _m.sel_instr < array_length(_m.instruments)) {
+        scr_sound_instrument_preview_play(_m.instruments[_m.sel_instr], _note_name, _ch, -1, false, _m);
+    } else {
+        scr_sound_preview_play(_note_name, "SQUARE", _ch);
+    }
+}
+
 /// The whole piano panel. _col_pat = the three voices' patterns (noone when a
 /// voice has none), _vis = visible grid rows (for scrolling after a click).
 /// _undo_push / _snap are the editor's undo helpers.
@@ -172,7 +226,50 @@ function scr_sound_editor_piano(_m, _x0, _y0, _x1, _y1, _mx, _my, _col_pat, _vis
         }
     }
     draw_set_color(make_color_rgb(120, 120, 150));
-    draw_text_l(_mb_x + 116, _y0, "HOLD RIGHT MOUSE ON THE KEYS TO HEAR THE SELECTED INSTRUMENT, LEFT CLICK TO WRITE THE NOTE AT THE MARKER");
+    var _hint_jam  = "JAM: LEFT CLICK OR HOLD RIGHT MOUSE ON THE KEYS TO PLAY - NOTHING IS WRITTEN";
+    var _hint_edit = "HOLD RIGHT MOUSE ON THE KEYS TO HEAR THE SELECTED INSTRUMENT, LEFT CLICK TO WRITE THE NOTE AT THE MARKER";
+    if (global.music_jam) {
+        draw_text_l(_mb_x + 116, _y0, _hint_jam);
+    } else {
+        draw_text_l(_mb_x + 116, _y0, _hint_edit);
+    }
+
+    // [EDIT MODE] / [JAM MODE]: JAM plays note keys and piano clicks without
+    // writing anything. [MONOPHONY] / [POLYPHONY]: in JAM, each new note
+    // either cuts the last one on the same voice, or moves on to the next
+    // voice (all voices of every SID chip) so notes ring together.
+    var _tg_x = _mb_x + 116 + max(string_width_l(_hint_jam), string_width_l(_hint_edit)) + 16;
+    var _tg_w = max(string_width_l("EDIT MODE"), string_width_l("JAM MODE")) + 16;
+    var _tg_w2 = max(string_width_l("MONOPHONY"), string_width_l("POLYPHONY")) + 16;
+    var _tg_labels = ["EDIT MODE", "MONOPHONY"];
+    if (global.music_jam) _tg_labels[0] = "JAM MODE";
+    if (global.music_poly) _tg_labels[1] = "POLYPHONY";
+    for (var _tgi = 0; _tgi < 2; _tgi++) {
+        var _tw = _tg_w;
+        if (_tgi == 1) _tw = _tg_w2;
+        var _thov = point_in_rectangle(_mx, _my, _tg_x, _y0 - 2, _tg_x + _tw, _y0 + 12);
+        var _ton = global.music_jam;
+        if (_tgi == 1) _ton = global.music_poly;
+        if (_ton) {
+            draw_set_color(_thov ? make_color_rgb(200, 120, 60) : make_color_rgb(150, 80, 30));
+        } else if (_thov) {
+            draw_set_color(make_color_rgb(65, 80, 100));
+        } else {
+            draw_set_color(make_color_rgb(30, 38, 52));
+        }
+        draw_rectangle(_tg_x, _y0 - 2, _tg_x + _tw, _y0 + 12, false);
+        draw_set_color(c_white);
+        draw_text_l(_tg_x + 8, _y0, _tg_labels[_tgi]);
+        if (_thov && mouse_check_button_pressed(mb_left)) {
+            if (_tgi == 0) {
+                global.music_jam = !global.music_jam;
+            } else {
+                global.music_poly = !global.music_poly;
+                global.music_poly_next = 0;
+            }
+        }
+        _tg_x += _tw + 6;
+    }
 
     // Keys each shown voice is sounding, in the voice colours.
     var _voice_cols = [make_color_rgb(90, 190, 255), make_color_rgb(255, 150, 70), make_color_rgb(120, 225, 120)];
@@ -235,7 +332,7 @@ function scr_sound_editor_piano(_m, _x0, _y0, _x1, _y1, _mx, _my, _col_pat, _vis
         if (_hover_v != _m.pno_hover_v) scr_sound_preview_free_channel(_m.pno_hover_v);
         var _nm = scr_sound_editor_piano_name(_hover);
         if (_m.sel_instr >= 0 && _m.sel_instr < array_length(_m.instruments)) {
-            scr_sound_instrument_preview_play(_m.instruments[_m.sel_instr], _nm, _hover_v);
+            scr_sound_instrument_preview_play(_m.instruments[_m.sel_instr], _nm, _hover_v, -1, false, _m);
         } else {
             scr_sound_preview_play(_nm, "SQUARE", _hover_v);
         }
@@ -243,8 +340,12 @@ function scr_sound_editor_piano(_m, _x0, _y0, _x1, _y1, _mx, _my, _col_pat, _vis
     _m.pno_hover   = _hover;
     _m.pno_hover_v = _hover_v;
 
-    // ── click: write the note at the marker row ──
-    if (_hover >= 0 && mouse_check_button_pressed(mb_left)) {
+    // ── click: JAM plays the key; EDIT writes the note at the marker row ──
+    if (_hover >= 0 && mouse_check_button_pressed(mb_left) && global.music_jam) {
+        // FULL piano follows MONOPHONY / POLYPHONY; each SPLIT keyboard is its own voice.
+        scr_sound_editor_jam_play(_m, scr_sound_editor_piano_name(_hover), _hover_v, global.music_poly && !_split);
+    }
+    if (_hover >= 0 && mouse_check_button_pressed(mb_left) && !global.music_jam) {
         var _pat = _col_pat[_hover_v];
         if (_pat != noone && _m.sel_step < array_length(_pat.steps)) {
             _undo_push(_m, _snap);

@@ -95,6 +95,7 @@ asset_types = [
     "SFX_MAKER",
     "SID_MUSIC",
     "SFX_DATA",
+    "SAMPLE",
     "--- SCREEN & DATA ---",
     "HUD",
     "TEXT_DATA",
@@ -135,8 +136,12 @@ type_colours = {
     HUD           : make_color_rgb( 90, 220, 190),
     ANIMATION     : make_color_rgb(100, 210, 190),
     ROOM_MAP      : make_color_rgb(250, 200,  60),
-    SPRITE_MASK   : make_color_rgb(230, 100, 230)
+    SPRITE_MASK   : make_color_rgb(230, 100, 230),
+    SAMPLE        : make_color_rgb(240, 120, 160)
 };
+// SAMPLE preview audio — one at a time across all SAMPLE assets.
+// See scr_sample_preview_play / scr_sample_preview_stop.
+sample_pv = { active: false, snd: -1, buf: -1, inst: -1, asset: undefined, mode: 0 };
 // -------------------------------------------------------
 // NAME EDITING
 // -------------------------------------------------------
@@ -231,6 +236,20 @@ editing_map_dim       = false;  // true while editing W or H
 editing_map_field     = "";     // "W" or "H"
 editing_map_string    = "";
 editing_map_asset_idx = -1;
+editing_map_name_idx  = -1;     // META_TILESET map being renamed (editing_map_field == "NAME")
+mts_tab_click_map     = -1;     // last map tab clicked, for double-click rename
+mts_tab_click_time    = 0;      // current_time of that click (ms)
+editing_map_col_idx   = -1;     // MAP CHAINS column being typed into (COLVAL)
+// MAP CHAINS panel (scr_mts_chain_panel) - editor state, not saved
+mts_chain_mode         = false; // true = the map area shows the CHAINS panel
+mts_chain_scroll       = 0;     // preview position, in lines from the chain start
+mts_chain_sel_entry    = -1;    // selected entry of the active chain
+mts_chain_list_scroll  = 0;
+mts_chain_entry_scroll = 0;
+mts_chain_view         = 0;     // 0 = COURSE (every chain joined up), 1 = SECTION (the active chain)
+mts_chain_drag         = false; // dragging the preview slider
+mts_chain_col_scroll   = 0;     // first visible row of the COLUMNS list
+mts_chain_zoom         = 1;     // preview zoom-out: 1 = fit the widest map, up to 4 = a quarter of that
 
 // -------------------------------------------------------
 // SFX_DATA ASSET

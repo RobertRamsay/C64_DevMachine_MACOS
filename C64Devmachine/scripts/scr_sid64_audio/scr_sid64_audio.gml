@@ -97,7 +97,7 @@ function scr_sid64_instr_field(_instr, _name, _default) {
 /// _max_sec   cap the rendered length, or -1 for the full tail
 /// _plain_pw  pulse width assumed for a no-instrument note
 /// Returns { snd, buf } (caller stores it in the preview cache) or undefined.
-function scr_sid64_render_note(_instr, _note_name, _max_sec, _plain_pw = 0x0800) {
+function scr_sid64_render_note(_instr, _note_name, _max_sec, _plain_pw = 0x0800, _filt_m = undefined) {
     if (!global.sid64_ok) {
         return undefined;
     }
@@ -120,6 +120,11 @@ function scr_sid64_render_note(_instr, _note_name, _max_sec, _plain_pw = 0x0800)
     }
 
     var _sim = scr_sid64_sim_create(undefined, undefined, false, 0, 0);
+    // The song's filter (mode, resonance, cutoff), as the compiled player's
+    // init sets it, so an instrument with FILTER ON is heard through it — and
+    // its ~FILTER table moves that cutoff — in auditions as well as playback.
+    // Without it the filter mode is off, and a routed voice is silent.
+    scr_sid64_sim_song_filter(_sim, _filt_m);
     // A no-instrument note keeps whatever PW the voice had; give it a usable one.
     scr_sid64_sim_write(_sim, 2, _plain_pw & 0xFF);
     scr_sid64_sim_write(_sim, 3, (_plain_pw >> 8) & 0x0F);
@@ -557,7 +562,15 @@ function scr_sound_instrument_follow_read(_m) {
             var _fi = floor((get_timer() - _f.start_us) / _f.period);
             if (_fi >= 0 && _fi < array_length(_f.trace)) {
                 var _v = _f.trace[_fi];
-                if (is_struct(_v)) array_push(_out, { instr: _f.instr, compiled: _f.compiled, pcs: _v.pcs });
+                if (is_struct(_v)) {
+                    // reSID auditions record the running tables' positions too
+                    // (scr_sid64_voice_display); the GML fallback has none.
+                    var _vt = _v[$ "tpcs"];
+                    if (!is_array(_vt)) {
+                        _vt = [];
+                    }
+                    array_push(_out, { instr: _f.instr, compiled: _f.compiled, pcs: _v.pcs, tpcs: _vt });
+                }
             }
         }
     }

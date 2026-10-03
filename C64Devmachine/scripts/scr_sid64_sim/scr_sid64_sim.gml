@@ -120,24 +120,33 @@ function scr_sid64_sim_create(_m, _song, _loop_row, _ord, _row) {
     }
     // init: the song's filter settings (mode + full volume, resonance, cutoff;
     // no voice routed yet), or plain full volume for an audition.
-    if (is_struct(_m)) {
-        var _fm = _m[$ "filt_mode"];
-        var _fr = _m[$ "filt_res"];
-        var _fc = _m[$ "filt_cut"];
-        if (!is_undefined(_fm)) {
-            _sim.f18 = ((real(_fm) & 0x0F) << 4) | 0x0F;
-        }
-        if (!is_undefined(_fr)) {
-            _sim.f17 = (real(_fr) & 0x0F) << 4;
-        }
-        if (!is_undefined(_fc)) {
-            _sim.fcut = clamp(real(_fc), 0, 2047);
-        }
-        scr_sid64_sim_write(_sim, 0x17, _sim.f17);
-        scr_sid64_sim_cut(_sim);
-    }
+    scr_sid64_sim_song_filter(_sim, _m);
     scr_sid64_sim_write(_sim, 0x18, _sim.f18);
     return _sim;
+}
+
+/// Applies a Music Maker asset's song filter (filt_mode / filt_res /
+/// filt_cut) to a sim, as the compiled player's init does. Nothing happens
+/// for undefined (an audition with no song): plain full volume.
+function scr_sid64_sim_song_filter(_sim, _m) {
+    if (!is_struct(_m)) {
+        return;
+    }
+    var _fm = _m[$ "filt_mode"];
+    var _fr = _m[$ "filt_res"];
+    var _fc = _m[$ "filt_cut"];
+    if (!is_undefined(_fm)) {
+        _sim.f18 = ((real(_fm) & 0x0F) << 4) | 0x0F;
+    }
+    if (!is_undefined(_fr)) {
+        _sim.f17 = (real(_fr) & 0x0F) << 4;
+    }
+    if (!is_undefined(_fc)) {
+        _sim.fcut = clamp(real(_fc), 0, 2047);
+    }
+    scr_sid64_sim_write(_sim, 0x17, _sim.f17);
+    scr_sid64_sim_cut(_sim);
+    scr_sid64_sim_write(_sim, 0x18, _sim.f18);
 }
 
 /// The player's fcut: 11-bit cutoff to $D415 (bits 0-2) / $D416 (bits 3-10).
@@ -452,6 +461,12 @@ function scr_sid64_sim_step(_sim, _v) {
         } else if (_op == 10) {
             _vc.cb = (_vc.active == 2) ? (_arg & 0xFE) : _arg;
             scr_sid64_sim_write(_sim, _r0 + 4, _vc.cb);
+            _vc.pc += 2;
+        } else if (_op == 27) {
+            // V$xy: instrument vibrato from here (speed x, depth y), no delay
+            _vc.ivs = (_arg >> 4) & 15;
+            _vc.ivp = ((_arg & 15) * 4) & 0x7F;
+            _vc.ivdl = 0;
             _vc.pc += 2;
         } else if (_op == 0x03) {
             _vc.pc = _arg;
@@ -1020,5 +1035,15 @@ function scr_sid64_voice_note(_sim, _vc) {
 /// Immutable display snapshot; never expose a voice that is being rendered ahead.
 function scr_sid64_voice_display(_vc) {
     if (!is_struct(_vc.instr) || (!_vc.active && (_vc.cb & 1) == 0)) return undefined;
-    return { instr: _vc.instr, compiled: _vc.display_compiled, pcs: _vc.display_pcs };
+    // tpcs: the record each running table (pitch / pulse / filter) is on, as a
+    // byte offset into this instrument's bytes — lane_pos has already moved
+    // past it, hence - 3. A table carried on in another instrument (>nn) isn't
+    // in these bytes, so it isn't shown.
+    var _tpcs = [];
+    for (var _k = 0; _k < 3; _k++) {
+        if (_vc.lane_count[_k] != 0 && _vc.lane_bytes[_k] == _vc.bytes && _vc.lane_pos[_k] >= 3) {
+            array_push(_tpcs, _vc.lane_pos[_k] - 3);
+        }
+    }
+    return { instr: _vc.instr, compiled: _vc.display_compiled, pcs: _vc.display_pcs, tpcs: _tpcs };
 }

@@ -249,6 +249,18 @@ if (instance_exists(obj_asset_manager)) {
             _meta_out.map_size_key = variable_struct_exists(_a.meta, "map_size_key") ? _a.meta.map_size_key : "";
             _meta_out.map_w        = variable_struct_exists(_a.meta, "map_w") ? _a.meta.map_w : [];
             _meta_out.map_h        = variable_struct_exists(_a.meta, "map_h") ? _a.meta.map_h : [];
+            _meta_out.raw_rows     = _a.meta.raw_rows;
+            _meta_out.map_names    = _a.meta.map_names;
+            _meta_out.map_reps       = _a.meta.map_reps;
+            _meta_out.map_addr       = _a.meta.map_addr;
+            _meta_out.chains         = _a.meta.chains;
+            _meta_out.chain_cols     = _a.meta.chain_cols;
+            _meta_out.chain_dir      = _a.meta.chain_dir;
+            _meta_out.chain_emit     = _a.meta.chain_emit;
+            _meta_out.chain_tab_addr = _a.meta.chain_tab_addr;
+            _meta_out.chain_rev      = _a.meta.chain_rev;
+            _meta_out.chain_col_link = _a.meta.chain_col_link;
+            _meta_out.active_chain   = _a.meta.active_chain;
         }
 		
 		
@@ -260,6 +272,10 @@ if (instance_exists(obj_asset_manager)) {
         if (_a.type == "SPRITE_MASK") {
 		     _meta_out = scr_sprmask_save_meta(_a);
 		 }
+        if (_a.type == "SAMPLE") {
+            // The source PCM goes out as the asset blob; meta is the settings.
+            _meta_out = scr_sample_save_meta(_a);
+        }
 		 if (_a.type == "ROOM_MAP") {
 		     // Rooms, exits and arrival points ARE the asset; the rest is editor state.
 		     _meta_out.rooms    = _a.meta.rooms;
@@ -295,6 +311,16 @@ if (instance_exists(obj_asset_manager)) {
 
 		 if ((_a.type == "MUSIC_MAKER" || _a.type == "SFX_MAKER")) {
             scr_music_sid_copy_meta(_a.meta, _meta_out);
+            if (_a.type == "MUSIC_MAKER") {
+                // Digi track: rate, sample slots, digi pattern pool. Order rows
+                // carry their dg index inside songs[].
+                _meta_out.digi_rate     = _a.meta.digi_rate;
+                _meta_out.digi_samples  = _a.meta.digi_samples;
+                _meta_out.digi_patterns = _a.meta.digi_patterns;
+                _meta_out.digi_boost    = _a.meta.digi_boost;
+                _meta_out.instr_div     = _a.meta.instr_div;    // commands box divider
+                _meta_out.digi_on       = _a.meta.digi_on;
+            }
             _meta_out.voice_mask = variable_struct_exists(_a.meta, "voice_mask") ? _a.meta.voice_mask : 7;
             _meta_out.sfx_chip = variable_struct_exists(_a.meta, "sfx_chip") ? _a.meta.sfx_chip : 0;
             _meta_out.instruments      = variable_struct_exists(_a.meta, "instruments")      ? _a.meta.instruments      : [];

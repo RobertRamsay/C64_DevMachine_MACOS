@@ -49,5 +49,24 @@ function scr_asset_meta_tileset_create(_asset) {
     _asset.meta.pan_start_oy           = 0;    // offset_y at the moment the grab began
     _asset.meta.stamp_clip             = [];   // copied metatile cells (char indices) for Ctrl+C / Ctrl+V
     _asset.meta.stamp_clip_valid       = false;// true once a stamp has been copied
+    _asset.meta.raw_rows               = 0;    // 1 = RAW ROWS: every map is emitted at the asset address as plain
+                                               //     char rows (map_w bytes a row), maps one after another, for
+                                               //     engines that read the map themselves. 0 = editor data only.
+                                               // 2 = RAW ROWS BOTTOM UP: the same, each map's rows emitted last
+                                               //     row first - for vertical scrollers that feed new rows in at
+                                               //     the top, so the map is drawn the way it looks on screen.
+    _asset.meta.map_names              = [];   // optional name per real map, shown on its tab ("" = MAP n)
+    // MAP CHAINS (scr_mts_chain): per-map repeat + fixed address, the chains
+    // themselves, their extra byte columns, and the table export settings.
+    _asset.meta.map_reps               = [];   // per map: times it is drawn in a row (1+)
+    _asset.meta.map_addr               = [];   // per map: RAW ROWS address, -1 = after the previous map
+    _asset.meta.chains                 = [];   // { name, maps[], cols[] }
+    _asset.meta.chain_cols             = [];   // extra byte column names, one byte per chain each
+    _asset.meta.chain_col_link         = [];   // per column: 1 = holds chain numbers (renumbered on move / delete)
+    _asset.meta.chain_dir              = 0;    // preview / feed direction: 0 UP 1 DOWN 2 LEFT 3 RIGHT
+    _asset.meta.chain_emit             = 0;    // 1 = emit the map + chain tables (RAW ROWS only)
+    _asset.meta.chain_tab_addr         = -1;   // table address, -1 = straight after the last map
+    _asset.meta.chain_rev              = 0;    // 1 = the engine feeds a chain's list LAST entry first
+    _asset.meta.active_chain           = 0;
     _asset.address                     = 0x8000;
 }

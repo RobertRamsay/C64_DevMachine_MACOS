@@ -897,6 +897,53 @@ function scr_load_workspace_from_path_core(_path, _mcp = false) {
                 // the dimensions just loaded; a stale saved key must never
                 // masquerade as a user resize and erase the restored maps.
                 _new_asset.meta.map_size_key = string(_new_asset.meta.stamp_w) + "x" + string(_new_asset.meta.stamp_h);
+                // RAW ROWS export flag (scr_mts_raw_rows_emit). Older saves don't have it.
+                if (variable_struct_exists(_tsm, "raw_rows")) {
+                    _new_asset.meta.raw_rows = real(_tsm.raw_rows);
+                } else {
+                    _new_asset.meta.raw_rows = 0;
+                }
+                // Per-map names (tabs). Padded to the map count.
+                if (variable_struct_exists(_tsm, "map_names")) {
+                    _new_asset.meta.map_names = _tsm.map_names;
+                } else {
+                    _new_asset.meta.map_names = [];
+                }
+                while (array_length(_new_asset.meta.map_names) < array_length(_new_asset.meta.maps)) {
+                    array_push(_new_asset.meta.map_names, "");
+                }
+                // MAP CHAINS (scr_mts_chain). Older saves have none of these.
+                if (variable_struct_exists(_tsm, "map_reps")) {
+                    _new_asset.meta.map_reps = _tsm.map_reps;
+                }
+                if (variable_struct_exists(_tsm, "map_addr")) {
+                    _new_asset.meta.map_addr = _tsm.map_addr;
+                }
+                if (variable_struct_exists(_tsm, "chains")) {
+                    _new_asset.meta.chains = _tsm.chains;
+                }
+                if (variable_struct_exists(_tsm, "chain_cols")) {
+                    _new_asset.meta.chain_cols = _tsm.chain_cols;
+                }
+                if (variable_struct_exists(_tsm, "chain_dir")) {
+                    _new_asset.meta.chain_dir = real(_tsm.chain_dir);
+                }
+                if (variable_struct_exists(_tsm, "chain_emit")) {
+                    _new_asset.meta.chain_emit = real(_tsm.chain_emit);
+                }
+                if (variable_struct_exists(_tsm, "chain_tab_addr")) {
+                    _new_asset.meta.chain_tab_addr = real(_tsm.chain_tab_addr);
+                }
+                if (variable_struct_exists(_tsm, "chain_col_link")) {
+                    _new_asset.meta.chain_col_link = _tsm.chain_col_link;
+                }
+                if (variable_struct_exists(_tsm, "chain_rev")) {
+                    _new_asset.meta.chain_rev = real(_tsm.chain_rev);
+                }
+                if (variable_struct_exists(_tsm, "active_chain")) {
+                    _new_asset.meta.active_chain = real(_tsm.active_chain);
+                }
+                scr_mts_maps_sync(_new_asset.meta);
 
 	            // Backfill per-map dim arrays to map_count so the viewer never
 	            // indexes past a short or empty array (old saves store no map_w/map_h).
@@ -1028,6 +1075,14 @@ function scr_load_workspace_from_path_core(_path, _mcp = false) {
 	            }
 	            scr_room_map_restore(_new_asset, _rmm);
 	        }
+	        if (_ad.type == "SAMPLE") {
+	            // The blob above already decoded the source PCM into the buffer.
+	            var _sam = _ad[$ "meta"];
+	            if (is_undefined(_sam)) {
+	                _sam = {};
+	            }
+	            scr_sample_restore(_new_asset, _sam);
+	        }
 	        if (_ad.type == "HUD") {
 	            // Seed a complete meta first, then lay the saved fields over it —
 	            // an asset written by an older build simply keeps the defaults for
@@ -1062,6 +1117,32 @@ function scr_load_workspace_from_path_core(_path, _mcp = false) {
 	            scr_sound_editor_create(_new_asset);
 	            var _sem = variable_struct_exists(_ad, "meta") ? _ad.meta : {};
                 scr_music_sid_copy_meta(_sem, _new_asset.meta);
+                // Digi track (absent in files saved before it existed — the
+                // defaults from scr_sound_editor_create stand).
+                var _dg_rate = _sem[$ "digi_rate"];
+                if (!is_undefined(_dg_rate)) {
+                    _new_asset.meta.digi_rate = real(_dg_rate);
+                }
+                var _dg_smp = _sem[$ "digi_samples"];
+                if (is_array(_dg_smp)) {
+                    _new_asset.meta.digi_samples = _dg_smp;
+                }
+                var _dg_pats = _sem[$ "digi_patterns"];
+                if (is_array(_dg_pats)) {
+                    _new_asset.meta.digi_patterns = _dg_pats;
+                }
+                var _dg_boost = _sem[$ "digi_boost"];
+                if (!is_undefined(_dg_boost)) {
+                    _new_asset.meta.digi_boost = clamp(real(_dg_boost), 0, 3);
+                }
+                var _ins_div = _sem[$ "instr_div"];
+                if (!is_undefined(_ins_div)) {
+                    _new_asset.meta.instr_div = real(_ins_div);
+                }
+                var _dg_on = _sem[$ "digi_on"];
+                if (!is_undefined(_dg_on)) {
+                    _new_asset.meta.digi_on = real(_dg_on);
+                }
                 _new_asset.meta.voice_mask = variable_struct_exists(_sem,"voice_mask") ? _sem.voice_mask : 7;
                 _new_asset.meta.sfx_chip = variable_struct_exists(_sem,"sfx_chip") ? _sem.sfx_chip : 0;
 	            if (variable_struct_exists(_sem, "instruments"))      _new_asset.meta.instruments      = _sem.instruments;

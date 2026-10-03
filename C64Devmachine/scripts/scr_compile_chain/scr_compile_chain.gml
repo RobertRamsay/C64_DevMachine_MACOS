@@ -1596,9 +1596,34 @@ case "MACRO_VWAIT": {
         array_push(_list, ["label",   _hi,       _id]);
         array_push(_list, ["cmp_abs", 0xD012,    _id]);
         array_push(_list, ["beq",     _hi,       _id]);
+    } else if (_line >= 0 && _line < 0xFF) {
+        // LITERAL MODE — wait for the raster to REACH line + 1, not to EQUAL
+        // the line. An exact compare misses the frame whenever an interrupt
+        // (a digi NMI is ~100 cycles; a line is 63) covers the whole line, so
+        // anything paced by VWAIT ran slow while samples played. Exits on the
+        // same line the old "match, then wait for the next line" did.
+        //   stage 1: wait while in this frame's zone (line+1 .. bottom), so a
+        //            second call in the same frame waits for the next one
+        //   stage 2: wait until the zone starts (any line >= line+1)
+        var _zone = (_line + 1) & 0xFF;
+        var _dn = "vwait_dn_" + string(real(_id));
+        array_push(_list, ["label",   _lo,    _id]);
+        array_push(_list, ["lda_abs", 0xD011, _id]);
+        array_push(_list, ["bmi",     _lo,    _id]);
+        array_push(_list, ["lda_abs", 0xD012, _id]);
+        array_push(_list, ["cmp_imm", _zone,  _id]);
+        array_push(_list, ["bcs",     _lo,    _id]);
+        array_push(_list, ["label",   _hi,    _id]);
+        array_push(_list, ["lda_abs", 0xD011, _id]);
+        array_push(_list, ["bmi",     _dn,    _id]);
+        array_push(_list, ["lda_abs", 0xD012, _id]);
+        array_push(_list, ["cmp_imm", _zone,  _id]);
+        array_push(_list, ["bcc",     _hi,    _id]);
+        array_push(_list, ["label",   _dn,    _id]);
     } else {
-        // LITERAL MODE — gate on D011 bit 8 (must be clear) so the line
-        // only matches in the top portion of the frame, then settle.
+        // LITERAL MODE, line 255 (its next line is past 255) — gate on D011
+        // bit 8 (must be clear) so the line only matches in the top portion
+        // of the frame, then settle.
         array_push(_list, ["label",   _lo,    _id]);
         array_push(_list, ["lda_abs", 0xD011, _id]);
         array_push(_list, ["bmi",     _lo,    _id]);
@@ -17090,7 +17115,14 @@ case "MACRO_SID_SONG": {
         break;
     }
 
-    scr_sid_song_build(_list, _id, _se, _asset_name, _auto_init, _zp, _hr, _chip_base, false);
+    // [6] VOICE LOCK: emit <key>vlock so the game can take voices from the song.
+    var _lock = false;
+    if (array_length(_i0) > 6 && is_real(_i0[6])) {
+        if (real(_i0[6]) != 0) {
+            _lock = true;
+        }
+    }
+    scr_sid_song_build(_list, _id, _se, _asset_name, _auto_init, _zp, _hr, _chip_base, false, "", _lock);
 } break;	
 	
 	
@@ -19583,6 +19615,7 @@ for (var _oi = 0; _oi < array_length(_org_nodes); _oi++) {
 		    if (_a.type == "MAP_DATA"   && (ds_map_exists(_used_map, _a.name) || ds_map_exists(_load_org_linked, _a.name))) array_push(_all_assets, _a);
 			if (_a.type == "TEXT_DATA"  && (ds_map_exists(_used_str,  _a.name) || ds_map_exists(_load_org_linked, _a.name))) array_push(_all_assets, _a);
 			if (_a.type == "BYTE_DATA"  ) array_push(_all_assets, _a);
+			if (_a.type == "META_TILESET" && _a.meta.raw_rows >= 1) array_push(_all_assets, _a);
 			if (_a.type == "LINE_COLL"  ) array_push(_all_assets, _a);
 			if (_a.type == "SFX_DATA" && ds_map_exists(_used_sfx, _a.name) && !ds_map_exists(_load_org_linked, _a.name)) array_push(_all_assets, _a);
 			if (_a.type == "SFX_DATA" && ds_map_exists(_load_org_linked, _a.name)) array_push(_all_assets, _a);
@@ -19601,6 +19634,13 @@ for (var _oi = 0; _oi < array_length(_org_nodes); _oi++) {
 
 	    for (var _ai = 0; _ai < array_length(_all_assets); _ai++) {
 			var _a   = _all_assets[_ai];
+			// META_TILESET in RAW ROWS mode: no buffer payload, the maps are
+			// flattened to plain char rows straight from the editor data.
+			if (_a.type == "META_TILESET") {
+			    array_push(instruction_list, ["org", _a.address]);
+			    scr_mts_raw_rows_emit(instruction_list, _a);
+			    continue;
+			}
 	        var _buf = _a.buffer;
 	        if (!buffer_exists(_buf)) continue;
 	        var _sz  = buffer_get_size(_buf);

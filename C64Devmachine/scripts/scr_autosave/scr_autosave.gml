@@ -137,9 +137,24 @@ var _base = "unsaved";
                 _mo.map_size_key = variable_struct_exists(_me, "map_size_key") ? _me.map_size_key : "";
                 _mo.map_w        = variable_struct_exists(_me, "map_w")        ? _me.map_w        : [];
                 _mo.map_h        = variable_struct_exists(_me, "map_h")        ? _me.map_h        : [];
+                _mo.raw_rows     = _me.raw_rows;
+                _mo.map_names    = _me.map_names;
+                _mo.map_reps       = _me.map_reps;
+                _mo.map_addr       = _me.map_addr;
+                _mo.chains         = _me.chains;
+                _mo.chain_cols     = _me.chain_cols;
+                _mo.chain_dir      = _me.chain_dir;
+                _mo.chain_emit     = _me.chain_emit;
+                _mo.chain_tab_addr = _me.chain_tab_addr;
+                _mo.chain_rev      = _me.chain_rev;
+                _mo.chain_col_link = _me.chain_col_link;
+                _mo.active_chain   = _me.active_chain;
             }
             if (_a.type == "SPRITE_MASK") {
                 _mo = scr_sprmask_save_meta(_a);
+            }
+            if (_a.type == "SAMPLE") {
+                _mo = scr_sample_save_meta(_a);
             }
             if (_a.type == "ROOM_MAP") {
                 _mo.rooms    = _me.rooms;
@@ -172,6 +187,14 @@ var _base = "unsaved";
             }
             if ((_a.type == "MUSIC_MAKER" || _a.type == "SFX_MAKER")) {
                 scr_music_sid_copy_meta(_me, _mo);
+                if (_a.type == "MUSIC_MAKER") {
+                    _mo.digi_rate     = _me.digi_rate;
+                    _mo.digi_samples  = _me.digi_samples;
+                    _mo.digi_patterns = _me.digi_patterns;
+                    _mo.digi_boost    = _me.digi_boost;
+                    _mo.instr_div     = _me.instr_div;
+                    _mo.digi_on       = _me.digi_on;
+                }
                 _mo.voice_mask = variable_struct_exists(_me, "voice_mask") ? _me.voice_mask : 7;
             _mo.sfx_chip = variable_struct_exists(_me, "sfx_chip") ? _me.sfx_chip : 0;
             _mo.instruments      = variable_struct_exists(_me, "instruments")      ? _me.instruments      : [];

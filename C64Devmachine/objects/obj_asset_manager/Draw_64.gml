@@ -351,7 +351,7 @@ for (var _pos = 0; _pos < _disp_n; _pos++) {
         draw_set_color(c_lime);
         var _blink = ((current_time mod 600) < 300) ? "_" : " ";
         draw_text_l(_panel_right - 6, _iy + 12, editing_addr_string + _blink);
-    } else if (_asset.type == "LOAD_ORG" || _asset.type == "LOAD_REU" || _asset.type == "BITMAP_BUILDER" || (_asset.type == "MUSIC_MAKER" || _asset.type == "SFX_MAKER") || _asset.type == "HUD" || (_asset.type == "ROOM_MAP" || _asset.type == "ANIMATION") || _asset.type == "SPRITE_MASK") {
+    } else if (_asset.type == "LOAD_ORG" || _asset.type == "LOAD_REU" || _asset.type == "BITMAP_BUILDER" || (_asset.type == "MUSIC_MAKER" || _asset.type == "SFX_MAKER") || _asset.type == "HUD" || (_asset.type == "ROOM_MAP" || _asset.type == "ANIMATION") || _asset.type == "SPRITE_MASK" || _asset.type == "SAMPLE") {
         // LOAD_ORG is a manifest, not physical data — it has no meaningful
         // load address (each linked asset carries its own). BITMAP_BUILDER is
         // an internal editor asset: it emits a derived BYTE_DATA table which
@@ -805,7 +805,7 @@ var _vy1 = 108;
 if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list)) {
     var _asset = ds_list_find_value(asset_list, viewer_asset);
 
-	var _wide_editor = (_asset.type == "BITMAP_BUILDER" || (_asset.type == "MUSIC_MAKER" || _asset.type == "SFX_MAKER") || _asset.type == "HUD" || (_asset.type == "ROOM_MAP" || _asset.type == "ANIMATION") || _asset.type == "SPRITE_MASK");
+	var _wide_editor = (_asset.type == "BITMAP_BUILDER" || (_asset.type == "MUSIC_MAKER" || _asset.type == "SFX_MAKER") || _asset.type == "HUD" || (_asset.type == "ROOM_MAP" || _asset.type == "ANIMATION") || _asset.type == "SPRITE_MASK" || _asset.type == "SAMPLE");
 	_vx1 = _wide_editor ? 30 : 288;
 	_vy1 = 108;
 	var _vx2 = _wide_editor ? (panel_x + 20) : (panel_x - 10);
@@ -816,15 +816,24 @@ if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list))
 	}
 	var _vy2 = 972;
     if (_asset.type == "MUSIC_MAKER") { _vy1=40; _vy2=_gui_h-40; }
-
+    // The meta tile map editor takes the whole screen too (same margins as the
+    // Music Maker) - its layout is relative, so the map area and the edit
+    // canvas grow with it. Must match obj_asset_manager Step.
+    if (_asset.type == "META_TILESET") {
+        _vx1 = 30;
+        _vx2 = _gui_w - 30;
+        _vy1 = 40;
+        _vy2 = _gui_h - 40;
+    }
+	
     var _vw    = _vx2 - _vx1;
     var _vh    = _vy2 - _vy1;
 
-     //Backdrop
-    draw_set_color(make_color_rgb(0, 0, 0));
-    draw_set_alpha(0.6);
-    draw_rectangle(0, 0, _gui_w, _gui_h, false);
+     //Backdrop - solid: nothing of the workspace (nodes, boxes, asset panel)
+     //shows behind an open editor
+    draw_set_color(make_color_rgb(8, 8, 12));
     draw_set_alpha(1.0);
+    draw_rectangle(0, 0, _gui_w, _gui_h, false);
 
     // Panel
     draw_set_color(make_color_rgb(18, 18, 28));
@@ -888,8 +897,8 @@ if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list))
     var _lby1     = _cy;
     var _lby2     = _cy + 20;
     if (!_hide_import && _asset.type != "LOAD_ORG" && _asset.type != "LOAD_REU"
-	&& _asset.type != "META_TILESET" && _asset.type != "BITMAP_BUILDER"
-	&& _asset.type != "MUSIC_MAKER" && _asset.type != "SFX_MAKER" && _asset.type != "HUD" && _asset.type != "ROOM_MAP" && _asset.type != "ANIMATION" && _asset.type != "SPRITE_MASK"
+	&& _asset.type != "META_TILESET" && _asset.type != "BITMAP_BUILDER" 
+	&& _asset.type != "MUSIC_MAKER" && _asset.type != "SFX_MAKER" && _asset.type != "HUD" && _asset.type != "ROOM_MAP" && _asset.type != "ANIMATION" && _asset.type != "SPRITE_MASK" && _asset.type != "SAMPLE"
 	&& !(_asset.type == "BYTE_DATA" && variable_struct_exists(_asset.meta, "is_save_file") && _asset.meta.is_save_file)) {
         var _lb_hover = point_in_rectangle(_mx, _my, _lbx1, _lby1, _lbx2, _lby2);
         draw_set_color(_lb_hover ? make_color_rgb(80, 200, 80) : make_color_rgb(30, 90, 40));
@@ -975,7 +984,7 @@ if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list))
     // asset with no C64 payload — suppress the label entirely rather than
     // showing an empty field.
     draw_set_font_l(fnt_c64_tiny);
-    if (_asset.type != "BITMAP_BUILDER" && _asset.type != "MUSIC_MAKER" && _asset.type != "SFX_MAKER" && _asset.type != "HUD" && _asset.type != "ROOM_MAP" && _asset.type != "ANIMATION" && _asset.type != "SPRITE_MASK") {
+    if (_asset.type != "BITMAP_BUILDER" && _asset.type != "MUSIC_MAKER" && _asset.type != "SFX_MAKER" && _asset.type != "HUD" && _asset.type != "ROOM_MAP" && _asset.type != "ANIMATION" && _asset.type != "SPRITE_MASK" && _asset.type != "SAMPLE") {
         draw_set_color(c_ltgray); draw_text_l(_vx1 + 10, _cy, "ADDRESS:");
     }
 
@@ -987,10 +996,12 @@ if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list))
         draw_text_l(_vx1 + 78, _cy, editing_addr_string + _blink);
         draw_set_color(c_gray);
         draw_text_l(_vx1 + 170, _cy, "ENTER TO CONFIRM");
-    } else if (_asset.type == "LOAD_ORG" || _asset.type == "LOAD_REU" || _asset.type == "BITMAP_BUILDER" || _asset.type == "HUD" || (_asset.type == "ROOM_MAP" || _asset.type == "ANIMATION") || _asset.type == "SPRITE_MASK") {
-        // LOAD_ORG is a manifest; BITMAP_BUILDER is an internal authoring asset
-        // whose output BYTE_DATA carries the real address. Neither has one of
-        // its own — draw nothing, no value, no hover/edit affordance.
+    } else if (_asset.type == "LOAD_ORG" || _asset.type == "LOAD_REU" || _asset.type == "BITMAP_BUILDER" || (_asset.type == "MUSIC_MAKER" || _asset.type == "SFX_MAKER") || _asset.type == "HUD" || (_asset.type == "ROOM_MAP" || _asset.type == "ANIMATION") || _asset.type == "SPRITE_MASK" || _asset.type == "SAMPLE") {
+        // LOAD_ORG is a manifest — no meaningful load address. BITMAP_BUILDER
+        // and SOUND_EDITOR are internal-only; their emitted BYTE_DATA/TEXT_DATA
+        // assets hold the real addresses. Show a dash, no hover/edit affordance.
+        draw_set_color(make_color_rgb(90, 90, 110));
+        draw_text_l(_vx1 + 80, _cy, "--");
     } else {
         var _ah = string_upper(decimal_to_hex(_asset.address));
         while (string_length(_ah) < 4) _ah = "0" + _ah;
@@ -1063,6 +1074,11 @@ case "ANIMATION": {
 case "ROOM_MAP": {
     // Map view: rooms as thumbnails, exits as arrows, per-room panel on the right.
     scr_room_map_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my);
+} break;
+
+case "SAMPLE": {
+    // Wide panel: the waveforms want the width.
+    scr_sample_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my);
 } break;
 
 case "HUD": {
@@ -8884,6 +8900,60 @@ case "META_TILESET": {
     var _rv_x2r = _rv_bx2 - 4;              // right edge for right-aligned items
     var _rv_rh  = 16;                       // row height
     var _rv_th  = string_height("X");     // text height, for vertical centring
+
+    // ---- RAW ROWS: emit the maps at the asset address as plain char rows ----
+    // For engines that read the map themselves (no METASCROLL / METAMAP):
+    // every map, map_w bytes a row, one map after another, label <NAME>_MAP<n>.
+    var _rr_on  = (_m.raw_rows >= 1);
+    var _rr_lbl = "RAW ROWS: OFF";
+    if (_m.raw_rows == 1) {
+        _rr_lbl = "RAW ROWS: ON";
+    }
+    if (_m.raw_rows == 2) {
+        _rr_lbl = "RAW ROWS: UP";
+    }
+    var _rr_x2  = _rv_x1 + string_width_l("RAW ROWS: OFF") + 10;
+    var _rr_y2  = _cy + 14;
+    var _rr_hov = point_in_rectangle(_mx, _my, _rv_x1, _cy, _rr_x2, _rr_y2);
+    if (_rr_on) {
+        draw_set_color(make_color_rgb(20, 70, 50));
+    } else {
+        draw_set_color(make_color_rgb(35, 35, 45));
+    }
+    if (_rr_hov) {
+        draw_set_color(make_color_rgb(40, 110, 80));
+    }
+    draw_rectangle(_rv_x1, _cy, _rr_x2, _rr_y2, false);
+    draw_set_color(make_color_rgb(80, 200, 140));
+    draw_rectangle(_rv_x1, _cy, _rr_x2, _rr_y2, true);
+    draw_set_color(c_white);
+    draw_set_halign(fa_center);
+    draw_text_l((_rv_x1 + _rr_x2) * 0.5, _cy + 1, _rr_lbl);
+    draw_set_halign(fa_left);
+    if (_rr_on) {
+        var _rr_sz  = 0;
+        var _rr_rng = scr_mts_raw_rows_ranges(_asset);
+        for (var _rri = 0; _rri < array_length(_rr_rng); _rri++) {
+            _rr_sz += _rr_rng[_rri][1];
+        }
+        draw_set_color(make_color_rgb(140, 200, 180));
+        draw_text_l(_rr_x2 + 6, _cy + 1, "$" + string_upper(decimal_to_hex(_asset.address)) + " " + string(_rr_sz) + "B");
+    }
+    if (_rr_hov && mouse_check_button_pressed(mb_left)) {
+        // OFF -> ON (top row first) -> UP (bottom row first) -> OFF
+        if (_m.raw_rows == 0) {
+            _m.raw_rows = 1;
+        } else if (_m.raw_rows == 1) {
+            _m.raw_rows = 2;
+        } else {
+            _m.raw_rows = 0;
+        }
+        _m.is_dirty             = true;
+        global.undo_dirty       = true;
+        global.addresses_dirty  = true;
+    }
+    _cy += 18;
+
     if (_run_node == noone) {
         draw_set_color(make_color_rgb(110, 110, 130));
         draw_text_l(_rv_x1, _cy + 1, "RUN VIEW: CONNECT A METASCROLL");
@@ -9252,7 +9322,12 @@ case "META_TILESET": {
         var _blank_len = _test_cols * _test_rows;
         _m.test_grid = array_create(_blank_len, -1);
         for (var _clr = 0; _clr < _m.map_count; _clr++) {
-            _m.maps[_clr] = array_create(_blank_len, -1);
+            // each map keeps its own char size (maps can differ - RAW ROWS segments)
+            var _clr_len = _blank_len;
+            if (_clr < array_length(_m.map_w) && _clr < array_length(_m.map_h)) {
+                _clr_len = floor(_m.map_w[_clr] / _m.stamp_w) * floor(_m.map_h[_clr] / _m.stamp_h);
+            }
+            _m.maps[_clr] = array_create(_clr_len, -1);
         }
         _m.map_size_key = _map_size_key;
     }
@@ -9614,10 +9689,19 @@ case "META_TILESET": {
     //   → GROW it, padding the new cells with -1 (empty) so existing tiles are
     //   preserved and bottom-row clicks land in-bounds (no out-of-range wipe).
     // - Too LONG → trim the surplus.
-    var _want_len = _test_cols * _test_rows;
+    // Every map is checked against ITS OWN map_w / map_h, not the active map's:
+    // maps in one tileset can differ in size (RAW ROWS segments), and sizing
+    // them all to the active map trimmed or padded every other map each frame.
     for (var _mmi = 0; _mmi < _m.map_count; _mmi++) {
+        var _mm_cols = _test_cols;
+        var _mm_rows = _test_rows;
+        if (_mmi < array_length(_m.map_w) && _mmi < array_length(_m.map_h)) {
+            _mm_cols = floor(_m.map_w[_mmi] / _m.stamp_w);
+            _mm_rows = floor(_m.map_h[_mmi] / _m.stamp_h);
+        }
+        var _want_len = _mm_cols * _mm_rows;
         var _mmi_len = array_length(_m.maps[_mmi]);
-        if (_test_cols <= 0 || _mmi_len == 0 || (_mmi_len mod _test_cols) != 0) {
+        if (_mm_cols <= 0 || _mmi_len == 0 || (_mmi_len mod _mm_cols) != 0) {
             // Malformed width or empty → blank grid at the expected size.
             _m.maps[_mmi] = array_create(_want_len, -1);
         } else if (_mmi_len < _want_len) {
@@ -10061,12 +10145,32 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
         }
     }
 
+    // ===== CHAINS toggle: the map area becomes the MAP CHAINS panel =====
+    var _chn_x1  = _mvt_x2 + 8;
+    var _chn_x2  = _chn_x1 + 70;
+    var _chn_hov = point_in_rectangle(_mx, _my, _chn_x1, _vo_y, _chn_x2, _vo_y + 18);
+    if (mts_chain_mode) {
+        draw_set_color(make_color_rgb(70, 50, 10));
+    } else {
+        draw_set_color(make_color_rgb(30, 30, 20));
+    }
+    draw_rectangle(_chn_x1, _vo_y, _chn_x2, _vo_y + 18, false);
+    draw_set_color(make_color_rgb(220, 170, 60));
+    draw_rectangle(_chn_x1, _vo_y, _chn_x2, _vo_y + 18, true);
+    draw_set_color(make_color_rgb(255, 220, 120));
+    draw_set_halign(fa_center);
+    draw_text_l((_chn_x1 + _chn_x2) * 0.5, _vo_y + 2, L("CHAINS"));
+    draw_set_halign(fa_left);
+    if (_chn_hov && mouse_check_button_pressed(mb_left)) {
+        mts_chain_mode = !mts_chain_mode;
+    }
+
     // Mouse wheel over the map area zooms continuously: MAP mode zooms up to
     // (and hands off into VIEW mode at) VIEW's own fit zoom, and zooming out
     // from VIEW mode drops back into MAP mode at that same zoom level before
     // continuing to zoom out from there (8px floor). VIEW's W/H spinners
     // still resize the window itself.
-    var _wheel_over_map = point_in_rectangle(_mx, _my, _test_x1, _canvas_y1, _test_x2, _canvas_y2);
+    var _wheel_over_map = point_in_rectangle(_mx, _my, _test_x1, _canvas_y1, _test_x2, _canvas_y2) && !mts_chain_mode;   // the CHAINS panel uses the wheel itself
     if (_wheel_over_map)
     {
         if (_m.edit_view_mode == 0)
@@ -10114,15 +10218,31 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
     draw_set_font_l(fnt_c64_tiny);
     draw_set_color(make_color_rgb(80, 200, 255));
     draw_text_l(_test_x1 - 64, _map_top - 3, (_m.active_map < 0) ? L("TEST MAP") : L("MAP ") + string(_m.active_map));
+    // Full name of the selected map, right-aligned above the tabs (the tabs
+    // only have room for the start of it).
+    if (_m.active_map >= 0 && _m.active_map < array_length(_m.map_names)) {
+        var _amn = _m.map_names[_m.active_map];
+        if (editing_map_dim && editing_map_field == "NAME" && editing_map_asset_idx == viewer_asset && editing_map_name_idx == _m.active_map) {
+            _amn = editing_map_string + "_";
+        }
+        if (_amn != "") {
+            draw_set_color(make_color_rgb(255, 220, 120));
+            draw_set_halign(fa_right);
+            // Sits on its own line above the panel's top edge, clear of the tabs.
+            draw_text_l(_test_x2 - 6, _map_top - string_height("X") - 2, L("MAP ") + string(_m.active_map) + ": " + _amn);
+            draw_set_halign(fa_left);
+        }
+    }
 
 // ---- MAP SELECTOR ROW (wraps + scrolls; 4 visible rows) ----
     var _msel_x0      = _test_x1 + 20;
     var _msel_y0      = _map_top;
-    var _msel_bw      = 44;
+    var _msel_bw      = 72;     // wide enough for a short map name
     var _msel_bh      = 15;
     var _msel_gap     = 4;
     var _msel_lh      = _msel_bh + 7;
-    var _msel_per_row = 15;
+    // As many tabs a row as fit the panel (wider tabs, so fewer than before).
+    var _msel_per_row = max(4, floor((_test_x2 - _msel_x0) / (_msel_bw + _msel_gap)));
     var _msel_vis_rows = 3;
     if (!variable_struct_exists(_m, "map_tab_scroll")) _m.map_tab_scroll = 0;
     var _msel_total   = _m.map_count + 2;
@@ -10159,12 +10279,66 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
             draw_rectangle(_scx, _scy, _scx + _msel_bw, _scy + _msel_bh, false);
             draw_set_color(_sel ? c_white : make_color_rgb(120, 180, 140));
             draw_set_halign(fa_center);
-            draw_text_l(_scx + _msel_bw * 0.5, _scy , L("MAP ") + string(_mbi));
+            var _mtab = L("MAP ") + string(_mbi);
+            draw_set_font_l(fnt_c64_nano);   // names are measured (and drawn) in the small font
+            if (_mbi < array_length(_m.map_names)) {
+                if (_m.map_names[_mbi] != "") {
+                    _mtab = _m.map_names[_mbi];
+                    while (string_length(_mtab) > 1 && string_width_l(_mtab) > _msel_bw - 4) {
+                        _mtab = string_copy(_mtab, 1, string_length(_mtab) - 1);
+                    }
+                }
+            }
+            var _mtab_edit = false;
+            if (editing_map_dim && editing_map_field == "NAME") {
+                if (editing_map_asset_idx == viewer_asset && editing_map_name_idx == _mbi) {
+                    _mtab_edit = true;
+                }
+            }
+            if (_mtab_edit) {
+                // Being renamed: show what's typed, end of the text if it's long
+                _mtab = editing_map_string + "_";
+                while (string_length(_mtab) > 1 && string_width_l(_mtab) > _msel_bw - 4) {
+                    _mtab = string_delete(_mtab, 1, 1);
+                }
+                draw_set_color(make_color_rgb(255, 220, 80));
+                draw_rectangle(_scx, _scy, _scx + _msel_bw, _scy + _msel_bh, true);
+            }
+            draw_set_font_l(fnt_c64_tiny);
+            var _mtab_small = (_mtab != L("MAP ") + string(_mbi));
+            if (_mtab_small) {
+                draw_set_font_l(fnt_c64_nano);
+                draw_text_l(_scx + _msel_bw * 0.5, _scy + 3, _mtab);
+                draw_set_font_l(fnt_c64_tiny);
+            } else {
+                draw_text_l(_scx + _msel_bw * 0.5, _scy , _mtab);
+            }
             draw_set_halign(fa_left);
+            if (_shov && mouse_check_button_pressed(mb_left)) {
+                // Double-click a map tab to name it
+                if (mts_tab_click_map == _mbi && current_time - mts_tab_click_time < 400) {
+                    while (array_length(_m.map_names) < array_length(_m.maps)) {
+                        array_push(_m.map_names, "");
+                    }
+                    editing_map_dim       = true;
+                    editing_map_field     = "NAME";
+                    editing_map_string    = _m.map_names[_mbi];
+                    editing_map_asset_idx = viewer_asset;
+                    editing_map_name_idx  = _mbi;
+                    keyboard_string       = "";
+                    mts_tab_click_map     = -1;
+                } else {
+                    mts_tab_click_map  = _mbi;
+                    mts_tab_click_time = current_time;
+                }
+            }
             if (_shov && mouse_check_button_pressed(mb_left)) _m.active_map = _mbi;
             if (_shov && mouse_check_button_pressed(mb_right) && _m.map_count > 0) {
                 array_delete(_m.maps, _mbi, 1);
                 if (array_length(_m.map_bytes) > _mbi) array_delete(_m.map_bytes, _mbi, 1);
+                // Per-map dims / names / repeats / addresses travel with the map,
+                // and chains drop it (later maps are renumbered).
+                scr_mts_map_removed(_m, _mbi);
                 _m.map_count = max(0, _m.map_count - 1);
                 if (_m.active_map >= _m.map_count) _m.active_map = _m.map_count - 1;
                 _m.is_dirty = true;
@@ -10191,6 +10365,8 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
                 array_push(_m.map_bytes, 0);
                 array_push(_m.map_w, _add_w);
                 array_push(_m.map_h, _add_h);
+                array_push(_m.map_names, "");
+                scr_mts_maps_sync(_m);
                 _m.map_count++;
                 _m.active_map = _m.map_count - 1;
                 _m.is_dirty = true;
@@ -10253,6 +10429,10 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
         );
     }
 
+    // The CHAINS panel covers the map area - don't spend the frame drawing it.
+    if (mts_chain_mode) {
+        _draw_row1 = _draw_row0;
+    }
     scr_mts_glyph_begin();
     for (var _trow = _draw_row0; _trow < _draw_row1; _trow++) {
         for (_tcol = _draw_col0; _tcol < _draw_col1; _tcol++) {
@@ -10384,7 +10564,7 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
             var _hthumb_hov = point_in_rectangle(_mx, _my, _hthumb_x, _hsb_y1, _hthumb_x + _hthumb_w, _hsb_y2);
             draw_set_color(_hthumb_hov ? _sb_thumb_hov : _sb_thumb_col);
             draw_rectangle(_hthumb_x, _hsb_y1, _hthumb_x + _hthumb_w, _hsb_y2, false);
-            if (_hthumb_hov && mouse_check_button_pressed(mb_left)) {
+            if (_hthumb_hov && !mts_chain_mode && mouse_check_button_pressed(mb_left)) {
                 _m.hsb_drag_active    = true;
                 _m.hsb_drag_start_mx  = _mx;
                 _m.hsb_drag_start_col = _m.map_pan_col;
@@ -10412,7 +10592,7 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
             var _vthumb_hov = point_in_rectangle(_mx, _my, _vsb_x1, _vthumb_y, _vsb_x2, _vthumb_y + _vthumb_h);
             draw_set_color(_vthumb_hov ? _sb_thumb_hov : _sb_thumb_col);
             draw_rectangle(_vsb_x1, _vthumb_y, _vsb_x2, _vthumb_y + _vthumb_h, false);
-            if (_vthumb_hov && mouse_check_button_pressed(mb_left)) {
+            if (_vthumb_hov && !mts_chain_mode && mouse_check_button_pressed(mb_left)) {
                 _m.vsb_drag_active    = true;
                 _m.vsb_drag_start_my  = _my;
                 _m.vsb_drag_start_row = _m.map_pan_row;
@@ -10482,7 +10662,7 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
     }
 
   // Test area interaction (suppressed while the SLICE modal is open)
-    if (!global.integer_box_open && point_in_rectangle(_mx, _my, _test_x1, _map_top, _test_x2, _canvas_y2)) {
+    if (!global.integer_box_open && !mts_chain_mode && point_in_rectangle(_mx, _my, _test_x1, _map_top, _test_x2, _canvas_y2)) {
         // Screen cell -> grid cell. VIEW mode draws from _draw_col0/_draw_row0
         // with a sub-metatile pixel shift, so add that shift back into the mouse
         // pixel before dividing, then add the draw-range start.
@@ -10711,6 +10891,21 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
             _m.maps[_m.active_map] = array_create(_test_cols * _test_rows, -1);
         }
         _m.is_dirty  = true;
+    }
+
+    // ---- MAP CHAINS panel (CHAINS toggle) - over the map area, below the tabs ----
+    if (mts_chain_mode) {
+        var _chn_gx = {
+            bg:        _ts_bg,
+            mixed:     (_ts_global_mixed == 1),
+            eff_mixed: _eff_mixed,
+            ecm:       _ecm_mode,
+            ecm_cols:  _ecm_bg_cols,
+            atlas_ok:  _mts_atlas_ok,
+            mc1:       _mts_mc1_col,
+            mc2:       _mts_mc2_col
+        };
+        scr_mts_chain_panel(_m, _asset, _test_x1, _msel_y0 + _msel_area_h + 4, _test_x2, _canvas_y2, _mx, _my, _chn_gx);
     }
 
     // ---- A: CHAR EDITOR (bottom left, below stamp list) ----
@@ -11183,7 +11378,7 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
 // REFERENCED BY (for BITMAP, default cases — SPRITE_SET and MAP_DATA handle their own above)
     if (_asset.type == "SFX_DATA") _cy = _vy2 - 100;
 	 if (_asset.type == "BYTE_DATA" || _asset.type == "TEXT_DATA" || _asset.type == "LINE_COLL") _cy = _vy2 - 100;
-   if (_asset.type != "SPRITE_SET" && _asset.type != "MAP_DATA" && _asset.type != "BITMAP" && _asset.type != "META_TILESET" && _asset.type != "META_MAP" && _asset.type != "BITMAP_BUILDER" && _asset.type != "MUSIC_MAKER" && _asset.type != "SFX_MAKER" && _asset.type != "HUD" && _asset.type != "ROOM_MAP" && _asset.type != "ANIMATION" && _asset.type != "SPRITE_MASK") {
+   if (_asset.type != "SPRITE_SET" && _asset.type != "MAP_DATA" && _asset.type != "BITMAP" && _asset.type != "META_TILESET" && _asset.type != "META_MAP" && _asset.type != "BITMAP_BUILDER" && _asset.type != "MUSIC_MAKER" && _asset.type != "SFX_MAKER" && _asset.type != "HUD" && _asset.type != "ROOM_MAP" && _asset.type != "ANIMATION" && _asset.type != "SPRITE_MASK" && _asset.type != "SAMPLE") {
         draw_set_font_l(fnt_c64_code);
         draw_set_color(make_color_rgb(60,60,80));
         draw_line(_vx1 + 10, _cy, _vx2 - 10, _cy);
