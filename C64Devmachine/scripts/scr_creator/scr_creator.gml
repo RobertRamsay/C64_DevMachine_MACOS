@@ -7,10 +7,10 @@
 /// ranges and named modes — plus build / run / save / load. Everything else
 /// is locked: the panel owns input through scr_workspace_input_blocked().
 ///
-/// LIGHT: a workspace saved with creator_locked opens in the Creator view
-///        and cannot leave it. No PARAMS tabs are shown.
-/// PRO:   F9 toggles the Creator view, EDIT GRAPH leaves it, and the
-///        OPENS LOCKED switch decides how the workspace opens next time.
+/// F9 toggles the Creator view, EDIT GRAPH leaves it, and the OPENS LOCKED
+/// switch decides how the workspace opens next time. Light and Pro behave
+/// the same here: Light's only restriction is editing code inside code
+/// blocks, which the code editor enforces on its own.
 ///
 /// TARGETS
 ///   MACRO_CODE: a `NAME = value` line inside the code block (sym).
@@ -384,9 +384,6 @@ function scr_creator_close_view() {
 // --------------------------------------------------------------------
 
 function scr_creator_node_tabbable(_n) {
-    if (global.lite) {
-        return false;
-    }
     if (_n.macro_owner != noone) {
         return false;
     }
@@ -417,9 +414,6 @@ function scr_creator_draw_node_tab() {
     var _np  = array_length(params);
     var _hot = (global.creator_tab_hot == id);
 
-    draw_set_color(make_color_rgb(20, 14, 26));
-    draw_rectangle(_r.x1, _r.y1, _r.x2, _r.y2, false);
-
     var _col = make_color_rgb(110, 110, 150);
     if (_np > 0) {
         _col = make_color_rgb(80, 200, 255);
@@ -427,8 +421,8 @@ function scr_creator_draw_node_tab() {
     if (_hot) {
         _col = make_color_rgb(255, 210, 80);
     }
-    draw_set_color(_col);
-    draw_rectangle(_r.x1, _r.y1, _r.x2, _r.y2, true);
+    scr_creator_skin_node_frame(_r.x1, _r.y1, _r.x2 - _r.x1, _r.y2 - _r.y1, 4, _col);
+    draw_set_color(c_white);
 
     var _font_b   = draw_get_font();
     var _halign_b = draw_get_halign();
@@ -450,6 +444,7 @@ function scr_creator_draw_node_tab() {
 
 function scr_creator_begin_step() {
     global.creator_tab_hot = noone;
+    scr_creator_update_covered();
 
     // Deferred panel actions: run here, never from inside a Draw event.
     if (global.creator_action != "") {
@@ -462,13 +457,6 @@ function scr_creator_begin_step() {
     if (global.creator_open_pending) {
         global.creator_open_pending = false;
         if (global.creator_locked && scr_creator_param_count() > 0) {
-            scr_creator_open_view();
-        }
-    }
-
-    // Light: a locked workspace stays locked.
-    if (global.lite && global.creator_locked && !global.creator_view_open) {
-        if (scr_creator_param_count() > 0) {
             scr_creator_open_view();
         }
     }
@@ -492,9 +480,7 @@ function scr_creator_begin_step() {
     if (instance_exists(obj_asset_manager)) {
         if (obj_asset_manager.viewer_open) { exit; }
     }
-    if (global.lite) { exit; }
-
-    // F9: Creator view (Pro).
+    // F9: Creator view.
     if (scr_workspace_keyboard_check_pressed(vk_f9)) {
         if (scr_creator_param_count() > 0) {
             scr_creator_open_view();
@@ -573,29 +559,122 @@ function scr_creator_run_action(_act) {
 // IMMEDIATE-MODE WIDGETS (GUI space, Draw GUI End)
 // --------------------------------------------------------------------
 
-function scr_creator_btn(_x1, _y1, _x2, _y2, _label, _on) {
-    var _hov = point_in_rectangle(global.creator_mx, global.creator_my, _x1, _y1, _x2, _y2);
-    var _bg  = make_colour_rgb(30, 30, 70);
-    if (_on) {
-        _bg = make_colour_rgb(70, 70, 170);
+// --------------------------------------------------------------------
+// THEME SKIN — the same sprites and style settings the rest of the UI uses:
+//   panels  : spr_glassSlice, frame niceSliceFrm (Panel Style)
+//   buttons : spr_menu_button, frame paletteStyle, or the cyber frame when
+//             the panel style is cyber (uiChromeStyle), hover = additive glow
+//   facades : spr_9s_tile1 with nodeStyle, like node bodies and headers
+// --------------------------------------------------------------------
+
+function scr_creator_skin_panel(_x1, _y1, _w, _h) {
+    var _frm = 0;
+    if (instance_exists(obj_workspace_manager)) {
+        _frm = obj_workspace_manager.niceSliceFrm;
     }
-    if (_hov) {
-        _bg = merge_colour(_bg, c_white, 0.18);
+    draw_sprite_stretched(spr_glassSlice, _frm, _x1, _y1, _w, _h);
+}
+
+function scr_creator_skin_btn_frame() {
+    var _frm = 0;
+    if (instance_exists(obj_workspace_manager)) {
+        if (obj_workspace_manager.uiChromeStyle == 0) {
+            _frm = obj_workspace_manager.paletteStyle;
+        } else {
+            _frm = sprite_get_number(spr_menu_button) - 1;
+        }
     }
-    draw_set_colour(_bg);
-    draw_rectangle(_x1, _y1, _x2, _y2, false);
-    draw_set_colour(make_colour_rgb(180, 180, 255));
-    draw_rectangle(_x1, _y1, _x2, _y2, true);
+    return _frm;
+}
+
+/// Themed button body. _on = selected/active, _hov = pointer over it.
+function scr_creator_skin_btn(_x1, _y1, _x2, _y2, _label, _on, _hov) {
+    var _frm = scr_creator_skin_btn_frame();
+    var _w   = max(1, _x2 - _x1);
+    var _h   = max(1, _y2 - _y1);
+    var _sx  = _w / sprite_get_width(spr_menu_button);
+    var _sy  = _h / sprite_get_height(spr_menu_button);
+    var _add = true;
+    if (instance_exists(obj_workspace_manager)) {
+        if (obj_workspace_manager.uiChromeStyle != 0) {
+            _add = false;
+        }
+    }
+    draw_sprite_ext(spr_menu_button, _frm, _x1, _y1, _sx, _sy, 0, c_white, 1);
+    if (_hov || _on) {
+        var _glow = 0.2;
+        if (_on) {
+            _glow = 0.35;
+        }
+        if (_add) {
+            gpu_set_blendmode(bm_add);
+        }
+        draw_sprite_ext(spr_menu_button, _frm, _x1, _y1, _sx, _sy, 0, c_white, _glow);
+        if (_add) {
+            gpu_set_blendmode(bm_normal);
+        }
+    }
     draw_set_colour(c_white);
+    if (_on) {
+        draw_set_colour(c_yellow);
+    }
     draw_set_halign(fa_center);
     draw_set_valign(fa_middle);
     draw_text_l((_x1 + _x2) / 2, (_y1 + _y2) / 2, _label);
     draw_set_halign(fa_left);
+}
+
+/// Node-style body + header, following the Node Style setting.
+function scr_creator_skin_node_frame(_x1, _y1, _w, _h, _head_h, _col) {
+    var _style = 0;
+    if (instance_exists(obj_workspace_manager)) {
+        _style = obj_workspace_manager.nodeStyle;
+    }
+    var _n9    = sprite_get_number(spr_9s_tile1);
+    var _body  = merge_colour(_col, make_colour_rgb(20, 22, 40), 0.7);
+    var _dark  = merge_colour(_body, c_black, 0.5);
+    var _head  = _col;
+
+    if (_style == _n9 - 1) {
+        // Cyber: dark slab, yellow rail, coloured ID strip.
+        draw_rectangle_colour(_x1, _y1, _x1 + _w, _y1 + _h,
+            make_colour_rgb(22, 24, 26), make_colour_rgb(22, 24, 26),
+            make_colour_rgb(10, 12, 14), make_colour_rgb(10, 12, 14), false);
+        draw_set_colour(make_colour_rgb(238, 197, 38));
+        draw_rectangle(_x1, _y1, _x1 + 3, _y1 + _h, false);
+        draw_set_colour(merge_colour(_head, make_colour_rgb(18, 20, 22), 0.72));
+        draw_rectangle(_x1, _y1, _x1 + _w, _y1 + _head_h, false);
+        draw_set_colour(_head);
+        draw_rectangle(_x1 + 3, _y1 + _head_h - 3, _x1 + _w - 10, _y1 + _head_h, false);
+        exit;
+    }
+    if (_style == 0) {
+        draw_rectangle_colour(_x1, _y1, _x1 + _w, _y1 + _h, _body, _body, _dark, _dark, false);
+        draw_set_colour(_head);
+        draw_rectangle(_x1, _y1, _x1 + _w, _y1 + _head_h, false);
+        exit;
+    }
+    var _frm = clamp(_style, 1, max(1, _n9 - 2));
+    if (_style >= _n9) {
+        _frm = _n9 - 1;
+    }
+    draw_sprite_stretched_ext(spr_9s_tile1, _frm, _x1, _y1, _w, _h, _body, 1);
+    draw_sprite_stretched_ext(spr_9s_tile1, _frm, _x1, _y1, _w, _head_h, _head, 1);
+}
+
+function scr_creator_btn(_x1, _y1, _x2, _y2, _label, _on) {
+    var _hov = point_in_rectangle(global.creator_mx, global.creator_my, _x1, _y1, _x2, _y2);
+    scr_creator_skin_btn(_x1, _y1, _x2, _y2, _label, _on, _hov);
     var _clicked = false;
     if (_hov && global.creator_click) {
         _clicked = true;
     }
     return _clicked;
+}
+
+/// Width of a button that fits its label (current font) with padding.
+function scr_creator_btn_w(_label) {
+    return string_width_l(_label) + 28;
 }
 
 /// @return committed string, or undefined
@@ -717,10 +796,7 @@ function scr_creator_draw_editor(_n) {
     var _py    = floor((_gh - _ph) / 2);
     var _code  = (_n.node_type == "MACRO_CODE");
 
-    draw_set_colour(make_colour_rgb(40, 40, 90));
-    draw_rectangle(_px, _py, _px + _pw, _py + _ph, false);
-    draw_set_colour(make_colour_rgb(180, 180, 255));
-    draw_rectangle(_px, _py, _px + _pw, _py + _ph, true);
+    scr_creator_skin_panel(_px, _py, _pw, _ph);
 
     draw_set_font_l(fnt_C64_Angled_big);
     draw_set_halign(fa_left);
@@ -923,7 +999,12 @@ function scr_creator_draw_view() {
         _content_h += _head_h + array_length(_hosts[_h].params) * _row_h;
     }
 
-    var _pw     = 820;
+    // Footer buttons size to their text, and the panel grows to fit them.
+    draw_set_font_l(fnt_C64_Angled);
+    var _foot_w = 16 + scr_creator_btn_w("BUILD & RUN") + 10 + scr_creator_btn_w("RUN ON ULTIMATE") + 10
+                + scr_creator_btn_w("SAVE") + 10 + scr_creator_btn_w("LOAD") + 16;
+    _foot_w += 30 + scr_creator_btn_w("OPENS LOCKED: OFF") + 10 + scr_creator_btn_w("EDIT GRAPH");
+    var _pw     = max(820, _foot_w);
     var _top_h  = 90;
     var _foot_h = 70;
     var _ph     = min(_gh - 60, _top_h + max(60, _content_h) + _foot_h);
@@ -945,10 +1026,7 @@ function scr_creator_draw_view() {
     }
     global.creator_scroll = clamp(global.creator_scroll, 0, _max_scroll);
 
-    draw_set_colour(make_colour_rgb(24, 24, 60));
-    draw_rectangle(_px, _py, _px + _pw, _py + _ph, false);
-    draw_set_colour(make_colour_rgb(180, 180, 255));
-    draw_rectangle(_px, _py, _px + _pw, _py + _ph, true);
+    scr_creator_skin_panel(_px, _py, _pw, _ph);
 
     draw_set_font_l(fnt_C64_Angled_big);
     draw_set_halign(fa_left);
@@ -962,11 +1040,9 @@ function scr_creator_draw_view() {
         _wsname = filename_name(global.workspace_path);
     }
     draw_text(_px + 16, _py + 56, string_upper(_wsname));
-    if (!global.lite) {
-        draw_set_halign(fa_right);
-        draw_text_l(_px + _pw - 16, _py + 56, "F9 / EDIT GRAPH returns to the node graph");
-        draw_set_halign(fa_left);
-    }
+    draw_set_halign(fa_right);
+    draw_text_l(_px + _pw - 16, _py + 56, "F9 / EDIT GRAPH returns to the node graph");
+    draw_set_halign(fa_left);
 
     // --- rows (clipped to the view) ---
     var _scale_x = window_get_width() / max(1, _gw);
@@ -1075,39 +1151,474 @@ function scr_creator_draw_view() {
     }
 
     // --- footer ---
+    draw_set_font_l(fnt_C64_Angled);
     var _by = _py + _ph - 50;
     var _bx = _px + 16;
-    if (scr_creator_btn(_bx, _by, _bx + 150, _by + 34, "BUILD & RUN", false)) {
+    var _bw = scr_creator_btn_w("BUILD & RUN");
+    if (scr_creator_btn(_bx, _by, _bx + _bw, _by + 34, "BUILD & RUN", false)) {
         global.creator_action = "build";
     }
-    _bx += 160;
-    if (scr_creator_btn(_bx, _by, _bx + 170, _by + 34, "RUN ON ULTIMATE", false)) {
+    _bx += _bw + 10;
+    _bw = scr_creator_btn_w("RUN ON ULTIMATE");
+    if (scr_creator_btn(_bx, _by, _bx + _bw, _by + 34, "RUN ON ULTIMATE", false)) {
         global.creator_action = "ultimate";
     }
-    _bx += 180;
-    if (scr_creator_btn(_bx, _by, _bx + 80, _by + 34, "SAVE", false)) {
+    _bx += _bw + 10;
+    _bw = scr_creator_btn_w("SAVE");
+    if (scr_creator_btn(_bx, _by, _bx + _bw, _by + 34, "SAVE", false)) {
         global.creator_action = "save";
     }
-    _bx += 90;
-    if (scr_creator_btn(_bx, _by, _bx + 80, _by + 34, "LOAD", false)) {
+    _bx += _bw + 10;
+    _bw = scr_creator_btn_w("LOAD");
+    if (scr_creator_btn(_bx, _by, _bx + _bw, _by + 34, "LOAD", false)) {
         global.creator_action = "load";
     }
 
-    if (!global.lite) {
-        var _lk = "OPENS LOCKED: OFF";
-        if (global.creator_locked) {
-            _lk = "OPENS LOCKED: ON";
+    // Right-aligned group. The lock button is sized for its longer
+    // label so it does not jump when toggled.
+    var _ew = scr_creator_btn_w("EDIT GRAPH");
+    var _lw = scr_creator_btn_w("OPENS LOCKED: OFF");
+    var _ex = _px + _pw - 16 - _ew;
+    var _lx = _ex - 10 - _lw;
+    var _lk = "OPENS LOCKED: OFF";
+    if (global.creator_locked) {
+        _lk = "OPENS LOCKED: ON";
+    }
+    if (scr_creator_btn(_lx, _by, _lx + _lw, _by + 34, _lk, global.creator_locked)) {
+        global.creator_locked = !global.creator_locked;
+        global.autosave_dirty = true;
+        global.undo_dirty     = true;
+    }
+    if (scr_creator_btn(_ex, _by, _ex + _ew, _by + 34, "EDIT GRAPH", false)) {
+        scr_creator_close_view();
+    }
+    if (keyboard_check_pressed(vk_f9) && global.frame_tick != global.creator_open_frame) {
+        scr_creator_close_view();
+    }
+}
+
+// ====================================================================
+// UI PANELS (mapping boxes)
+//
+// A mapping box with UI PANEL switched on draws a facade over the nodes it
+// covers: the box name, an EDIT button, and a widget for every param on
+// those nodes. Covered nodes count as hidden (scr_node_is_hidden), so they
+// are not drawn, clicked, selected or searched while the facade is up.
+// EDIT lifts the facade; SHOW UI puts it back. Workspaces always load with
+// the facade up.
+// ====================================================================
+
+#macro CREATOR_PANEL_HEAD 30
+#macro CREATOR_PANEL_ROW  34
+#macro CREATOR_PANEL_ROW_STACK 52
+#macro CREATOR_PANEL_SUB  22
+#macro CREATOR_PANEL_PAD  10
+
+/// Begin Step: mark every node sitting under a raised facade.
+function scr_creator_update_covered() {
+    with (obj_c64_node) {
+        creator_covered = false;
+    }
+    with (obj_mapping_box) {
+        if (!is_panel || panel_editing) {
+            continue;
         }
-        if (scr_creator_btn(_px + _pw - 316, _by, _px + _pw - 146, _by + 34, _lk, global.creator_locked)) {
-            global.creator_locked = !global.creator_locked;
-            global.autosave_dirty = true;
-            global.undo_dirty     = true;
-        }
-        if (scr_creator_btn(_px + _pw - 136, _by, _px + _pw - 16, _by + 34, "EDIT GRAPH", false)) {
-            scr_creator_close_view();
-        }
-        if (keyboard_check_pressed(vk_f9) && global.frame_tick != global.creator_open_frame) {
-            scr_creator_close_view();
+        var _bx1 = x;
+        var _by1 = y;
+        var _bx2 = x + box_w;
+        var _by2 = y + box_h;
+        with (obj_c64_node) {
+            var _nx = x + (width * 0.5);
+            var _ny = y + (height * 0.5);
+            if (_nx >= _bx1 && _nx <= _bx2 && _ny >= _by1 && _ny <= _by2) {
+                creator_covered = true;
+            }
         }
     }
+}
+
+/// Nodes with params whose centre is inside the box, top to bottom.
+function scr_creator_panel_nodes(_b) {
+    var _out = [];
+    var _bx1 = _b.x;
+    var _by1 = _b.y;
+    var _bx2 = _b.x + _b.box_w;
+    var _by2 = _b.y + _b.box_h;
+    with (obj_c64_node) {
+        if (array_length(params) == 0) {
+            continue;
+        }
+        var _nx = x + (width * 0.5);
+        var _ny = y + (height * 0.5);
+        if (_nx >= _bx1 && _nx <= _bx2 && _ny >= _by1 && _ny <= _by2) {
+            array_push(_out, id);
+        }
+    }
+    array_sort(_out, function(_a, _c) {
+        if (_a.y != _c.y) {
+            return _a.y - _c.y;
+        }
+        return _a.x - _c.x;
+    });
+    return _out;
+}
+
+function scr_creator_item(_t, _x1, _y1, _x2, _y2) {
+    return { t: _t, x1: _x1, y1: _y1, x2: _x2, y2: _y2, n: noone, pidx: 0, v: 0, text: "", on: false, lo: 0, hi: 0 };
+}
+
+/// Room-space layout shared by the facade's Step (clicks) and Draw.
+/// Font must be fnt_c64_code when called (string widths).
+function scr_creator_panel_layout(_b) {
+    var _items = [];
+    var _pad   = CREATOR_PANEL_PAD;
+    var _bx1   = _b.x;
+    var _by1   = _b.y;
+    var _bx2   = _b.x + _b.box_w;
+    var _by2   = _b.y + _b.box_h;
+
+    var _nodes = scr_creator_panel_nodes(_b);
+    var _multi = (array_length(_nodes) > 1);
+    var _y     = _by1 + CREATOR_PANEL_HEAD + 6;
+    // Narrow panels stack each param: label on one line, the control on a
+    // full-width line under it. Wide panels keep label and control side by side.
+    var _stack = (_b.box_w < 420);
+    var _row_h = CREATOR_PANEL_ROW;
+    var _lw    = floor(_b.box_w * 0.38);
+    if (_stack) {
+        _row_h = CREATOR_PANEL_ROW_STACK;
+        _lw    = 0;
+    }
+    var _cx    = _bx1 + _pad + _lw;
+    var _cw    = _bx2 - _pad - _cx;
+
+    if (array_length(_nodes) == 0) {
+        var _none = scr_creator_item("text", _bx1 + _pad, _y, _bx2 - _pad, _y + CREATOR_PANEL_ROW);
+        _none.text = "No params in this panel. EDIT, then use the P tab on a node.";
+        array_push(_items, _none);
+        return _items;
+    }
+
+    for (var _ni = 0; _ni < array_length(_nodes); _ni++) {
+        var _n = _nodes[_ni];
+        if (_multi) {
+            if (_y + CREATOR_PANEL_SUB > _by2 - 4) {
+                array_push(_items, scr_creator_item("more", _bx1, _by2 - 14, _bx2, _by2));
+                return _items;
+            }
+            var _sub = scr_creator_item("sub", _bx1 + _pad, _y, _bx2 - _pad, _y + CREATOR_PANEL_SUB);
+            _sub.text = string_upper(scr_creator_node_name(_n));
+            array_push(_items, _sub);
+            _y += CREATOR_PANEL_SUB;
+        }
+        for (var _i = 0; _i < array_length(_n.params); _i++) {
+            if (_y + _row_h > _by2 - 4) {
+                array_push(_items, scr_creator_item("more", _bx1, _by2 - 14, _bx2, _by2));
+                return _items;
+            }
+            var _p   = _n.params[_i];
+            var _cy  = _y + _row_h * 0.5;
+            var _cur = scr_param_read(_n, _p);
+
+            var _lab = scr_creator_item("label", _bx1 + _pad, _y, _cx - 6, _y + _row_h);
+            if (_stack) {
+                _lab = scr_creator_item("label", _bx1 + _pad, _y, _bx2 - _pad, _y + 20);
+                _cy  = _y + 20 + 15;
+            }
+            _lab.text = _p.label;
+            array_push(_items, _lab);
+
+            if (!_cur.ok) {
+                var _bad = scr_creator_item("bad", _cx, _cy - 10, _bx2 - _pad, _cy + 10);
+                _bad.text = "NOT LINKED";
+                array_push(_items, _bad);
+            } else if (_p.kind == "COLOUR") {
+                var _step = max(8, floor(_cw / 16));
+                var _sw   = max(6, _step - 3);
+                for (var _c = 0; _c < 16; _c++) {
+                    var _sx = _cx + _c * _step;
+                    var _it = scr_creator_item("swatch", _sx, _cy - _sw * 0.5, _sx + _sw, _cy + _sw * 0.5);
+                    _it.n  = _n;
+                    _it.pidx = _i;
+                    _it.v  = _c;
+                    _it.on = (round(_cur.val) == _c);
+                    array_push(_items, _it);
+                }
+            } else if (_p.kind == "RANGE") {
+                var _mi = scr_creator_item("minus", _cx, _cy - 10, _cx + 20, _cy + 10);
+                _mi.n = _n; _mi.pidx = _i; _mi.v = _cur.val - 1; _mi.text = "-";
+                array_push(_items, _mi);
+                var _vt = scr_creator_item("value", _cx + 22, _cy - 10, _cx + 62, _cy + 10);
+                _vt.text = string(_cur.val);
+                array_push(_items, _vt);
+                var _pl = scr_creator_item("plus", _cx + 64, _cy - 10, _cx + 84, _cy + 10);
+                _pl.n = _n; _pl.pidx = _i; _pl.v = _cur.val + 1; _pl.text = "+";
+                array_push(_items, _pl);
+                if (_cw > 120) {
+                    var _bar = scr_creator_item("bar", _cx + 94, _cy - 5, _cx + _cw, _cy + 5);
+                    _bar.n  = _n;
+                    _bar.pidx = _i;
+                    _bar.lo = min(_p.vmin, _p.vmax);
+                    _bar.hi = max(_p.vmin, _p.vmax);
+                    _bar.v  = _cur.val;
+                    array_push(_items, _bar);
+                }
+            } else if (_p.kind == "MODE") {
+                var _opts = scr_param_options(_p.options);
+                var _ox   = _cx;
+                for (var _o = 0; _o < array_length(_opts); _o++) {
+                    var _ow = string_width_l(_opts[_o].name) + 16;
+                    if (_ox + _ow > _bx2 - _pad) {
+                        break;
+                    }
+                    var _ob = scr_creator_item("opt", _ox, _cy - 11, _ox + _ow, _cy + 11);
+                    _ob.n    = _n;
+                    _ob.pidx   = _i;
+                    _ob.v    = _opts[_o].val;
+                    _ob.text = _opts[_o].name;
+                    _ob.on   = (round(_cur.val) == round(_opts[_o].val));
+                    array_push(_items, _ob);
+                    _ox += _ow + 6;
+                }
+            }
+            _y += _row_h;
+        }
+    }
+    return _items;
+}
+
+/// The one button above the box, left of its delete X (developer only):
+///   UI   - plain box: turn panel mode on (facade drops over the nodes)
+///   EDIT - panel: turn panel mode off (back to the normal node view)
+function scr_creator_box_buttons(_b) {
+    var _out = [];
+    var _right = _b.x + _b.box_w - 22;
+    var _bt = scr_creator_item("toggle", _right - 50, _b.y - 18, _right, _b.y);
+    if (_b.is_panel) {
+        _bt.text = "EDIT";
+    } else {
+        _bt.text = "UI";
+    }
+    array_push(_out, _bt);
+    return _out;
+}
+
+/// obj_mapping_box Step. Returns true when this box used the click.
+function scr_creator_box_step(_b) {
+    var _mx = mouse_x;
+    var _my = mouse_y;
+
+    // Bar drag in progress.
+    if (_b.panel_bar.active) {
+        if (scr_workspace_mouse_check_button(mb_left) && instance_exists(_b.panel_bar.n)) {
+            var _bn = _b.panel_bar.n;
+            if (_b.panel_bar.pidx < array_length(_bn.params)) {
+                var _f = clamp((_mx - _b.panel_bar.x1) / max(1, _b.panel_bar.x2 - _b.panel_bar.x1), 0, 1);
+                scr_param_write(_bn, _bn.params[_b.panel_bar.pidx], _b.panel_bar.lo + _f * (_b.panel_bar.hi - _b.panel_bar.lo));
+            }
+            return true;
+        }
+        _b.panel_bar.active = false;
+        return true;
+    }
+
+    if (!scr_workspace_mouse_check_button_pressed(mb_left)) {
+        return false;
+    }
+
+    // Buttons above the box.
+    var _btns = scr_creator_box_buttons(_b);
+    for (var _i = 0; _i < array_length(_btns); _i++) {
+        var _bt = _btns[_i];
+        if (!point_in_rectangle(_mx, _my, _bt.x1, _bt.y1, _bt.x2, _bt.y2)) {
+            continue;
+        }
+        if (_bt.t == "toggle") {
+            _b.is_panel      = !_b.is_panel;
+            _b.panel_editing = false;
+            global.selected_nodes = [];
+        }
+        global.undo_dirty     = true;
+        global.autosave_dirty = true;
+        return true;
+    }
+
+    if (!_b.is_panel || _b.panel_editing) {
+        return false;
+    }
+    if (!point_in_rectangle(_mx, _my, _b.x, _b.y, _b.x + _b.box_w, _b.y + _b.box_h)) {
+        return false;
+    }
+    // Leave the resize corner to the box.
+    if (_mx >= _b.x + _b.box_w - 16 && _my >= _b.y + _b.box_h - 16) {
+        return false;
+    }
+
+    draw_set_font_l(fnt_c64_code);
+    var _items = scr_creator_panel_layout(_b);
+    for (var _i = 0; _i < array_length(_items); _i++) {
+        var _it = _items[_i];
+        if (!point_in_rectangle(_mx, _my, _it.x1, _it.y1 - 3, _it.x2, _it.y2 + 3)) {
+            continue;
+        }
+        if (!instance_exists(_it.n)) {
+            continue;
+        }
+        if (_it.pidx >= array_length(_it.n.params)) {
+            continue;
+        }
+        var _p = _it.n.params[_it.pidx];
+        if (_it.t == "swatch" || _it.t == "minus" || _it.t == "plus" || _it.t == "opt") {
+            scr_param_write(_it.n, _p, _it.v);
+            return true;
+        }
+        if (_it.t == "bar") {
+            _b.panel_bar.active = true;
+            _b.panel_bar.n      = _it.n;
+            _b.panel_bar.pidx     = _it.pidx;
+            _b.panel_bar.x1     = _it.x1;
+            _b.panel_bar.x2     = _it.x2;
+            _b.panel_bar.lo     = _it.lo;
+            _b.panel_bar.hi     = _it.hi;
+            var _f = clamp((_mx - _it.x1) / max(1, _it.x2 - _it.x1), 0, 1);
+            scr_param_write(_it.n, _p, _it.lo + _f * (_it.hi - _it.lo));
+            return true;
+        }
+    }
+    // The facade protects what is under it: a click anywhere on it stops here.
+    return true;
+}
+
+/// Facade buttons stay plain for readability: dark fill, coloured outline,
+/// selected = filled in the colour with black text.
+function scr_creator_draw_room_btn(_it, _on, _col) {
+    var _hov = point_in_rectangle(mouse_x, mouse_y, _it.x1, _it.y1, _it.x2, _it.y2);
+    var _bg  = make_colour_rgb(30, 30, 70);
+    if (_on) {
+        _bg = _col;
+    }
+    if (_hov) {
+        _bg = merge_colour(_bg, c_white, 0.2);
+    }
+    draw_set_colour(_bg);
+    draw_rectangle(_it.x1, _it.y1, _it.x2, _it.y2, false);
+    draw_set_colour(_col);
+    draw_rectangle(_it.x1, _it.y1, _it.x2, _it.y2, true);
+    draw_set_colour(c_white);
+    if (_on) {
+        draw_set_colour(c_black);
+    }
+    draw_set_halign(fa_center);
+    draw_set_valign(fa_middle);
+    draw_text_l((_it.x1 + _it.x2) * 0.5, (_it.y1 + _it.y2) * 0.5, _it.text);
+    draw_set_halign(fa_left);
+}
+
+/// obj_mapping_box Draw (room space). Buttons above the box always; the
+/// facade itself only while the panel is up.
+function scr_creator_box_draw(_b) {
+    var _col      = _b.box_colours[_b.box_col_idx];
+    var _font_b   = draw_get_font();
+    var _halign_b = draw_get_halign();
+    var _valign_b = draw_get_valign();
+    draw_set_font_l(fnt_c64_code);
+
+    // UI / EDIT: plain, like the box's own name tab.
+    var _btns = scr_creator_box_buttons(_b);
+    for (var _i = 0; _i < array_length(_btns); _i++) {
+        var _bt = _btns[_i];
+        draw_set_colour(_col);
+        draw_rectangle(_bt.x1, _bt.y1, _bt.x2, _bt.y2, false);
+        draw_set_colour(c_black);
+        draw_set_halign(fa_center);
+        draw_set_valign(fa_middle);
+        draw_text_l((_bt.x1 + _bt.x2) * 0.5, (_bt.y1 + _bt.y2) * 0.5, _bt.text);
+        draw_set_halign(fa_left);
+    }
+
+    if (_b.is_panel && !_b.panel_editing) {
+        var _bx1 = _b.x;
+        var _by1 = _b.y;
+        var _bx2 = _b.x + _b.box_w;
+        var _by2 = _b.y + _b.box_h;
+
+        draw_set_alpha(1);
+        scr_creator_skin_node_frame(_bx1, _by1, _b.box_w, _b.box_h, CREATOR_PANEL_HEAD, _col);
+        draw_set_colour(c_white);
+        draw_set_halign(fa_left);
+        draw_set_valign(fa_middle);
+        draw_text_l(_bx1 + CREATOR_PANEL_PAD, _by1 + CREATOR_PANEL_HEAD * 0.5, string_upper(_b.box_name));
+
+        var _items = scr_creator_panel_layout(_b);
+        for (var _i = 0; _i < array_length(_items); _i++) {
+            var _it = _items[_i];
+            var _my = (_it.y1 + _it.y2) * 0.5;
+            draw_set_valign(fa_middle);
+            draw_set_halign(fa_left);
+            switch (_it.t) {
+                case "sub":
+                    draw_set_colour(_col);
+                    draw_text_l(_it.x1, _my, _it.text);
+                    draw_set_alpha(0.4);
+                    draw_line(_it.x1, _it.y2 - 2, _it.x2, _it.y2 - 2);
+                    draw_set_alpha(1);
+                    break;
+                case "label":
+                    draw_set_colour(c_white);
+                    draw_text(_it.x1, _my, _it.text);
+                    break;
+                case "text":
+                    draw_set_colour(make_colour_rgb(190, 190, 230));
+                    draw_text_l(_it.x1, _my, _it.text);
+                    break;
+                case "bad":
+                    draw_set_colour(make_colour_rgb(255, 110, 110));
+                    draw_text_l(_it.x1, _my, _it.text);
+                    break;
+                case "value":
+                    draw_set_colour(c_white);
+                    draw_set_halign(fa_center);
+                    draw_text((_it.x1 + _it.x2) * 0.5, _my, _it.text);
+                    break;
+                case "swatch":
+                    draw_set_colour(scr_c64_pepto_colour(_it.v));
+                    draw_rectangle(_it.x1, _it.y1, _it.x2, _it.y2, false);
+                    if (_it.on) {
+                        draw_set_colour(c_white);
+                        draw_rectangle(_it.x1 - 2, _it.y1 - 2, _it.x2 + 2, _it.y2 + 2, true);
+                        draw_rectangle(_it.x1 - 3, _it.y1 - 3, _it.x2 + 3, _it.y2 + 3, true);
+                    }
+                    break;
+                case "minus":
+                case "plus":
+                    scr_creator_draw_room_btn(_it, false, make_colour_rgb(180, 180, 255));
+                    break;
+                case "opt":
+                    scr_creator_draw_room_btn(_it, _it.on, make_colour_rgb(180, 180, 255));
+                    break;
+                case "bar":
+                    var _t = 0;
+                    if (_it.hi > _it.lo) {
+                        _t = clamp((_it.v - _it.lo) / (_it.hi - _it.lo), 0, 1);
+                    }
+                    draw_set_colour(make_colour_rgb(8, 8, 24));
+                    draw_rectangle(_it.x1, _it.y1, _it.x2, _it.y2, false);
+                    draw_set_colour(make_colour_rgb(80, 200, 255));
+                    draw_rectangle(_it.x1, _it.y1, _it.x1 + (_it.x2 - _it.x1) * _t, _it.y2, false);
+                    draw_set_colour(make_colour_rgb(180, 180, 255));
+                    draw_rectangle(_it.x1, _it.y1, _it.x2, _it.y2, true);
+                    break;
+                case "more":
+                    draw_set_colour(make_colour_rgb(190, 190, 230));
+                    draw_set_halign(fa_center);
+                    draw_text_l((_it.x1 + _it.x2) * 0.5, _my, "...");
+                    break;
+            }
+        }
+    }
+
+    draw_set_font_l(_font_b);
+    draw_set_halign(_halign_b);
+    draw_set_valign(_valign_b);
+    draw_set_alpha(1);
 }
