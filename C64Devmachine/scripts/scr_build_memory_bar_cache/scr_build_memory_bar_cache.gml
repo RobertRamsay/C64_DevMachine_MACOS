@@ -736,6 +736,12 @@ var _addr_total = 65536;
                 case "BYTE_DATA":
                     if (buffer_exists(_a.buffer)) { _seg_size = buffer_get_size(_a.buffer); _seg_col = make_color_rgb(180, 120, 255); }
                     break;
+                case "BMP_OBJECTS":
+                    if (buffer_exists(_a.buffer)) { _seg_size = buffer_get_size(_a.buffer); _seg_col = make_color_rgb(255, 140, 60); }
+                    if (real(_a.meta.colour_addr) > 0 && array_length(_a.meta.objects) > 0) {
+                        array_push(_segments, { addr: real(_a.meta.colour_addr), size: array_length(_a.meta.objects), col: make_color_rgb(255, 140, 60), type: "ASSET", name: _a.name + " COL", lines: [], node_id: noone, no_conflict: false, conflict: false, load_later: false });
+                    }
+                    break;
                 case "SFX_DATA":
                     if (_a.file != "" && array_length(_a.meta.instruments) > 0) {
                         var _sfx_instrs = _a.meta.instruments;
@@ -753,7 +759,16 @@ var _addr_total = 65536;
                         if (variable_struct_exists(_a.meta, "raw_chars") && is_real(_a.meta.raw_chars)) {
                             _map_raw_seg = real(_a.meta.raw_chars);
                         }
+                        if (_map_raw_seg == 2) {
+                            _msz = max(1, array_length(scr_map_rle_rooms_encode(_a)));
+                        }
                         array_push(_segments, { addr: _a.address, size: _msz, col: make_color_rgb(40, 200, 180), type: "ASSET", name: _a.name, lines: [], node_id: noone, no_conflict: _a_is_load_later, conflict: false, load_later: _a_is_load_later });
+                        if (_map_raw_seg == 2) {
+                            var _objc = scr_map_objects_chunks(_a);
+                            for (var _oc = 0; _oc < array_length(_objc); _oc++) {
+                                array_push(_segments, { addr: _objc[_oc].addr, size: max(1, array_length(_objc[_oc].bytes)), col: make_color_rgb(40, 200, 180), type: "ASSET", name: _a.name + " OBJ", lines: [], node_id: noone, no_conflict: _a_is_load_later, conflict: false, load_later: _a_is_load_later });
+                            }
+                        }
                         // RAW CHARS maps have no colour plane
                         if (_map_raw_seg == 0) {
                             array_push(_segments, { addr: _a.address + _msz, size: _msz, col: make_color_rgb(40, 120, 200), type: "ASSET", name: _a.name + " (ATTR)", lines: [], node_id: noone, no_conflict: _a_is_load_later, conflict: false, load_later: _a_is_load_later });
@@ -1056,8 +1071,8 @@ function scr_workspace_usage_refresh(_segments) {
                         var _bank=floor(_a.address/0x4000), _base=_bank*0x4000;
                         var _screen=(_bank==2)?_base+0x3c00:((_bank==3)?_base+0x400:_a.address+0x2000);
                         _size=_screen-_a.address+2002;
-                    } else if(_a.type=="MAP_DATA" && variable_struct_exists(_a.meta,"raw_chars") && is_real(_a.meta.raw_chars) && real(_a.meta.raw_chars)==1) {
-                        _size=min(buffer_get_size(_a.buffer),_a.meta.map_w*_a.meta.map_h)+2;
+                    } else if(_a.type=="MAP_DATA") {
+                        _size=scr_map_emit_size(_a)+2;
                     }
                 }
                 _blocks+=ceil(_size/254);

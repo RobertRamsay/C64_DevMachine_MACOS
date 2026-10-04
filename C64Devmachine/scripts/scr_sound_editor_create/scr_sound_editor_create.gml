@@ -112,6 +112,9 @@ function scr_sound_editor_create(_asset) {
         // plays no music notes in the compiled tune.
         digi_boost    : 0,
         digi_on       : 1,       // VOICES row "SMP": 0 = digi track muted (preview and build)
+        // Frames per digi row. 0 = SONG: digi rows go with the song's rows.
+        // 1-31 = the digi lane's own tempo, restarted on every order row.
+        digi_speed    : 0,
         // editor / preview state (never saved)
         dg_focus      : false,
         dg_sel_step   : 0,
@@ -121,8 +124,17 @@ function scr_sound_editor_create(_asset) {
         dg_type_step  : -1,
         dg_type_time  : 0,
         dg_last_key   : -1,
+        dg_own_ord    : -1,      // DIGI SPEED preview: order row the digi lane last synced to
+        dg_own_row    : -1,      // DIGI SPEED preview: digi row playing now
+        dg_sync_time  : 0,       // DIGI SPEED preview: current_time of the digi row's start
+        dg_run_sp     : 0,       // preview: digi speed now (0 = song rows), set by DIGI SPEED / Fxx
+        dg_sel_sub    : 0,       // digi cursor: 0 = note column, 1 = command column
+        dg_cmd_on     : false,   // typing an Fxx speed command in the digi lane
+        dg_cmd_buf    : "",      // its hex digits so far
         dg_inst       : -1,
         dg_panel_rect : [0, 0, 0, 0],
+        dg_asset_name : "",      // the MUSIC_MAKER asset being edited (project check)
+        dg_check_shown: false,   // project-check warning already shown this session
 
         // ── EDITOR CURSOR ──
         sel_voice     : 0,
@@ -212,7 +224,7 @@ function scr_music_sid_project(_m, _chip) {
     var _out = { instruments: _m.instruments, patterns: _m.patterns, songs: [],
         play_speed: _m.play_speed, voice_mask: scr_music_sid_mask(_m, _chip),
         filt_mode: _m.filt_mode, filt_res: _m.filt_res, filt_cut: _m.filt_cut, note_table: _m[$ "note_table"], free_voices: _m[$ "free_voices"],
-        digi_rate: 8000, digi_samples: [], digi_patterns: [], digi_boost: 0, digi_on: 0 };
+        digi_rate: 8000, digi_samples: [], digi_patterns: [], digi_boost: 0, digi_on: 0, digi_speed: 0 };
     // The digi track plays through chip 0's $D418 only.
     if (_chip == 0) {
         _out.digi_rate     = _m[$ "digi_rate"];
@@ -220,6 +232,7 @@ function scr_music_sid_project(_m, _chip) {
         _out.digi_patterns = _m[$ "digi_patterns"];
         _out.digi_boost    = _m[$ "digi_boost"];
         _out.digi_on       = _m[$ "digi_on"];
+        _out.digi_speed    = _m[$ "digi_speed"];
     }
     for (var _s = 0; _s < array_length(_m.songs); _s++) {
         var _source = _m.songs[_s];
@@ -893,6 +906,10 @@ function scr_music_size_digi_sig(_m) {
     var _don = _m[$ "digi_on"];
     if (!is_undefined(_don)) {
         _h = (_h * 31 + real(_don) + 11) mod 1000000007;
+    }
+    var _dspd = _m[$ "digi_speed"];
+    if (!is_undefined(_dspd)) {
+        _h = (_h * 31 + real(_dspd) + 17) mod 1000000007;
     }
     for (var _s = 0; _s < array_length(_m.songs); _s++) {
         var _order = _m.songs[_s].order;

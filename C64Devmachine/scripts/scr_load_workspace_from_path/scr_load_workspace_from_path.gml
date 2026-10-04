@@ -140,6 +140,7 @@ function scr_load_workspace_from_path_core(_path, _mcp = false) {
     io_clear();
 
     global.workspace_path = path;
+    scr_recent_files_add(path);
 
     var _temp_sprites = working_directory + "temp/sprites";
     if (directory_exists(_temp_sprites)) {
@@ -595,9 +596,19 @@ function scr_load_workspace_from_path_core(_path, _mcp = false) {
                 if (variable_struct_exists(_sm, "paint_mc"))       _meta.paint_mc       = _sm.paint_mc;
                 if (variable_struct_exists(_sm, "map_mixed"))      _meta.map_mixed      = _sm.map_mixed;
                 if (variable_struct_exists(_sm, "raw_chars"))      _meta.raw_chars      = _sm.raw_chars;
+                if (variable_struct_exists(_sm, "room_w"))         _meta.room_w         = _sm.room_w;
+                if (variable_struct_exists(_sm, "room_h"))         _meta.room_h         = _sm.room_h;
+                if (variable_struct_exists(_sm, "room_count"))     _meta.room_count     = _sm.room_count;
                 if (variable_struct_exists(_sm, "erase_char"))     _meta.erase_char     = _sm.erase_char;
                 if (variable_struct_exists(_sm, "override_grid"))  _meta.override_grid  = _sm.override_grid;
                 if (variable_struct_exists(_sm, "map_mc_bg"))      _meta.map_mc_bg      = _sm.map_mc_bg;
+                if (variable_struct_exists(_sm, "tile_colours"))   _meta.tile_colours   = _sm.tile_colours;
+                if (variable_struct_exists(_sm, "obj_asset")) _meta.obj_asset = _sm.obj_asset;
+                if (variable_struct_exists(_sm, "room_objects")) _meta.room_objects = _sm.room_objects;
+                if (variable_struct_exists(_sm, "obj_row_off")) _meta.obj_row_off = _sm.obj_row_off;
+                if (variable_struct_exists(_sm, "obj_col_off")) _meta.obj_col_off = _sm.obj_col_off;
+                if (variable_struct_exists(_sm, "obj_table_addr")) _meta.obj_table_addr = _sm.obj_table_addr;
+                if (variable_struct_exists(_sm, "obj_regions")) _meta.obj_regions = _sm.obj_regions;
                 if (variable_struct_exists(_sm, "map_mc_col1"))    _meta.map_mc_col1    = _sm.map_mc_col1;
                 if (variable_struct_exists(_sm, "map_mc_col2"))    _meta.map_mc_col2    = _sm.map_mc_col2;
             }
@@ -764,8 +775,21 @@ function scr_load_workspace_from_path_core(_path, _mcp = false) {
                 if (!variable_struct_exists(_new_asset.meta, "paint_mc"))          _new_asset.meta.paint_mc          = 0;
                 if (!variable_struct_exists(_new_asset.meta, "map_mixed"))         _new_asset.meta.map_mixed         = obj_workspace_manager.map_global_mixed;
                 if (!variable_struct_exists(_new_asset.meta, "raw_chars"))         _new_asset.meta.raw_chars         = 0;
+                if (!variable_struct_exists(_new_asset.meta, "room_w"))            _new_asset.meta.room_w            = 40;
+                if (!variable_struct_exists(_new_asset.meta, "room_h"))            _new_asset.meta.room_h            = 25;
+                if (!variable_struct_exists(_new_asset.meta, "room_count"))        _new_asset.meta.room_count        = 0;
                 if (!variable_struct_exists(_new_asset.meta, "erase_char"))        _new_asset.meta.erase_char        = 0;
                 if (!variable_struct_exists(_new_asset.meta, "map_mc_bg"))         _new_asset.meta.map_mc_bg         = -1;
+                if (!variable_struct_exists(_new_asset.meta, "tile_colours"))      _new_asset.meta.tile_colours      = [];
+                if (!variable_struct_exists(_new_asset.meta, "obj_asset")) _new_asset.meta.obj_asset = "";
+                if (!variable_struct_exists(_new_asset.meta, "room_objects")) _new_asset.meta.room_objects = [];
+                if (!variable_struct_exists(_new_asset.meta, "obj_row_off")) _new_asset.meta.obj_row_off = 0;
+                if (!variable_struct_exists(_new_asset.meta, "obj_col_off")) _new_asset.meta.obj_col_off = 0;
+                if (!variable_struct_exists(_new_asset.meta, "obj_table_addr")) _new_asset.meta.obj_table_addr = 0;
+                if (!variable_struct_exists(_new_asset.meta, "obj_regions")) _new_asset.meta.obj_regions = [];
+                if (!variable_struct_exists(_new_asset.meta, "obj_mode")) _new_asset.meta.obj_mode = false;
+                if (!variable_struct_exists(_new_asset.meta, "obj_sel")) _new_asset.meta.obj_sel = 0;
+                if (!variable_struct_exists(_new_asset.meta, "show_objects")) _new_asset.meta.show_objects = true;
                 if (!variable_struct_exists(_new_asset.meta, "map_mc_col1"))       _new_asset.meta.map_mc_col1       = -1;
                 if (!variable_struct_exists(_new_asset.meta, "map_mc_col2"))       _new_asset.meta.map_mc_col2       = -1;
                 // Physical stride is grid_w x grid_h, NOT map_w x map_h. Backfill
@@ -1068,6 +1092,13 @@ function scr_load_workspace_from_path_core(_path, _mcp = false) {
 	            }
 	            scr_sprmask_restore(_new_asset, _smm);
 	        }
+	        if (_ad.type == "BMP_OBJECTS") {
+	            var _bom = {};
+	            if (variable_struct_exists(_ad, "meta")) {
+	                _bom = _ad.meta;
+	            }
+	            scr_bmpobj_restore(_new_asset, _bom);
+	        }
 	        if (_ad.type == "ROOM_MAP") {
 	            var _rmm = {};
 	            if (variable_struct_exists(_ad, "meta")) {
@@ -1134,6 +1165,10 @@ function scr_load_workspace_from_path_core(_path, _mcp = false) {
                 var _dg_boost = _sem[$ "digi_boost"];
                 if (!is_undefined(_dg_boost)) {
                     _new_asset.meta.digi_boost = clamp(real(_dg_boost), 0, 3);
+                }
+                var _dg_speed = _sem[$ "digi_speed"];
+                if (!is_undefined(_dg_speed)) {
+                    _new_asset.meta.digi_speed = clamp(real(_dg_speed), 0, 31);
                 }
                 var _ins_div = _sem[$ "instr_div"];
                 if (!is_undefined(_ins_div)) {
@@ -1256,6 +1291,11 @@ with (obj_c64_node) {
     }
 
 global.kernal_unlocked = variable_struct_exists(load_data, "kernal_unlocked") ? load_data.kernal_unlocked : false;
+    // Older workspaces have no build_target: they build exactly as before (D64 when they have loaders).
+    global.build_target = 0;
+    if (variable_struct_exists(load_data, "build_target")) {
+        global.build_target = clamp(real(load_data.build_target), 0, 2);
+    }
     global.basic_unlocked  = variable_struct_exists(load_data, "basic_unlocked")  ? load_data.basic_unlocked  : false;
 
     // Restore the stable-UID allocator: take the higher of the persisted value

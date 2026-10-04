@@ -3,6 +3,8 @@ function scr_template_catalog(_index) {
     if (_index == 10) return {title:"ZYRONS ESCAPE", pro:false, path:working_directory + "C64DMResources/TEMPLATES/ZYRONS_ESCAPE.json"};
     if (_index == 11) return {title:"SPY HUNTER", pro:false, path:working_directory + "C64DMResources/TEMPLATES/SPY_HUNTER.json"};
     if (_index == 12) return {title:"WIZBALL", pro:false, path:working_directory + "C64DMResources/TEMPLATES/WIZBALL.json"};
+    if (_index == 13) return {title:"SABOTEUR", pro:false, path:working_directory + "C64DMResources/TEMPLATES/SABOTEUR.json"};
+    if (_index == 14) return {title:"R-TYPE", pro:false, path:working_directory + "C64DMResources/TEMPLATES/RTYPE.json"};
     if (_index == 0) return {title:"SHMUP V", pro:false, path:working_directory + "C64DMResources/TEMPLATES/SHMUP_V.json"};
     var _titles = ["V.SHMUP", "H.SHMUP", "PFORMER", "PFRMR.SCRL", "TOP DOWN"];
     var _files = ["vshmup", "hshmup", "pformer", "pfrmr_scrl", "top_down"];
@@ -13,7 +15,7 @@ function scr_template_catalog(_index) {
 }
 
 function scr_template_load(_index) {
-    if (_index < 0 || _index >= 13) return;
+    if (_index < 0 || _index >= 15) return;
     var _entry = scr_template_catalog(_index);
     // Validate before the native loader destroys the current workspace.
     if (!file_exists(_entry.path)) { scr_show_message("Template file is missing: " + _entry.title); return; }
@@ -38,6 +40,18 @@ function scr_template_load(_index) {
 }
 
 function scr_template_step() {
+    // A chosen template loads two frames after it was confirmed, so the
+    // NOW LOADING banner (obj_workspace_manager Draw GUI) is on screen
+    // while the load blocks.
+    if (template_load_index >= 0) {
+        template_load_frames--;
+        if (template_load_frames <= 0) {
+            var _li = template_load_index;
+            template_load_index = -1;
+            scr_template_load(_li);
+        }
+        return;
+    }
     if (global.question_result == "template_save_yes") {
         global.question_result = "";
         var _choice = template_waiting;
@@ -57,7 +71,7 @@ function scr_template_step() {
                 buffer_delete(_saved);
             }
         }
-        if (_verified) scr_template_load(_choice);
+        if (_verified) scr_template_begin_load(_choice);
         else {
             global.manual_saved = false;
             scr_show_message("The save could not be verified. Your current project has been kept.");
@@ -73,7 +87,7 @@ function scr_template_step() {
         global.question_result = "";
         var _choice = template_waiting;
         template_waiting = -1;
-        scr_template_load(_choice);
+        scr_template_begin_load(_choice);
         return;
     }
     if (global.question_result == "template_discard_no") {
@@ -87,5 +101,12 @@ function scr_template_step() {
     if (scr_workspace_has_changes()) {
         template_waiting = _choice;
         scr_show_question("Save changes before loading the template?", "template_save");
-    } else scr_template_load(_choice);
+    } else scr_template_begin_load(_choice);
+}
+
+
+/// Queue a template / port to load once the NOW LOADING banner is showing.
+function scr_template_begin_load(_index) {
+    template_load_index  = _index;
+    template_load_frames = 2;
 }

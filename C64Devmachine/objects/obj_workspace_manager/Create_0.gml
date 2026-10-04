@@ -466,6 +466,23 @@ global.named_loc_repack_gen = 0; // bumped every scr_c64_do_update_addresses() c
                                   // even when the node's own name/value didn't change.
 global.kernal_unlocked = false;
 global.basic_unlocked = false;
+// BUILD TARGET (saved per workspace)
+//   0 = D64          LOAD_ORG files on disk, MACRO LOADER does real loads
+//   1 = PRG INJECT   one PRG with every LOAD_ORG asset baked in, loaders
+//                    compile to nothing - for VICE inject / Ultimate DMA
+//   2 = PRG EXO      the PRG INJECT image crunched by Exomizer into a
+//                    self-extracting PRG that survives a normal KERNAL LOAD
+global.build_target = 0;
+// RECENTS (PROJECT menu): last 10 projects, from c64devmachine.ini
+global.recent_files = [];
+scr_recent_files_load();
+global.exo_last_blocks = 0;   // size of the last PRG EXO build, shown next to the target
+// Exomizer runs as a separate process; Step polls for its output file.
+exo_pending     = false;
+exo_out_path    = "";
+exo_timeout     = 0;
+exo_last_size   = -1;
+exo_to_c64u     = false;
 global.breakdown_node = noone;
 
 // Normally created by obj_c64_node's Create, but the Begin Step label-highlight
@@ -1311,6 +1328,8 @@ flow_overlay_dirty  = true;
 // show "CONSTRUCTING FLOW DATA" immediately; the actual build runs first
 // thing next Step, once that frame has had a chance to render.
 flow_overlay_build_pending      = false;
+// F-key builds show a CALCULATING FLOW LINES banner (Draw GUI) until done
+flow_overlay_banner             = false;
 flow_overlay_pending_toast_text = "";
 flow_overlay_pending_toast_col  = c_yellow;
 
@@ -1378,5 +1397,8 @@ box_body_dbl_target = noone;
 
 // Bundled projects and cached palette search.
 template_pending = -1;
+// NOW LOADING banner: template queued by scr_template_begin_load
+template_load_index  = -1;
+template_load_frames = 0;
 template_waiting = -1;
 opcode_finder_cached_text = undefined;

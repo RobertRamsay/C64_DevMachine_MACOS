@@ -1,3 +1,10 @@
+// ── EXOMIZER POLL (BUILD TARGET = PRG EXO) ──
+// Exomizer runs as its own process; wait until its output exists and has
+// stopped growing, then run it like any PRG.
+if (exo_pending) {
+    scr_exo_crunch_poll();
+}
+
 scr_template_step();
 scr_tour_question_step();
 
@@ -52,6 +59,7 @@ if (flow_overlay_build_pending) {
     flow_overlay_edges = scr_build_flow_graph();
     flow_overlay_dirty = false;
     flow_overlay_build_pending = false;
+    flow_overlay_banner        = false;
     global.qmenu_toast_text = flow_overlay_pending_toast_text;
     global.qmenu_toast_col  = flow_overlay_pending_toast_col;
     global.qmenu_toast_t    = global.qmenu_toast_dur;
@@ -242,6 +250,7 @@ if (!is_entering_text && !global.is_any_text_active && scr_workspace_keyboard_ch
         global.qmenu_toast_col  = c_yellow;
         global.qmenu_toast_t    = global.qmenu_toast_dur;
         flow_overlay_build_pending = true;
+        flow_overlay_banner        = true;   // drawn this frame, build runs next Step
     }
 }
 
@@ -3291,8 +3300,24 @@ show_debug_message(_pbuf_dbg2);
             _has_loader = true;
         }
     }
+    // A DISK ONLY link (game code loads the file itself, e.g. a ported
+    // game's KERNAL loader) needs the D64 just as much as a MACRO_LOADER.
+    if (!_has_loader && instance_exists(obj_asset_manager)) {
+        var _am_do = obj_asset_manager;
+        for (var _doi = 0; _doi < ds_list_size(_am_do.asset_list); _doi++) {
+            var _doa = ds_list_find_value(_am_do.asset_list, _doi);
+            if (_doa.type != "LOAD_ORG") continue;
+            var _dol = _doa[$ "linked_assets"];
+            if (!is_array(_dol)) continue;
+            for (var _dlj = 0; _dlj < array_length(_dol); _dlj++) {
+                if (_dol[_dlj][$ "disk_only"] == true) {
+                    _has_loader = true;
+                }
+            }
+        }
+    }
 
-    if (_has_load_org && _has_loader) {
+    if (_has_load_org && _has_loader && global.build_target == 0) {
         // ---------------------------------------------------------
         // Compute TRUE boot size by trimming trailing bytes that fall
         // inside LOAD_ORG asset address ranges (those load from disk,
@@ -3309,6 +3334,9 @@ show_debug_message(_pbuf_dbg2);
                 for (var _lli = 0; _lli < array_length(_lal); _lli++) {
                     var _lnk = _lal[_lli];
                     if (variable_struct_exists(_lnk, "load_later") && _lnk.load_later) continue;
+                    // DISK ONLY files were never baked into BOOT - the resident
+                    // bytes at that address belong to BOOT and must not be trimmed.
+                    if (_lnk[$ "disk_only"] == true) continue;
                     var _lname = _lnk.asset_name;
                     for (var _lbi = 0; _lbi < ds_list_size(_am_bs.asset_list); _lbi++) {
                         var _lb = ds_list_find_value(_am_bs.asset_list, _lbi);
@@ -3327,12 +3355,9 @@ show_debug_message(_pbuf_dbg2);
                         // $4000-$14E00, every code block above the map was
                         // treated as "loads from disk", and BOOT was cut off
                         // before the game code. Crash to READY on JMP.
-                        if (_lb.type == "MAP_DATA"
-                        &&  variable_struct_exists(_lb, "meta")
-                        &&  variable_struct_exists(_lb.meta, "raw_chars")
-                        &&  is_real(_lb.meta.raw_chars)
-                        &&  real(_lb.meta.raw_chars) == 1) {
-                            _lend = _lstart + (_lb.meta.map_w * _lb.meta.map_h);
+                        if (_lb.type == "MAP_DATA") {
+                            // what is really emitted / written to disk, not the 3-plane buffer
+                            _lend = _lstart + scr_map_emit_size(_lb);
                         }
                         array_push(_load_org_ranges, { s: _lstart, e: _lend });
                         break;
@@ -3420,7 +3445,16 @@ show_debug_message(_pbuf_dbg2);
         buffer_save(p_buf, full_save_path);
         buffer_delete(p_buf);
         ds_map_destroy(p.labels);
-        if (!silent_build) {
+        // PRG EXO: crunch the image, then run the crunched file once
+        // Exomizer has written it (polled below, outside the build).
+        var _exo_started = false;
+        if (global.build_target == 2 && !silent_build) {
+            _exo_started = scr_exo_crunch_start(full_save_path, trigger_c64u);
+            if (_exo_started) {
+                trigger_c64u = false;
+            }
+        }
+        if (!_exo_started && !silent_build) {
             if (trigger_c64u) {
                 trigger_c64u = false;
                 scr_c64u_reu_begin("PRG", full_save_path, "");
@@ -4242,7 +4276,22 @@ if (export_trigger) {
             _exp_has_loader = true;
         }
     }
-    var _exp_build_d64 = (_exp_has_load_org && _exp_has_loader);
+    // DISK ONLY links (the game loads its own files) need the D64 too.
+    if (!_exp_has_loader && instance_exists(obj_asset_manager)) {
+        var _exp_am_do = obj_asset_manager;
+        for (var _edi = 0; _edi < ds_list_size(_exp_am_do.asset_list); _edi++) {
+            var _eda = ds_list_find_value(_exp_am_do.asset_list, _edi);
+            if (_eda.type != "LOAD_ORG") continue;
+            var _edl = _eda[$ "linked_assets"];
+            if (!is_array(_edl)) continue;
+            for (var _edj = 0; _edj < array_length(_edl); _edj++) {
+                if (_edl[_edj][$ "disk_only"] == true) {
+                    _exp_has_loader = true;
+                }
+            }
+        }
+    }
+    var _exp_build_d64 = (_exp_has_load_org && _exp_has_loader && global.build_target == 0);
 
     // Resolve the target path via dialog / pending path.
     var _chosen = pending_export_path;

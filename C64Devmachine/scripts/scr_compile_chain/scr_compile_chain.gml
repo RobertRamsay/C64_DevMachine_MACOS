@@ -7409,6 +7409,11 @@ case "MACRO_JOY": {
 // ]
 // --------------------------------------------------------
 case "MACRO_LOADER": {
+    // PRG INJECT / PRG EXO: every LOAD_ORG asset is already in the image,
+    // so there is no disk to load from - the loader emits nothing.
+    if (global.build_target != 0) {
+        break;
+    }
     var _id        = _curr;
     var _org_name  = (array_length(_id.instructions[0]) > 1) ? string(_id.instructions[0][1]) : "";
     var _file_name = (array_length(_id.instructions[0]) > 2) ? string(_id.instructions[0][2]) : "";
@@ -19587,6 +19592,7 @@ for (var _oi = 0; _oi < array_length(_org_nodes); _oi++) {
 	    }
 
 	    var _load_org_linked = ds_map_create();
+	    var _disk_only_linked = ds_map_create();
 	    if (instance_exists(obj_asset_manager)) {
 	        var _am_lo = obj_asset_manager;
 	        for (var _loi = 0; _loi < ds_list_size(_am_lo.asset_list); _loi++) {
@@ -19598,6 +19604,13 @@ for (var _oi = 0; _oi < array_length(_org_nodes); _oi++) {
 	                if (variable_struct_exists(_lolink, "asset_name") && _lolink.asset_name != "") {
 	                    ds_map_replace(_load_org_linked, _lolink.asset_name, true);
 	                }
+	                // DISK ONLY: the game's own code loads this file (KERNAL
+	                // LOAD by name). It lives on the D64 and nowhere else - never
+	                // baked into BOOT, so it can share an address with resident
+	                // code it gets loaded over later (R-TYPE level files).
+	                if (_lolink[$ "disk_only"] == true) {
+	                    ds_map_replace(_disk_only_linked, _lolink.asset_name, true);
+	                }
 	            }
 	        }
 	    }
@@ -19607,6 +19620,7 @@ for (var _oi = 0; _oi < array_length(_org_nodes); _oi++) {
 	    for (var _ai = 0; _ai < ds_list_size(_am.asset_list); _ai++) {
 	        var _a = ds_list_find_value(_am.asset_list, _ai);
 			if (scr_reu_asset_is_external(_a.name)) continue;
+			if (ds_map_exists(_disk_only_linked, _a.name)) continue;
 
 			if ((_a.type == "BITMAP" || _a.type == "BITMAP_KLA") && (ds_map_exists(_used_bmp, _a.name) && !ds_map_exists(_load_org_linked, _a.name))) array_push(_all_assets, _a);
 			if (_a.type == "SID_MUSIC" || _a.type == "SID_SFX") array_push(_all_assets, _a);
@@ -19617,6 +19631,7 @@ for (var _oi = 0; _oi < array_length(_org_nodes); _oi++) {
 			if (_a.type == "BYTE_DATA"  ) array_push(_all_assets, _a);
 			if (_a.type == "META_TILESET" && _a.meta.raw_rows >= 1) array_push(_all_assets, _a);
 			if (_a.type == "LINE_COLL"  ) array_push(_all_assets, _a);
+			if (_a.type == "BMP_OBJECTS") array_push(_all_assets, _a);
 			if (_a.type == "SFX_DATA" && ds_map_exists(_used_sfx, _a.name) && !ds_map_exists(_load_org_linked, _a.name)) array_push(_all_assets, _a);
 			if (_a.type == "SFX_DATA" && ds_map_exists(_load_org_linked, _a.name)) array_push(_all_assets, _a);
 	    }
@@ -19720,9 +19735,17 @@ if (_a.type == "BITMAP" || _a.type == "BITMAP_KLA") {
 		    for (var _bb = 0; _bb < _chr_inject_sz; _bb++) {
 		        array_push(instruction_list, ["byte", buffer_peek(_buf, _bb, buffer_u8)]);
 		    }
-			} else if (_a.type == "BYTE_DATA" || _a.type == "LINE_COLL") {
+			} else if (_a.type == "BYTE_DATA" || _a.type == "LINE_COLL" || _a.type == "BMP_OBJECTS") {
 			    for (var _bb = 0; _bb < _sz; _bb++) {
 			        array_push(instruction_list, ["byte", buffer_peek(_buf, _bb, buffer_u8)]);
+			    }
+			    // BMP_OBJECTS colour table (one byte per object, colour_auto = AUTO)
+			    if (_a.type == "BMP_OBJECTS" && real(_a.meta.colour_addr) > 0) {
+			        array_push(instruction_list, ["org", real(_a.meta.colour_addr)]);
+			        var _ctab = scr_bmpobj_colour_table(_a);
+			        for (var _bb = 0; _bb < array_length(_ctab); _bb++) {
+			            array_push(instruction_list, ["byte", _ctab[_bb]]);
+			        }
 			    }
 				
 			} else if (_a.type == "TEXT_DATA") {
@@ -19771,6 +19794,25 @@ if (_a.type == "BITMAP" || _a.type == "BITMAP_KLA") {
 		        var _raw_n = min(_msz, _sz);
 		        for (var _bb = 0; _bb < _raw_n; _bb++) {
 		            array_push(instruction_list, ["byte", buffer_peek(_buf, _bb, buffer_u8)]);
+		        }
+		        continue;
+		    }
+		    // RLE ROOMS map: room pointer table + band/run streams (see
+		    // scr_map_rle_rooms_encode). Nothing else is emitted.
+		    if (_map_raw == 2) {
+		        var _rle = scr_map_rle_rooms_encode(_a);
+		        for (var _bb = 0; _bb < array_length(_rle); _bb++) {
+		            array_push(instruction_list, ["byte", _rle[_bb]]);
+		        }
+		        // OBJECT LAYER: room pointer table + object lists, each chunk
+		        // at its own address (see scr_map_objects_chunks).
+		        var _objc = scr_map_objects_chunks(_a);
+		        for (var _oc = 0; _oc < array_length(_objc); _oc++) {
+		            array_push(instruction_list, ["org", _objc[_oc].addr]);
+		            var _ocb = _objc[_oc].bytes;
+		            for (var _bb = 0; _bb < array_length(_ocb); _bb++) {
+		                array_push(instruction_list, ["byte", _ocb[_bb]]);
+		            }
 		        }
 		        continue;
 		    }
@@ -19863,6 +19905,7 @@ if (_a.type == "BITMAP" || _a.type == "BITMAP_KLA") {
 			}
 		}
         ds_map_destroy(_load_org_linked);
+        ds_map_destroy(_disk_only_linked);
 	}
 
 	// ================================================================

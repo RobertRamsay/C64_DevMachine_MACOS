@@ -47,7 +47,8 @@ function scr_sound_editor_cmd_menus(_lines) {
             { ins: "N+2",  label: "TONE UP" },
             { ins: "N+1",  label: "SEMITONE UP" },
             { ins: "N-1",  label: "SEMITONE DOWN" },
-            { ins: "N+24", label: "TWO OCTAVES UP" }
+            { ins: "N+24", label: "TWO OCTAVES UP" },
+            { ins: "N=81", label: "FIXED NOTE 81 (ANY ROW NOTE) - NOISE CLICKS" }
         ] },
         { id: "HOLD", items: [
             { ins: "D1",   label: "1 FRAME (FASTEST ARP)" },
@@ -74,7 +75,8 @@ function scr_sound_editor_cmd_menus(_lines) {
             { ins: "G$40", label: "GATE OFF, CONTINUE THE PROGRAM" },
             { ins: "G$41", label: "PULSE GATE ON, CONTINUE" },
             { ins: "H0", label: "KEEP ENVELOPE: BYPASS HARD RESTART" },
-            { ins: "H1", label: "USE THE PLAYER HARD RESTART SETTING" }
+            { ins: "H1", label: "USE THE PLAYER HARD RESTART SETTING" },
+            { ins: "PK", label: "KEEP PULSE WIDTH ON NEW NOTES (FOR ~PULSE+)" }
         ] },
         { id: "END", items: [
             { ins: "---", label: "GATE OFF + STOP (NOTE RELEASES)" }
@@ -412,6 +414,19 @@ function scr_sound_editor_instr_comment(_line, _lines) {
     // C+n / C-n : a ~FILTER table's cutoff speed
     if (_c0 == "C" && (string_char_at(_up, 2) == "+" || string_char_at(_up, 2) == "-")) {
         return { text: "cutoff speed per frame (in a ~FILTER table); Dn sets duration", bad: false };
+    }
+    // N=n : a fixed table note, whatever note the row plays
+    if (_c0 == "N" && string_char_at(_rest, 1) == "=") {
+        var _abs_d = string_digits(string_delete(_rest, 1, 1));
+        if (_abs_d == "" || string_length(_abs_d) != string_length(_rest) - 1 || real(_abs_d) > 95) {
+            return { text: "? write N=0 .. N=95", bad: true };
+        }
+        var _abs_n = real(_abs_d);
+        var _abs_names = ["C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-"];
+        return { text: "fixed note " + _abs_names[_abs_n mod 12] + string(_abs_n div 12) + " (ignores the row note)", bad: false };
+    }
+    if (_up == "PK") {
+        return { text: "instrument setting: keep the pulse width on new notes", bad: false };
     }
     // N / N+n / N-n : note
     if (_c0 == "N") {

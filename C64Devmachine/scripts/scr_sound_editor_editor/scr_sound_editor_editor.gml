@@ -381,6 +381,39 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
         }
     }
 
+    // ── CARRIED INSTRUMENT PER LANE ──
+    // A note row with no instrument (e.g. a JXX tie) keeps the instrument the
+    // voice is already playing. _carry_ins[lane][row] = that instrument
+    // (-1 = none yet), worked out from every earlier order row of this song.
+    var _carry_ins = [[], [], []];
+    for (var _ci = 0; _ci < 3; _ci++) {
+        var _run_ins = -1;
+        for (var _co = 0; _co < _m.sel_order_row; _co++) {
+            var _cp_idx = scr_music_sid_pattern(_cur_song.order[_co], _voice_offset + _ci);
+            if (_cp_idx >= 0 && _cp_idx < array_length(_m.patterns)) {
+                var _cp_pat = _m.patterns[_cp_idx];
+                _se_ensure_steps(_cp_pat);
+                var _cp_n = min(_cp_pat.pattern_len, array_length(_cp_pat.steps));
+                for (var _cs = 0; _cs < _cp_n; _cs++) {
+                    var _cp_st = _cp_pat.steps[_cs];
+                    if (!_cp_st.empty && _cp_st.instr_idx >= 0) {
+                        _run_ins = _cp_st.instr_idx;
+                    }
+                }
+            }
+        }
+        if (_col_pat[_ci] != noone) {
+            var _cl_n = min(_col_pat[_ci].pattern_len, array_length(_col_pat[_ci].steps));
+            for (var _cs2 = 0; _cs2 < _cl_n; _cs2++) {
+                var _cl_st = _col_pat[_ci].steps[_cs2];
+                if (!_cl_st.empty && _cl_st.instr_idx >= 0) {
+                    _run_ins = _cl_st.instr_idx;
+                }
+                _carry_ins[_ci][_cs2] = _run_ins;
+            }
+        }
+    }
+
     // Grid shows rows up to the LONGEST active pattern; a column whose own
     // pattern is shorter shows dim "END" cells past its own length, and a
     // column with no pattern assigned shows "NO PATTERN" throughout.
@@ -1023,7 +1056,15 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
     if (_m.free_voices) {
         draw_set_font_l(fnt_c64_pico);
         draw_set_color(make_color_rgb(90, 90, 120));
-        draw_text_l(_tm_x + 180, _rowy + 6, "EACH VOICE: OWN ORDER COLUMN, OWN FXX SPEED, OWN PATTERN LENGTH");
+        // Two lines, scaled down if the editor is too narrow for them.
+        var _tm_hint = "EACH VOICE: OWN ORDER COLUMN,\nOWN FXX SPEED, OWN PATTERN LENGTH";
+        var _tm_avail = _vx2 - (_tm_x + 180) - 10;
+        var _tm_w = string_width_l(_tm_hint);
+        var _tm_sc = 1;
+        if (_tm_w > _tm_avail && _tm_w > 0) {
+            _tm_sc = max(0.5, _tm_avail / _tm_w);
+        }
+        draw_text_transformed_l(_tm_x + 180, _rowy, _tm_hint, _tm_sc, _tm_sc, 0);
         draw_set_font_l(fnt_c64_tiny);
     }
 
@@ -1350,6 +1391,16 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
                 }
                 draw_set_color(_missing ? c_red : c_white);
                 draw_text_transformed_l(_cx1 + 8, _ry + _ty, _cell_txt, _txt_scale, _txt_scale, 0);
+                if (!_has_instr && !_missing && _row < array_length(_carry_ins[_cv])) {
+                    // No instrument on this row: show the one still playing, dimmed
+                    var _carried = _carry_ins[_cv][_row];
+                    if (_carried >= 0) {
+                        var _carry_str = string(_carried);
+                        while (string_length(_carry_str) < 2) { _carry_str = "0" + _carry_str; }
+                        draw_set_color(make_color_rgb(100, 100, 125));
+                        draw_text_transformed_l(_cx1 + 8 + string_width_l(_cell_txt + " ") * _txt_scale, _ry + _ty, _carry_str, _txt_scale, _txt_scale, 0);
+                    }
+                }
                 if (_missing) {
                     draw_set_font_l(fnt_c64_pico);
                     draw_set_color(c_red);
@@ -1419,7 +1470,17 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
                 }
             }
 
-            if (_hov && mouse_check_button_pressed(mb_left)) {
+            if (_hov && mouse_check_button_pressed(mb_left) && keyboard_check(vk_alt)) {
+                // ALT+click: pick this note's instrument (or the one it carries)
+                var _pick_ins = _step.instr_idx;
+                if (_pick_ins < 0 && _row < array_length(_carry_ins[_cv])) {
+                    _pick_ins = _carry_ins[_cv][_row];
+                }
+                if (_pick_ins >= 0 && _pick_ins < array_length(_m.instruments)) {
+                    _m.sel_instr = _pick_ins;
+                    global.mm_instr_center = _pick_ins;
+                }
+            } else if (_hov && mouse_check_button_pressed(mb_left)) {
                 if (_m.edit_active && (_m.edit_voice != _cv || _m.edit_step != _row)) {
                     scr_sound_editor_commit_cell(_m, _se_push_undo, _se_snap, _col_pat);
                 }
@@ -1484,6 +1545,9 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
         _dg_hl = _m.preview_display_step;
     } else if (_m.song_playing && _m.preview_display_order == _m.sel_order_row) {
         _dg_hl = _m.preview_display_step;
+    }
+    if (_dg_hl >= 0 && _m.dg_own_ord >= 0) {
+        _dg_hl = _m.dg_own_row;    // the digi lane keeps its own row (DIGI SPEED / Fxx)
     }
     if (scr_digi_lane(_m, _order_row, _dg_x, _gy0, _dg_w, _row_h, _vis, _grid_len, _txt_scale, _dg_hl, _mx, _my, _se_push_undo, _se_snap)) {
         if (_m.edit_active) {
@@ -2093,8 +2157,9 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
             } else if (_m.sel_sub == 1) {
                 _m.sel_sub = 0;
             } else if (_m.sel_voice == 0) {
-                // Left of voice 1's note wraps round to the DIGI lane.
+                // Left of voice 1's note wraps round to the DIGI lane's command column.
                 scr_digi_focus_from_grid(_m);
+                _m.dg_sel_sub = 1;
             } else {
                 _m.sel_sub = 1;
                 _m.sel_voice = _m.sel_voice - 1;
@@ -2726,6 +2791,7 @@ function scr_sound_editor_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) 
     // real mouse (the editor's copy is hidden while over the panel).
     var _dg_rect = scr_digi_slots_rect(_dg_x, _dg_w, _gy0);
     _m.dg_panel_rect = _dg_rect;
+    _m.dg_asset_name = _asset.name;
     if (_m.dg_slots_open && !_cg_open) {
         scr_digi_slots_panel(_m, _dg_rect, _dg_pmx, _dg_pmy);
     }

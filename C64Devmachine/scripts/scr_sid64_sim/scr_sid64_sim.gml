@@ -228,9 +228,12 @@ function scr_sid64_sim_trigger(_sim, _v, _instr) {
     var _pw  = floor(scr_sid64_instr_field(_instr, "pulse_width", 0x0800)) & 0x0FFF;
     scr_sid64_sim_write(_sim, _r0 + 5, (_atk << 4) | _dec);
     scr_sid64_sim_write(_sim, _r0 + 6, (_sus << 4) | _rel);
-    scr_sid64_sim_write(_sim, _r0 + 2, _pw & 0xFF);
-    scr_sid64_sim_write(_sim, _r0 + 3, (_pw >> 8) & 0x0F);
-    _vc.pw = _pw;
+    // PK instruments keep the voice's pulse width (the song build's bit 7).
+    if (!scr_instrument_ensure_compiled(_instr).keep_pw) {
+        scr_sid64_sim_write(_sim, _r0 + 2, _pw & 0xFF);
+        scr_sid64_sim_write(_sim, _r0 + 3, (_pw >> 8) & 0x0F);
+        _vc.pw = _pw;
+    }
     _vc.ivdl = clamp(floor(scr_sid64_instr_field(_instr, "vib_delay", 0)), 0, 255);
     _vc.ivs  = clamp(floor(scr_sid64_instr_field(_instr, "vib_speed", 0)), 0, 15);
     _vc.ivp  = (clamp(floor(scr_sid64_instr_field(_instr, "vib_depth", 0)), 0, 15) * 4) & 0x7F;
@@ -431,6 +434,10 @@ function scr_sid64_sim_step(_sim, _v) {
                 _ni = 95;
             }
             _vc.freq = _sim.note_freq[_ni];
+            _vc.pc += 2;
+        } else if (_op == 0x1C) {
+            // ABSOLUTE NOTE (N=n) — the table note itself, no row note added
+            _vc.freq = _sim.note_freq[min(_arg, 95)];
             _vc.pc += 2;
         } else if (_op == 0x02) {
             _vc.display_hold = _vc.pc;

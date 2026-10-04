@@ -1219,11 +1219,18 @@ if (gui_menu_open == 7 || gui_menu_open == 8) {
     ];
     // PORTS: negative entries are sub-headers (-1 GAMES, -2 MUSIC+GFX), not clickable
     var _port_headers = ["GAMES", "MUSIC+GFX"];
-    if (gui_menu_open == 8) _visible_templates = [-1, 10, 11, -2, 12]; // ZYRONS ESCAPE, SPY HUNTER | WIZBALL
+    if (gui_menu_open == 8) _visible_templates = [-1, 10, 11, 13, 14, -2, 12]; // ZYRONS ESCAPE, SPY HUNTER, SABOTEUR, R-TYPE | WIZBALL
     var _th = array_length(_visible_templates) * 24 + 24;
     draw_sprite_stretched(spr_glassSlice, niceSliceFrm, _tx, _ty, _tw, _th);
     draw_set_font_l(fnt_C64_Angled);
     draw_set_halign(fa_left);
+    // Indent for the whole list, fixed before the loop: a click closes the
+    // menu (gui_menu_open = -1) part-way through drawing it, and the rows
+    // after the click used to jump left for that frame.
+    var _tind = 10;
+    if (gui_menu_open == 8) {
+        _tind = 22;    // PORTS entries sit under their sub-header
+    }
     for (var _ti = 0; _ti < array_length(_visible_templates); _ti++) {
         var _iy = _ty + 12 + _ti * 24;
         if (_visible_templates[_ti] < 0) {
@@ -1236,10 +1243,6 @@ if (gui_menu_open == 7 || gui_menu_open == 8) {
         var _disabled = false;
         var _hov = point_in_rectangle(gui_mouse_x, gui_mouse_y, _tx, _iy, _tx + _tw, _iy + 23);
         draw_set_color(_disabled ? c_gray : (_hov ? c_yellow : c_white));
-        var _tind = 10;
-        if (gui_menu_open == 8) {
-            _tind = 22;    // PORTS entries sit under their sub-header
-        }
         draw_text_l(_tx + _tind, _iy + 3, _entry.title);
         if (_hov && !_disabled && scr_workspace_mouse_check_button_pressed(mb_left) && !global.ui_click_consumed && !global.any_picker_open) {
             template_pending = _visible_templates[_ti];
@@ -1272,6 +1275,13 @@ if (gui_menu_open == 3) {
         { title: "RESET/CLEAR",     action: "RESET"           },
         { title: "OPEN AUTOSAVES",  action: "OPEN_AUTOSAVES"  },
     ];
+    // RECENTS - up to 10, newest first; names cut to fit the panel
+    if (array_length(global.recent_files) > 0) {
+        array_push(_proj_list, { title: "--- RECENTS ---", action: "HEADER" });
+        for (var _rfi = 0; _rfi < array_length(global.recent_files); _rfi++) {
+            array_push(_proj_list, { title: "", action: "RECENT", path: global.recent_files[_rfi] });
+        }
+    }
 
     var _item_h_p   = 20;
     var _panel_w_p  = 220;
@@ -1319,6 +1329,8 @@ if (gui_menu_open == 3) {
             draw_text_l(_ix1 + 10, _iy + 3, "AUTOSAVE");
             draw_set_color(_as_title_cols[global.autosave_mode]);
             draw_text_l(_ix1 + 10 + string_width_l("AUTOSAVE "), _iy + 3, _as_title_labels[global.autosave_mode]);
+        } else if (_pp.action == "RECENT") {
+            draw_text_l(_ix1 + 10, _iy + 3, scr_recent_files_label(_pp.path, _panel_w_p - 20));
         } else {
             draw_text_l(_ix1 + 10, _iy + 3, _pp.title);
         }
@@ -1451,6 +1463,9 @@ if (gui_menu_open == 3) {
                     break;
                 case "RESET":
                     game_restart();
+                    break;
+                case "RECENT":
+                    scr_recent_files_open(_pp.path);
                     break;
                 case "OPEN_AUTOSAVES":
                     if (os_type == os_macosx) {
@@ -2580,10 +2595,81 @@ draw_text_l(10, gui_h - 10, "FPS: " + string(fps) + " (REAL: " + string(fps_real
 draw_set_color(c_white);
 draw_text_l(180,gui_h-10,L("NODES: ")+string(instance_number(obj_c64_node)));
 var _usage_y=gui_h-85;
+// Widest a stats line may be: up to the right edge of the side panel
+// (the FIND OPCODE box ends at x=213). Longer lines are scaled down.
+var _side_max_w = 221 - _stats_x;
 if(global.workspace_disk_mode) {
-    draw_set_color(global.workspace_disk_blocks>664?c_red:make_color_rgb(240,200,100));
-    draw_text_l(_stats_x,_usage_y,"DISK: "+(global.workspace_disk_exact?"":"~")+string(global.workspace_disk_blocks)+" / 664 blocks");
+    // Used / free out of a standard 35-track disk (664 blocks). Until a D64
+    // has been built the figure is an estimate and says so - the old "~"
+    // prefix read as a minus sign in the C64 font.
+    var _disk_cap  = 664;
+    var _disk_used = global.workspace_disk_blocks;
+    var _disk_free = _disk_cap - _disk_used;
+    var _disk_txt  = "DISK: " + string(_disk_used) + " USED  ";
+    if (_disk_free >= 0) {
+        draw_set_color(make_color_rgb(240,200,100));
+        _disk_txt += string(_disk_free) + " FREE";
+    } else {
+        draw_set_color(c_red);
+        _disk_txt += "OVER BY " + string(-_disk_free);
+    }
+    _disk_txt += " /" + string(_disk_cap);
+    if (!global.workspace_disk_exact) {
+        _disk_txt += " EST";
+    }
+    // Shrink to fit the side panel (never enlarge).
+    var _disk_sc = min(1, _side_max_w / max(1, string_width(_disk_txt)));
+    draw_text_transformed_l(_stats_x, _usage_y, _disk_txt, _disk_sc, _disk_sc, 0);
     _usage_y-=15;
+}
+// BUILD TARGET - click to cycle D64 -> PRG INJECT -> PRG EXO.
+{
+    var _bt_txt = "BUILD: ";
+    var _bt_col = make_color_rgb(150, 220, 255);
+    var _bt_warn = "";
+    if (global.build_target == 0) {
+        if (global.workspace_disk_mode) {
+            _bt_txt += "D64";
+        } else {
+            _bt_txt += "PRG";
+        }
+    } else if (global.build_target == 1) {
+        _bt_txt += "PRG INJECT";
+        // a plain PRG over $D000-$DFFF only survives RAM inject / DMA
+        var _segs_bt = global.memory_bar_segments;
+        for (var _si_bt = 0; _si_bt < array_length(_segs_bt); _si_bt++) {
+            var _sg_bt = _segs_bt[_si_bt];
+            if (_sg_bt.addr < 0xE000 && _sg_bt.addr + _sg_bt.size > 0xD000) {
+                _bt_warn = "  INJECT ONLY";
+                break;
+            }
+        }
+    } else {
+        _bt_txt += "PRG EXO";
+        if (global.exo_last_blocks > 0) {
+            _bt_txt += " (" + string(global.exo_last_blocks) + " BLK)";
+        }
+        if (exo_pending) {
+            _bt_txt += "  CRUNCHING...";
+        }
+    }
+    var _bt_sc = min(1, _side_max_w / max(1, string_width(_bt_txt + _bt_warn)));
+    var _bt_w = string_width(_bt_txt + _bt_warn) * _bt_sc;
+    var _bt_hov = point_in_rectangle(gui_mouse_x, gui_mouse_y, _stats_x, _usage_y - 12, _stats_x + _bt_w, _usage_y);
+    if (_bt_hov) {
+        _bt_col = c_white;
+        if (scr_workspace_mouse_check_button_pressed(mb_left) && !global.ui_click_consumed) {
+            global.build_target = (global.build_target + 1) mod 3;
+            global.ui_click_consumed = true;
+        }
+    }
+    draw_set_color(_bt_col);
+    draw_text_transformed_l(_stats_x, _usage_y, _bt_txt, _bt_sc, _bt_sc, 0);
+    if (_bt_warn != "") {
+        draw_set_color(c_orange);
+        draw_text_transformed_l(_stats_x + string_width(_bt_txt) * _bt_sc, _usage_y, _bt_warn, _bt_sc, _bt_sc, 0);
+    }
+    _usage_y -= 15;
 }
 draw_set_color(global.workspace_reu_used>global.workspace_reu_capacity?c_red:c_aqua);
 draw_text_l(_stats_x,_usage_y,"REU: "+scr_workspace_usage_text(global.workspace_reu_used)+" / "+scr_workspace_usage_text(global.workspace_reu_capacity));
@@ -4353,4 +4439,57 @@ if (reu_pick_open) {
         global.any_picker_open = false;
     }
     draw_set_color(c_white);
+}
+
+
+// ── NOW LOADING banner (templates / ports) ──
+// Shown from the moment the load is confirmed until it finishes; the load
+// itself blocks, so this is what stays on screen while it runs.
+if (template_load_index >= 0) {
+    var _ld_e = scr_template_catalog(template_load_index);
+    var _ld_t = "NOW LOADING " + string_upper(_ld_e.title) + "...";
+    draw_set_alpha(0.7);
+    draw_set_color(c_black);
+    draw_rectangle(0, 0, display_get_gui_width(), display_get_gui_height(), false);
+    draw_set_alpha(1.0);
+    draw_set_font_l(fnt_C64_Angled);
+    draw_set_halign(fa_center);
+    draw_set_valign(fa_middle);
+    var _ld_cx = display_get_gui_width() * 0.5;
+    var _ld_cy = display_get_gui_height() * 0.5;
+    var _ld_w  = string_width_l(_ld_t) + 60;
+    draw_set_color(make_color_rgb(18, 22, 36));
+    draw_rectangle(_ld_cx - _ld_w * 0.5, _ld_cy - 26, _ld_cx + _ld_w * 0.5, _ld_cy + 26, false);
+    draw_set_color(c_aqua);
+    draw_rectangle(_ld_cx - _ld_w * 0.5, _ld_cy - 26, _ld_cx + _ld_w * 0.5, _ld_cy + 26, true);
+    draw_set_color(c_white);
+    draw_text_l(_ld_cx, _ld_cy, _ld_t);
+    draw_set_halign(fa_left);
+    draw_set_valign(fa_top);
+}
+
+
+// ── CALCULATING FLOW LINES banner (F key) ──
+// The flow graph is built at the start of the next Step and blocks while it
+// runs, so this frame is what stays on screen during the build.
+if (flow_overlay_banner && flow_overlay_build_pending) {
+    var _fl_t = "CALCULATING FLOW LINES...";
+    draw_set_alpha(0.6);
+    draw_set_color(c_black);
+    draw_rectangle(0, 0, display_get_gui_width(), display_get_gui_height(), false);
+    draw_set_alpha(1.0);
+    draw_set_font_l(fnt_C64_Angled);
+    draw_set_halign(fa_center);
+    draw_set_valign(fa_middle);
+    var _fl_cx = display_get_gui_width() * 0.5;
+    var _fl_cy = display_get_gui_height() * 0.5;
+    var _fl_w  = string_width_l(_fl_t) + 60;
+    draw_set_color(make_color_rgb(18, 22, 36));
+    draw_rectangle(_fl_cx - _fl_w * 0.5, _fl_cy - 26, _fl_cx + _fl_w * 0.5, _fl_cy + 26, false);
+    draw_set_color(c_yellow);
+    draw_rectangle(_fl_cx - _fl_w * 0.5, _fl_cy - 26, _fl_cx + _fl_w * 0.5, _fl_cy + 26, true);
+    draw_set_color(c_white);
+    draw_text_l(_fl_cx, _fl_cy, _fl_t);
+    draw_set_halign(fa_left);
+    draw_set_valign(fa_top);
 }

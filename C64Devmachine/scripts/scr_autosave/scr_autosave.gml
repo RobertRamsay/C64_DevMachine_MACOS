@@ -103,7 +103,7 @@ var _base = "unsaved";
                            "ecm_bg1","ecm_bg2","ecm_bg3",
                            "map_w","map_h","grid_w","grid_h","char_grid","colour_grid","chr_asset",
                            "scroll_x","scroll_y","zoom","active_char","active_colour","tool",
-                           "text","byte_string","is_save_file","save_file_size","paint_mc","map_mixed","raw_chars","erase_char","override_grid","map_mc_bg","map_mc_col1","map_mc_col2",
+                           "text","byte_string","is_save_file","save_file_size","paint_mc","map_mixed","raw_chars","tile_colours","obj_asset","room_objects","obj_row_off","obj_col_off","obj_table_addr","obj_regions","show_objects","room_w","room_h","room_count","erase_char","override_grid","map_mc_bg","map_mc_col1","map_mc_col2",
                            "song_name","sfx_count","instruments","wavetable","source_file",
                            "tile_types",
                            "line_string","lines","active_type","ref_enabled","ref_asset_name","ref_offset_x","ref_offset_y",
@@ -153,6 +153,9 @@ var _base = "unsaved";
             if (_a.type == "SPRITE_MASK") {
                 _mo = scr_sprmask_save_meta(_a);
             }
+            if (_a.type == "BMP_OBJECTS") {
+                _mo = scr_bmpobj_save_meta(_a);
+            }
             if (_a.type == "SAMPLE") {
                 _mo = scr_sample_save_meta(_a);
             }
@@ -192,6 +195,7 @@ var _base = "unsaved";
                     _mo.digi_samples  = _me.digi_samples;
                     _mo.digi_patterns = _me.digi_patterns;
                     _mo.digi_boost    = _me.digi_boost;
+                    _mo.digi_speed    = _me.digi_speed;
                     _mo.instr_div     = _me.instr_div;
                     _mo.digi_on       = _me.digi_on;
                 }
@@ -298,7 +302,7 @@ var _root = { nodes:node_data, boxes:box_data, assets:asset_data,
  // Group registry. Project-level, not per-asset, so an empty group
  // survives a save with nothing in it.
  asset_groups:       _groups_out,
-                  basic_unlocked:global.basic_unlocked, kernal_unlocked:global.kernal_unlocked,
+                  basic_unlocked:global.basic_unlocked, kernal_unlocked:global.kernal_unlocked, build_target:global.build_target,
                   code_editor_font_index: code_editor_font_index,
                   map_global_mixed: obj_workspace_manager.map_global_mixed,
                   map_tile_bank:     variable_global_exists("map_tile_bank") ? global.map_tile_bank : [],
