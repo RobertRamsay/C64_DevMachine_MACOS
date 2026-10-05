@@ -40,6 +40,14 @@ function scr_creator_init() {
     global.creator_field_rect   = [0, 0, 0, 0];
     global.creator_commit       = false;
     global.creator_esc_eaten    = false;
+    // Param cards: params drawn on the canvas beside their node, or
+    // stacked under a folded ORG. Rebuilt every Begin Step.
+    global.creator_cards        = [];
+    global.creator_card_hot     = false;
+    global.creator_card_bar     = { active: false, n: noone, pidx: 0, x1: 0, x2: 0, lo: 0, hi: 0 };
+    // TEXT params on a card or panel are typed into a small popup.
+    global.creator_text_node    = noone;
+    global.creator_text_pidx    = 0;
 }
 
 // --------------------------------------------------------------------
@@ -49,13 +57,14 @@ function scr_creator_init() {
 function scr_param_new() {
     return {
         label:   "PARAM",
-        kind:    "COLOUR",     // COLOUR, RANGE, MODE
+        kind:    "COLOUR",     // COLOUR, RANGE, MODE, TEXT
         sym:     "",           // MACRO_CODE target symbol
         row:     0,            // macro target row
         slot:    1,            // macro target slot
         vmin:    0,
         vmax:    255,
-        options: "Off=0,On=1"  // MODE: Label=value, comma separated
+        options: "Off=0,On=1", // MODE: Label=value, comma separated
+        pin:     false         // shown as a card on the canvas
     };
 }
 
@@ -74,7 +83,8 @@ function scr_param_from_data(_d) {
     if (variable_struct_exists(_d, "vmin"))    _p.vmin    = real(_d.vmin);
     if (variable_struct_exists(_d, "vmax"))    _p.vmax    = real(_d.vmax);
     if (variable_struct_exists(_d, "options")) _p.options = string(_d.options);
-    if (_p.kind != "COLOUR" && _p.kind != "RANGE" && _p.kind != "MODE") {
+    if (variable_struct_exists(_d, "pin"))     _p.pin     = bool(_d.pin);
+    if (_p.kind != "COLOUR" && _p.kind != "RANGE" && _p.kind != "MODE" && _p.kind != "TEXT") {
         _p.kind = "COLOUR";
     }
     return _p;
@@ -240,8 +250,30 @@ function scr_code_const_set(_text, _sym, _v) {
 
 /// @return {struct} { ok, val }
 function scr_param_read(_n, _p) {
-    var _res = { ok: false, val: 0 };
+    var _res = { ok: false, val: 0, str: "" };
     if (!instance_exists(_n)) {
+        return _res;
+    }
+    // TEXT targets a string slot on a macro (code blocks have no string
+    // constants the assembler could use, so they never link).
+    if (_p.kind == "TEXT") {
+        if (_n.node_type == "MACRO_CODE") {
+            return _res;
+        }
+        if (_p.row >= array_length(_n.instructions)) {
+            return _res;
+        }
+        var _trow = _n.instructions[_p.row];
+        if (!is_array(_trow)) {
+            return _res;
+        }
+        if (_p.slot >= array_length(_trow)) {
+            return _res;
+        }
+        if (is_string(_trow[_p.slot])) {
+            _res.ok  = true;
+            _res.str = _trow[_p.slot];
+        }
         return _res;
     }
     if (_n.node_type == "MACRO_CODE") {
@@ -297,6 +329,28 @@ function scr_param_write(_n, _p, _v) {
     scr_creator_node_changed(_n);
 }
 
+function scr_param_write_text(_n, _p, _s) {
+    if (!instance_exists(_n)) {
+        return;
+    }
+    var _cur = scr_param_read(_n, _p);
+    if (!_cur.ok) {
+        return;
+    }
+    var _max = max(1, round(_p.vmax));
+    if (string_length(_s) > _max) {
+        _s = string_copy(_s, 1, _max);
+    }
+    if (_cur.str == _s) {
+        return;
+    }
+    _n.instructions[_p.row][_p.slot] = _s;
+    if (_n.node_type == "MACRO_PRINT") {
+        scr_print_sync_height(_n);
+    }
+    scr_creator_node_changed(_n);
+}
+
 function scr_creator_node_changed(_n) {
     with (_n) {
         height_dirty      = true;
@@ -333,6 +387,9 @@ function scr_creator_node_changed(_n) {
 function scr_creator_panel_active() {
     var _open = global.creator_view_open;
     if (instance_exists(global.creator_edit_node)) {
+        _open = true;
+    }
+    if (instance_exists(global.creator_text_node)) {
         _open = true;
     }
     if (!_open) {
@@ -443,8 +500,11 @@ function scr_creator_draw_node_tab() {
 // --------------------------------------------------------------------
 
 function scr_creator_begin_step() {
-    global.creator_tab_hot = noone;
+    global.creator_tab_hot  = noone;
+    global.creator_card_hot = false;
     scr_creator_update_covered();
+    global.creator_cards = scr_creator_cards_build();
+    scr_creator_cards_make_room();
 
     // Deferred panel actions: run here, never from inside a Draw event.
     if (global.creator_action != "") {
@@ -464,7 +524,10 @@ function scr_creator_begin_step() {
     if (!instance_exists(global.creator_edit_node)) {
         global.creator_edit_node = noone;
     }
-    if (global.creator_view_open || global.creator_edit_node != noone) {
+    if (!instance_exists(global.creator_text_node)) {
+        global.creator_text_node = noone;
+    }
+    if (global.creator_view_open || global.creator_edit_node != noone || global.creator_text_node != noone) {
         exit;
     }
 
@@ -487,6 +550,11 @@ function scr_creator_begin_step() {
         } else {
             scr_show_message("CREATOR VIEW\n\nNo params exposed yet.\nUse the P tab on a macro or code block to add some.");
         }
+        exit;
+    }
+
+    // Param cards on the canvas own the pointer while it is over them.
+    if (scr_creator_cards_step()) {
         exit;
     }
 
@@ -721,11 +789,18 @@ function scr_creator_field(_fid, _x1, _y1, _x2, _y2, _value) {
     var _show = string(_value);
     if (_active) {
         _show = global.creator_field_text;
+    }
+    var _ty = (_y1 + _y2) / 2;
+    draw_text(_x1 + 6, _ty, _show);
+    // Caret: the "_" glyph drawn 2px lower, twice (1px apart) for double
+    // thickness, so it sits clear of the text instead of hugging it.
+    if (_active) {
         if ((current_time div 500) mod 2 == 0) {
-            _show += "_";
+            var _cx = _x1 + 6 + string_width(_show);
+            draw_text(_cx, _ty + 2, "_");
+            draw_text(_cx, _ty + 3, "_");
         }
     }
-    draw_text(_x1 + 6, (_y1 + _y2) / 2, _show);
     return _result;
 }
 
@@ -765,7 +840,9 @@ function scr_creator_draw() {
     draw_rectangle(0, 0, display_get_gui_width(), display_get_gui_height(), false);
     draw_set_alpha(1.0);
 
-    if (instance_exists(global.creator_edit_node)) {
+    if (instance_exists(global.creator_text_node)) {
+        scr_creator_draw_text_edit();
+    } else if (instance_exists(global.creator_edit_node)) {
         scr_creator_draw_editor(global.creator_edit_node);
     } else {
         scr_creator_draw_view();
@@ -815,7 +892,7 @@ function scr_creator_draw_editor(_n) {
     draw_set_font_l(fnt_C64_Angled);
     var _changed = false;
     var _del     = -1;
-    var _kinds   = ["COLOUR", "RANGE", "MODE"];
+    var _kinds   = ["COLOUR", "RANGE", "MODE", "TEXT"];
 
     for (var _i = 0; _i < _np; _i++) {
         var _p  = _n.params[_i];
@@ -834,12 +911,16 @@ function scr_creator_draw_editor(_n) {
 
         if (scr_creator_btn(_px + 296, _ry, _px + 406, _ry + 26, _p.kind, true)) {
             var _k = 0;
-            for (var _ki = 0; _ki < 3; _ki++) {
+            for (var _ki = 0; _ki < 4; _ki++) {
                 if (_kinds[_ki] == _p.kind) {
                     _k = _ki;
                 }
             }
-            _p.kind  = _kinds[(_k + 1) mod 3];
+            _p.kind  = _kinds[(_k + 1) mod 4];
+            if (_p.kind == "TEXT") {
+                _p.vmin = 0;
+                _p.vmax = 40;
+            }
             _changed = true;
         }
 
@@ -856,8 +937,15 @@ function scr_creator_draw_editor(_n) {
             draw_set_colour(c_white);
             draw_set_valign(fa_middle);
             draw_text_l(_px + 418, _ry + 13, "SLOT");
+            // Macros with a slot table step through their NAMED slots only
+            // and fill in the label, kind and range; others step raw slots.
+            var _names = scr_macro_slot_names(_n.node_type);
             if (scr_creator_btn(_px + 476, _ry, _px + 502, _ry + 26, "-", false)) {
-                _p.slot  = max(1, _p.slot - 1);
+                if (array_length(_names) > 0) {
+                    scr_creator_slot_step(_p, _names, -1);
+                } else {
+                    _p.slot = max(1, _p.slot - 1);
+                }
                 _changed = true;
             }
             draw_set_colour(c_white);
@@ -869,8 +957,21 @@ function scr_creator_draw_editor(_n) {
                 _row_len = array_length(_n.instructions[_p.row]);
             }
             if (scr_creator_btn(_px + 552, _ry, _px + 578, _ry + 26, "+", false)) {
-                _p.slot  = min(max(1, _row_len - 1), _p.slot + 1);
+                if (array_length(_names) > 0) {
+                    scr_creator_slot_step(_p, _names, 1);
+                } else {
+                    _p.slot = min(max(1, _row_len - 1), _p.slot + 1);
+                }
                 _changed = true;
+            }
+            var _sinfo = scr_macro_slot_find(_names, _p.slot);
+            draw_set_valign(fa_middle);
+            if (is_struct(_sinfo)) {
+                draw_set_colour(make_colour_rgb(255, 210, 80));
+                draw_text_l(_px + 588, _ry + 13, _sinfo.name);
+            } else {
+                draw_set_colour(make_colour_rgb(150, 150, 190));
+                draw_text_l(_px + 588, _ry + 13, "UNNAMED");
             }
         }
 
@@ -896,6 +997,13 @@ function scr_creator_draw_editor(_n) {
                 _p.vmax  = scr_creator_num(_rmax);
                 _changed = true;
             }
+        } else if (_p.kind == "TEXT") {
+            draw_text_l(_px + 16, _ly + 13, "MAX LEN");
+            var _rlen = scr_creator_field("len" + _si, _px + 110, _ly, _px + 190, _ly + 26, _p.vmax);
+            if (!is_undefined(_rlen)) {
+                _p.vmax  = clamp(round(scr_creator_num(_rlen)), 1, 48);
+                _changed = true;
+            }
         } else if (_p.kind == "MODE") {
             draw_text_l(_px + 16, _ly + 13, "OPTIONS");
             var _ro = scr_creator_field("opt" + _si, _px + 100, _ly, _px + 560, _ly + 26, _p.options);
@@ -911,7 +1019,10 @@ function scr_creator_draw_editor(_n) {
 
         var _cur = scr_param_read(_n, _p);
         draw_set_valign(fa_middle);
-        if (_cur.ok) {
+        if (_cur.ok && _p.kind == "TEXT") {
+            draw_set_colour(make_colour_rgb(120, 255, 140));
+            draw_text_l(_px + 590, _ly + 13, "\"" + string_copy(_cur.str, 1, 14) + "\"");
+        } else if (_cur.ok) {
             draw_set_colour(make_colour_rgb(120, 255, 140));
             draw_text(_px + 590, _ly + 13, "VALUE " + string(_cur.val));
             if (_p.kind == "COLOUR") {
@@ -920,7 +1031,9 @@ function scr_creator_draw_editor(_n) {
             }
         } else {
             draw_set_colour(make_colour_rgb(255, 110, 110));
-            if (_code) {
+            if (_p.kind == "TEXT") {
+                draw_text_l(_px + 590, _ly + 13, "NEEDS A TEXT SLOT");
+            } else if (_code) {
                 draw_text_l(_px + 590, _ly + 13, "NAME NOT FOUND");
             } else {
                 draw_text_l(_px + 590, _ly + 13, "SLOT NOT NUMERIC");
@@ -948,6 +1061,11 @@ function scr_creator_draw_editor(_n) {
                 _np_new.sym = "";
             } else {
                 _np_new.kind = "RANGE";
+                // Start on the macro's first named slot, already labelled.
+                var _new_names = scr_macro_slot_names(_n.node_type);
+                if (array_length(_new_names) > 0) {
+                    scr_creator_slot_apply(_np_new, _new_names[0]);
+                }
             }
             array_push(_n.params, _np_new);
             _changed = true;
@@ -1125,6 +1243,11 @@ function scr_creator_draw_view() {
                     var _f = (global.creator_mx - _bx1) / (_bx2 - _bx1);
                     scr_param_write(_n, _p, _lo + _f * (_hi - _lo));
                 }
+            } else if (_p.kind == "TEXT") {
+                var _rt = scr_creator_field("view" + string(_h) + "_" + string(_i), _cx, _cy - 13, _cx + 460, _cy + 13, _cur.str);
+                if (!is_undefined(_rt)) {
+                    scr_param_write_text(_n, _p, _rt);
+                }
             } else if (_p.kind == "MODE") {
                 var _opts = scr_param_options(_p.options);
                 var _ox   = _cx;
@@ -1211,6 +1334,7 @@ function scr_creator_draw_view() {
 #macro CREATOR_PANEL_HEAD 30
 #macro CREATOR_PANEL_ROW  34
 #macro CREATOR_PANEL_ROW_STACK 52
+#macro CREATOR_PANEL_ROW_COLOUR2 70   // stacked COLOUR: label + 2 rows of 8
 #macro CREATOR_PANEL_SUB  22
 #macro CREATOR_PANEL_PAD  10
 
@@ -1222,6 +1346,11 @@ function scr_creator_update_covered() {
     with (obj_mapping_box) {
         if (!is_panel || panel_editing) {
             continue;
+        }
+        // Panels from older workspaces (and templates) carry no links yet:
+        // link them to whatever they cover the first time they are seen.
+        if (array_length(panel_links) == 0) {
+            panel_links = scr_creator_panel_cover_uids(id);
         }
         var _bx1 = x;
         var _by1 = y;
@@ -1237,8 +1366,67 @@ function scr_creator_update_covered() {
     }
 }
 
-/// Nodes with params whose centre is inside the box, top to bottom.
+/// stable_uids of the nodes with params whose centre is inside the box.
+function scr_creator_panel_cover_uids(_b) {
+    var _uids = [];
+    var _nodes = scr_creator_panel_cover_nodes(_b);
+    for (var _i = 0; _i < array_length(_nodes); _i++) {
+        array_push(_uids, _nodes[_i].stable_uid);
+    }
+    return _uids;
+}
+
+/// The nodes this panel drives: its links when it has them, otherwise the
+/// nodes it covers. Top to bottom, then left to right.
 function scr_creator_panel_nodes(_b) {
+    if (array_length(_b.panel_links) == 0) {
+        return scr_creator_panel_cover_nodes(_b);
+    }
+    var _out   = [];
+    var _links = _b.panel_links;
+    with (obj_c64_node) {
+        if (array_length(params) == 0) {
+            continue;
+        }
+        for (var _i = 0; _i < array_length(_links); _i++) {
+            if (_links[_i] == stable_uid) {
+                array_push(_out, id);
+                break;
+            }
+        }
+    }
+    array_sort(_out, function(_a, _c) {
+        if (_a.y != _c.y) {
+            return _a.y - _c.y;
+        }
+        return _a.x - _c.x;
+    });
+    return _out;
+}
+
+/// Unfold whatever hides a node. The camera is left alone on purpose.
+function scr_creator_reveal_node(_n) {
+    if (!instance_exists(_n)) {
+        return;
+    }
+    if (_n.org_parent != noone) {
+        if (instance_exists(_n.org_parent)) {
+            if (_n.org_parent.collapsed) {
+                scr_org_set_collapsed(_n.org_parent, false);
+            }
+        }
+    } else if (global.init_collapsed) {
+        with (obj_c64_node) {
+            if (node_type == "INIT") {
+                scr_org_set_collapsed(id, false);
+                break;
+            }
+        }
+    }
+}
+
+/// Nodes with params whose centre is inside the box, top to bottom.
+function scr_creator_panel_cover_nodes(_b) {
     var _out = [];
     var _bx1 = _b.x;
     var _by1 = _b.y;
@@ -1267,6 +1455,116 @@ function scr_creator_item(_t, _x1, _y1, _x2, _y2) {
     return { t: _t, x1: _x1, y1: _y1, x2: _x2, y2: _y2, n: noone, pidx: 0, v: 0, text: "", on: false, lo: 0, hi: 0 };
 }
 
+
+/// One param's widgets appended to _items, inside content columns _x1.._x2
+/// starting at _y. _stack puts the label above a full-width control; _lw is
+/// the label column width when not stacked. Shared by panels and cards.
+/// Height one param row takes. Stacked COLOUR rows split the palette over
+/// two lines of 8 so the swatches stay a usable size.
+function scr_creator_param_row_h(_p, _stack) {
+    if (!_stack) {
+        return CREATOR_PANEL_ROW;
+    }
+    if (_p.kind == "COLOUR") {
+        return CREATOR_PANEL_ROW_COLOUR2;
+    }
+    return CREATOR_PANEL_ROW_STACK;
+}
+
+function scr_creator_param_row(_items, _n, _i, _x1, _x2, _y, _stack, _lw) {
+    var _row_h = CREATOR_PANEL_ROW;
+    if (_stack) {
+        _row_h = CREATOR_PANEL_ROW_STACK;
+    }
+    var _cx = _x1 + _lw;
+    var _cw = _x2 - _cx;
+    var _p   = _n.params[_i];
+    var _cy  = _y + _row_h * 0.5;
+    var _cur = scr_param_read(_n, _p);
+
+    var _lab = scr_creator_item("label", _x1, _y, _cx - 6, _y + _row_h);
+    if (_stack) {
+        _lab = scr_creator_item("label", _x1, _y, _x2, _y + 20);
+        _cy  = _y + 20 + 15;
+    }
+    _lab.text = _p.label;
+    array_push(_items, _lab);
+
+    if (!_cur.ok) {
+        var _bad = scr_creator_item("bad", _cx, _cy - 10, _x2, _cy + 10);
+        _bad.text = "NOT LINKED";
+        array_push(_items, _bad);
+    } else if (_p.kind == "COLOUR" && _stack) {
+        // Two rows of 8, under the label.
+        var _step2 = max(10, floor(_cw / 8));
+        for (var _c = 0; _c < 16; _c++) {
+            var _sx = _cx + (_c mod 8) * _step2;
+            var _sy = _y + 24 + (_c div 8) * 22;
+            var _it = scr_creator_item("swatch", _sx, _sy, _sx + _step2 - 5, _sy + 16);
+            _it.n    = _n;
+            _it.pidx = _i;
+            _it.v    = _c;
+            _it.on   = (round(_cur.val) == _c);
+            array_push(_items, _it);
+        }
+    } else if (_p.kind == "COLOUR") {
+        var _step = max(8, floor(_cw / 16));
+        var _sw   = max(6, _step - 3);
+        for (var _c = 0; _c < 16; _c++) {
+            var _sx = _cx + _c * _step;
+            var _it = scr_creator_item("swatch", _sx, _cy - _sw * 0.5, _sx + _sw, _cy + _sw * 0.5);
+            _it.n  = _n;
+            _it.pidx = _i;
+            _it.v  = _c;
+            _it.on = (round(_cur.val) == _c);
+            array_push(_items, _it);
+        }
+    } else if (_p.kind == "RANGE") {
+        var _mi = scr_creator_item("minus", _cx, _cy - 10, _cx + 20, _cy + 10);
+        _mi.n = _n; _mi.pidx = _i; _mi.v = _cur.val - 1; _mi.text = "-";
+        array_push(_items, _mi);
+        var _vt = scr_creator_item("value", _cx + 22, _cy - 10, _cx + 62, _cy + 10);
+        _vt.text = string(_cur.val);
+        array_push(_items, _vt);
+        var _pl = scr_creator_item("plus", _cx + 64, _cy - 10, _cx + 84, _cy + 10);
+        _pl.n = _n; _pl.pidx = _i; _pl.v = _cur.val + 1; _pl.text = "+";
+        array_push(_items, _pl);
+        if (_cw > 120) {
+            var _bar = scr_creator_item("bar", _cx + 94, _cy - 5, _cx + _cw, _cy + 5);
+            _bar.n  = _n;
+            _bar.pidx = _i;
+            _bar.lo = min(_p.vmin, _p.vmax);
+            _bar.hi = max(_p.vmin, _p.vmax);
+            _bar.v  = _cur.val;
+            array_push(_items, _bar);
+        }
+    } else if (_p.kind == "TEXT") {
+        // Click to type it in a popup.
+        var _tb = scr_creator_item("textbox", _cx, _cy - 11, _x2, _cy + 11);
+        _tb.n    = _n;
+        _tb.pidx = _i;
+        _tb.text = _cur.str;
+        array_push(_items, _tb);
+    } else if (_p.kind == "MODE") {
+        var _opts = scr_param_options(_p.options);
+        var _ox   = _cx;
+        for (var _o = 0; _o < array_length(_opts); _o++) {
+            var _ow = string_width_l(_opts[_o].name) + 16;
+            if (_ox + _ow > _x2) {
+                break;
+            }
+            var _ob = scr_creator_item("opt", _ox, _cy - 11, _ox + _ow, _cy + 11);
+            _ob.n    = _n;
+            _ob.pidx   = _i;
+            _ob.v    = _opts[_o].val;
+            _ob.text = _opts[_o].name;
+            _ob.on   = (round(_cur.val) == round(_opts[_o].val));
+            array_push(_items, _ob);
+            _ox += _ow + 6;
+        }
+    }
+}
+
 /// Room-space layout shared by the facade's Step (clicks) and Draw.
 /// Font must be fnt_c64_code when called (string widths).
 function scr_creator_panel_layout(_b) {
@@ -1293,7 +1591,8 @@ function scr_creator_panel_layout(_b) {
     var _cw    = _bx2 - _pad - _cx;
 
     if (array_length(_nodes) == 0) {
-        var _none = scr_creator_item("text", _bx1 + _pad, _y, _bx2 - _pad, _y + CREATOR_PANEL_ROW);
+        // Runs to the bottom of the box so the text can shrink to fit it.
+        var _none = scr_creator_item("text", _bx1 + _pad, _y, _bx2 - _pad, _by2 - 4);
         _none.text = "No params in this panel. EDIT, then use the P tab on a node.";
         array_push(_items, _none);
         return _items;
@@ -1312,76 +1611,13 @@ function scr_creator_panel_layout(_b) {
             _y += CREATOR_PANEL_SUB;
         }
         for (var _i = 0; _i < array_length(_n.params); _i++) {
-            if (_y + _row_h > _by2 - 4) {
+            var _rh = scr_creator_param_row_h(_n.params[_i], _stack);
+            if (_y + _rh > _by2 - 4) {
                 array_push(_items, scr_creator_item("more", _bx1, _by2 - 14, _bx2, _by2));
                 return _items;
             }
-            var _p   = _n.params[_i];
-            var _cy  = _y + _row_h * 0.5;
-            var _cur = scr_param_read(_n, _p);
-
-            var _lab = scr_creator_item("label", _bx1 + _pad, _y, _cx - 6, _y + _row_h);
-            if (_stack) {
-                _lab = scr_creator_item("label", _bx1 + _pad, _y, _bx2 - _pad, _y + 20);
-                _cy  = _y + 20 + 15;
-            }
-            _lab.text = _p.label;
-            array_push(_items, _lab);
-
-            if (!_cur.ok) {
-                var _bad = scr_creator_item("bad", _cx, _cy - 10, _bx2 - _pad, _cy + 10);
-                _bad.text = "NOT LINKED";
-                array_push(_items, _bad);
-            } else if (_p.kind == "COLOUR") {
-                var _step = max(8, floor(_cw / 16));
-                var _sw   = max(6, _step - 3);
-                for (var _c = 0; _c < 16; _c++) {
-                    var _sx = _cx + _c * _step;
-                    var _it = scr_creator_item("swatch", _sx, _cy - _sw * 0.5, _sx + _sw, _cy + _sw * 0.5);
-                    _it.n  = _n;
-                    _it.pidx = _i;
-                    _it.v  = _c;
-                    _it.on = (round(_cur.val) == _c);
-                    array_push(_items, _it);
-                }
-            } else if (_p.kind == "RANGE") {
-                var _mi = scr_creator_item("minus", _cx, _cy - 10, _cx + 20, _cy + 10);
-                _mi.n = _n; _mi.pidx = _i; _mi.v = _cur.val - 1; _mi.text = "-";
-                array_push(_items, _mi);
-                var _vt = scr_creator_item("value", _cx + 22, _cy - 10, _cx + 62, _cy + 10);
-                _vt.text = string(_cur.val);
-                array_push(_items, _vt);
-                var _pl = scr_creator_item("plus", _cx + 64, _cy - 10, _cx + 84, _cy + 10);
-                _pl.n = _n; _pl.pidx = _i; _pl.v = _cur.val + 1; _pl.text = "+";
-                array_push(_items, _pl);
-                if (_cw > 120) {
-                    var _bar = scr_creator_item("bar", _cx + 94, _cy - 5, _cx + _cw, _cy + 5);
-                    _bar.n  = _n;
-                    _bar.pidx = _i;
-                    _bar.lo = min(_p.vmin, _p.vmax);
-                    _bar.hi = max(_p.vmin, _p.vmax);
-                    _bar.v  = _cur.val;
-                    array_push(_items, _bar);
-                }
-            } else if (_p.kind == "MODE") {
-                var _opts = scr_param_options(_p.options);
-                var _ox   = _cx;
-                for (var _o = 0; _o < array_length(_opts); _o++) {
-                    var _ow = string_width_l(_opts[_o].name) + 16;
-                    if (_ox + _ow > _bx2 - _pad) {
-                        break;
-                    }
-                    var _ob = scr_creator_item("opt", _ox, _cy - 11, _ox + _ow, _cy + 11);
-                    _ob.n    = _n;
-                    _ob.pidx   = _i;
-                    _ob.v    = _opts[_o].val;
-                    _ob.text = _opts[_o].name;
-                    _ob.on   = (round(_cur.val) == round(_opts[_o].val));
-                    array_push(_items, _ob);
-                    _ox += _ow + 6;
-                }
-            }
-            _y += _row_h;
+            scr_creator_param_row(_items, _n, _i, _bx1 + _pad, _bx2 - _pad, _y, _stack, _lw);
+            _y += _rh;
         }
     }
     return _items;
@@ -1434,8 +1670,26 @@ function scr_creator_box_step(_b) {
             continue;
         }
         if (_bt.t == "toggle") {
-            _b.is_panel      = !_b.is_panel;
-            _b.panel_editing = false;
+            if (_b.is_panel) {
+                // EDIT: back to a plain box, and take the view to the linked
+                // nodes (unfolding their ORG) so they can be worked on.
+                var _linked = scr_creator_panel_nodes(_b);
+                _b.is_panel      = false;
+                _b.panel_editing = false;
+                if (array_length(_linked) > 0) {
+                    scr_creator_reveal_node(_linked[0]);
+                }
+            } else {
+                // UI: link to the param nodes the box covers. Covering none
+                // keeps the previous links, so a panel can go back to being a
+                // panel from anywhere.
+                var _cover = scr_creator_panel_cover_uids(_b);
+                if (array_length(_cover) > 0) {
+                    _b.panel_links = _cover;
+                }
+                _b.is_panel      = true;
+                _b.panel_editing = false;
+            }
             global.selected_nodes = [];
         }
         global.undo_dirty     = true;
@@ -1454,8 +1708,36 @@ function scr_creator_box_step(_b) {
         return false;
     }
 
+    // The header bar is a grab handle: start the box's own drag (Step_0
+    // carries it on from the next frame). Panels move alone - no nodes.
+    if (_my < _b.y + CREATOR_PANEL_HEAD) {
+        scr_undo_snapshot();
+        _b.is_dragging   = true;
+        _b.drag_ox       = mouse_x;
+        _b.drag_oy       = mouse_y;
+        _b.drag_start_x  = _b.x;
+        _b.drag_start_y  = _b.y;
+        _b.drag_nodes    = [];
+        _b.drag_offsets  = [];
+        _b.drag_floats   = [];
+        _b.drag_float_ox = [];
+        _b.drag_float_oy = [];
+        return true;
+    }
+
     draw_set_font_l(fnt_c64_code);
     var _items = scr_creator_panel_layout(_b);
+    if (scr_creator_items_press(_items, _mx, _my, _b.panel_bar)) {
+        return true;
+    }
+    // The facade protects what is under it: a click anywhere on it stops here.
+    return true;
+}
+
+
+/// A press on panel / card widgets. _bar is the slider-drag state to arm.
+/// Returns true when a widget used the click.
+function scr_creator_items_press(_items, _mx, _my, _bar) {
     for (var _i = 0; _i < array_length(_items); _i++) {
         var _it = _items[_i];
         if (!point_in_rectangle(_mx, _my, _it.x1, _it.y1 - 3, _it.x2, _it.y2 + 3)) {
@@ -1468,25 +1750,33 @@ function scr_creator_box_step(_b) {
             continue;
         }
         var _p = _it.n.params[_it.pidx];
+        if (_it.t == "textbox") {
+            global.creator_text_node = _it.n;
+            global.creator_text_pidx = _it.pidx;
+            scr_creator_opened();
+            global.creator_field      = "ptext";
+            keyboard_string           = _it.text;
+            global.creator_field_text = _it.text;
+            return true;
+        }
         if (_it.t == "swatch" || _it.t == "minus" || _it.t == "plus" || _it.t == "opt") {
             scr_param_write(_it.n, _p, _it.v);
             return true;
         }
         if (_it.t == "bar") {
-            _b.panel_bar.active = true;
-            _b.panel_bar.n      = _it.n;
-            _b.panel_bar.pidx     = _it.pidx;
-            _b.panel_bar.x1     = _it.x1;
-            _b.panel_bar.x2     = _it.x2;
-            _b.panel_bar.lo     = _it.lo;
-            _b.panel_bar.hi     = _it.hi;
+            _bar.active = true;
+            _bar.n      = _it.n;
+            _bar.pidx     = _it.pidx;
+            _bar.x1     = _it.x1;
+            _bar.x2     = _it.x2;
+            _bar.lo     = _it.lo;
+            _bar.hi     = _it.hi;
             var _f = clamp((_mx - _it.x1) / max(1, _it.x2 - _it.x1), 0, 1);
             scr_param_write(_it.n, _p, _it.lo + _f * (_it.hi - _it.lo));
             return true;
         }
     }
-    // The facade protects what is under it: a click anywhere on it stops here.
-    return true;
+    return false;
 }
 
 /// Facade buttons stay plain for readability: dark fill, coloured outline,
@@ -1512,6 +1802,106 @@ function scr_creator_draw_room_btn(_it, _on, _col) {
     draw_set_valign(fa_middle);
     draw_text_l((_it.x1 + _it.x2) * 0.5, (_it.y1 + _it.y2) * 0.5, _it.text);
     draw_set_halign(fa_left);
+}
+
+
+/// Draw panel / card widgets built by scr_creator_param_row. Font must be
+/// fnt_c64_code. _col tints node sub-headings.
+function scr_creator_draw_items(_items, _col) {
+    for (var _i = 0; _i < array_length(_items); _i++) {
+        var _it = _items[_i];
+        var _my = (_it.y1 + _it.y2) * 0.5;
+        draw_set_valign(fa_middle);
+        draw_set_halign(fa_left);
+        switch (_it.t) {
+            case "sub":
+                draw_set_colour(_col);
+                draw_text_l(_it.x1, _my, _it.text);
+                draw_set_alpha(0.4);
+                draw_line(_it.x1, _it.y2 - 2, _it.x2, _it.y2 - 2);
+                draw_set_alpha(1);
+                break;
+            case "label":
+                draw_set_colour(c_white);
+                draw_text(_it.x1, _my, _it.text);
+                break;
+            case "text":
+                // Word-wrapped to the item width, and scaled down (in 10%
+                // steps, to 40%) when the wrapped text is taller than the item.
+                draw_set_colour(make_colour_rgb(190, 190, 230));
+                draw_set_valign(fa_top);
+                var _tw  = max(20, _it.x2 - _it.x1);
+                var _tah = max(10, _it.y2 - _it.y1 - 4);
+                var _tsc = 1;
+                while (_tsc > 0.4) {
+                    if (string_height_ext_l(_it.text, 20, _tw / _tsc) * _tsc <= _tah) {
+                        break;
+                    }
+                    _tsc -= 0.1;
+                }
+                draw_text_ext_transformed_l(_it.x1, _it.y1 + 4, _it.text, 20, _tw / _tsc, _tsc, _tsc, 0);
+                draw_set_valign(fa_middle);
+                break;
+            case "bad":
+                draw_set_colour(make_colour_rgb(255, 110, 110));
+                draw_text_l(_it.x1, _my, _it.text);
+                break;
+            case "value":
+                draw_set_colour(c_white);
+                draw_set_halign(fa_center);
+                draw_text((_it.x1 + _it.x2) * 0.5, _my, _it.text);
+                break;
+            case "swatch":
+                draw_set_colour(scr_c64_pepto_colour(_it.v));
+                draw_rectangle(_it.x1, _it.y1, _it.x2, _it.y2, false);
+                if (_it.on) {
+                    draw_set_colour(c_white);
+                    draw_rectangle(_it.x1 - 2, _it.y1 - 2, _it.x2 + 2, _it.y2 + 2, true);
+                    draw_rectangle(_it.x1 - 3, _it.y1 - 3, _it.x2 + 3, _it.y2 + 3, true);
+                }
+                break;
+            case "minus":
+            case "plus":
+                scr_creator_draw_room_btn(_it, false, make_colour_rgb(180, 180, 255));
+                break;
+            case "opt":
+                scr_creator_draw_room_btn(_it, _it.on, make_colour_rgb(180, 180, 255));
+                break;
+            case "bar":
+                var _t = 0;
+                if (_it.hi > _it.lo) {
+                    _t = clamp((_it.v - _it.lo) / (_it.hi - _it.lo), 0, 1);
+                }
+                draw_set_colour(make_colour_rgb(8, 8, 24));
+                draw_rectangle(_it.x1, _it.y1, _it.x2, _it.y2, false);
+                draw_set_colour(make_colour_rgb(80, 200, 255));
+                draw_rectangle(_it.x1, _it.y1, _it.x1 + (_it.x2 - _it.x1) * _t, _it.y2, false);
+                draw_set_colour(make_colour_rgb(180, 180, 255));
+                draw_rectangle(_it.x1, _it.y1, _it.x2, _it.y2, true);
+                break;
+            case "textbox":
+                var _thov = point_in_rectangle(mouse_x, mouse_y, _it.x1, _it.y1, _it.x2, _it.y2);
+                draw_set_colour(make_colour_rgb(8, 8, 24));
+                draw_rectangle(_it.x1, _it.y1, _it.x2, _it.y2, false);
+                draw_set_colour(make_colour_rgb(180, 180, 255));
+                if (_thov) {
+                    draw_set_colour(make_colour_rgb(255, 210, 80));
+                }
+                draw_rectangle(_it.x1, _it.y1, _it.x2, _it.y2, true);
+                draw_set_colour(c_white);
+                var _tshow = _it.text;
+                while (string_length(_tshow) > 0 && string_width_l(_tshow) > _it.x2 - _it.x1 - 12) {
+                    _tshow = string_copy(_tshow, 1, string_length(_tshow) - 1);
+                }
+                draw_text_l(_it.x1 + 6, _my, _tshow);
+                break;
+            case "more":
+                draw_set_colour(make_colour_rgb(190, 190, 230));
+                draw_set_halign(fa_center);
+                draw_text_l((_it.x1 + _it.x2) * 0.5, _my, "...");
+                break;
+        }
+    }
 }
 
 /// obj_mapping_box Draw (room space). Buttons above the box always; the
@@ -1547,78 +1937,598 @@ function scr_creator_box_draw(_b) {
         draw_set_colour(c_white);
         draw_set_halign(fa_left);
         draw_set_valign(fa_middle);
-        draw_text_l(_bx1 + CREATOR_PANEL_PAD, _by1 + CREATOR_PANEL_HEAD * 0.5, string_upper(_b.box_name));
-
-        var _items = scr_creator_panel_layout(_b);
-        for (var _i = 0; _i < array_length(_items); _i++) {
-            var _it = _items[_i];
-            var _my = (_it.y1 + _it.y2) * 0.5;
-            draw_set_valign(fa_middle);
-            draw_set_halign(fa_left);
-            switch (_it.t) {
-                case "sub":
-                    draw_set_colour(_col);
-                    draw_text_l(_it.x1, _my, _it.text);
-                    draw_set_alpha(0.4);
-                    draw_line(_it.x1, _it.y2 - 2, _it.x2, _it.y2 - 2);
-                    draw_set_alpha(1);
-                    break;
-                case "label":
-                    draw_set_colour(c_white);
-                    draw_text(_it.x1, _my, _it.text);
-                    break;
-                case "text":
-                    draw_set_colour(make_colour_rgb(190, 190, 230));
-                    draw_text_l(_it.x1, _my, _it.text);
-                    break;
-                case "bad":
-                    draw_set_colour(make_colour_rgb(255, 110, 110));
-                    draw_text_l(_it.x1, _my, _it.text);
-                    break;
-                case "value":
-                    draw_set_colour(c_white);
-                    draw_set_halign(fa_center);
-                    draw_text((_it.x1 + _it.x2) * 0.5, _my, _it.text);
-                    break;
-                case "swatch":
-                    draw_set_colour(scr_c64_pepto_colour(_it.v));
-                    draw_rectangle(_it.x1, _it.y1, _it.x2, _it.y2, false);
-                    if (_it.on) {
-                        draw_set_colour(c_white);
-                        draw_rectangle(_it.x1 - 2, _it.y1 - 2, _it.x2 + 2, _it.y2 + 2, true);
-                        draw_rectangle(_it.x1 - 3, _it.y1 - 3, _it.x2 + 3, _it.y2 + 3, true);
-                    }
-                    break;
-                case "minus":
-                case "plus":
-                    scr_creator_draw_room_btn(_it, false, make_colour_rgb(180, 180, 255));
-                    break;
-                case "opt":
-                    scr_creator_draw_room_btn(_it, _it.on, make_colour_rgb(180, 180, 255));
-                    break;
-                case "bar":
-                    var _t = 0;
-                    if (_it.hi > _it.lo) {
-                        _t = clamp((_it.v - _it.lo) / (_it.hi - _it.lo), 0, 1);
-                    }
-                    draw_set_colour(make_colour_rgb(8, 8, 24));
-                    draw_rectangle(_it.x1, _it.y1, _it.x2, _it.y2, false);
-                    draw_set_colour(make_colour_rgb(80, 200, 255));
-                    draw_rectangle(_it.x1, _it.y1, _it.x1 + (_it.x2 - _it.x1) * _t, _it.y2, false);
-                    draw_set_colour(make_colour_rgb(180, 180, 255));
-                    draw_rectangle(_it.x1, _it.y1, _it.x2, _it.y2, true);
-                    break;
-                case "more":
-                    draw_set_colour(make_colour_rgb(190, 190, 230));
-                    draw_set_halign(fa_center);
-                    draw_text_l((_it.x1 + _it.x2) * 0.5, _my, "...");
-                    break;
-            }
+        // Title shrinks to fit a narrow panel instead of running past it.
+        var _title  = string_upper(_b.box_name);
+        var _ttw    = string_width_l(_title);
+        var _tfit   = _b.box_w - CREATOR_PANEL_PAD * 2;
+        var _tscale = 1;
+        if (_ttw > _tfit && _ttw > 0) {
+            _tscale = max(0.4, _tfit / _ttw);
         }
+        draw_text_transformed_l(_bx1 + CREATOR_PANEL_PAD, _by1 + CREATOR_PANEL_HEAD * 0.5, _title, _tscale, _tscale, 0);
+
+        scr_creator_draw_items(scr_creator_panel_layout(_b), _col);
     }
 
     draw_set_font_l(_font_b);
     draw_set_halign(_halign_b);
     draw_set_valign(_valign_b);
     draw_set_alpha(1);
+}
+
+
+// ====================================================================
+// MACRO SLOT NAMES
+//
+// What each value slot of a macro means, so the P-tab editor can say
+// "SLOT 5 - BORDER" instead of a bare index, and fill in the label, kind
+// and range when a slot is picked. Row 0 only; names come from each
+// macro's spawn layout and draw code. Only slots a user could sensibly
+// tweak are listed - addresses, asset names, ZP and var names are not.
+// Macros not listed fall back to raw slot stepping ("UNNAMED").
+// ====================================================================
+
+function scr_slot(_slot, _name, _kind, _vmin, _vmax, _options) {
+    return { slot: _slot, name: _name, kind: _kind, vmin: _vmin, vmax: _vmax, options: _options };
+}
+
+function scr_macro_slot_names(_type) {
+    switch (_type) {
+        case "MACRO_WAIT":
+            return [scr_slot(1, "FRAMES", "RANGE", 1, 255, "")];
+        case "MACRO_NOP_REPEAT":
+            return [scr_slot(1, "NOP COUNT", "RANGE", 1, 255, "")];
+        case "MACRO_VWAIT":
+            return [scr_slot(1, "RASTER LINE", "RANGE", 0, 255, "")];
+        case "MACRO_IRQ":
+            return [scr_slot(1, "RASTER LINE", "RANGE", 0, 255, "")];
+        case "MACRO_DISPLAY":
+            return [scr_slot(1, "DISPLAY", "MODE", 0, 1, "Off=0,On=1")];
+        case "MACRO_VIC":
+            return [
+                scr_slot(5, "BORDER",       "COLOUR", 0, 15, ""),
+                scr_slot(6, "BACKGROUND",   "COLOUR", 0, 15, ""),
+                scr_slot(7, "BACKGROUND 1", "COLOUR", 0, 15, ""),
+                scr_slot(8, "BACKGROUND 2", "COLOUR", 0, 15, ""),
+                scr_slot(9, "BACKGROUND 3", "COLOUR", 0, 15, "")
+            ];
+        case "MACRO_PRINT":
+            return [
+                scr_slot(1, "COLUMN",    "RANGE",  0, 39, ""),
+                scr_slot(2, "ROW",       "RANGE",  0, 24, ""),
+                scr_slot(3, "COLOUR",    "COLOUR", 0, 15, ""),
+                scr_slot(4, "PRE-CLEAR", "MODE",   0, 1,  "Off=0,On=1"),
+                scr_slot(5, "TEXT",      "TEXT",   0, 40, ""),
+                scr_slot(7, "ALIGN H",   "MODE",   0, 3,  "Default=0,Left=1,Centre=2,Right=3"),
+                scr_slot(8, "ALIGN V",   "MODE",   0, 3,  "Default=0,Top=1,Middle=2,Bottom=3")
+            ];
+        case "MACRO_PRINT_EXT":
+            return [
+                scr_slot(1, "COLUMN", "RANGE",  0, 39, ""),
+                scr_slot(2, "ROW",    "RANGE",  0, 24, ""),
+                scr_slot(3, "COLOUR", "COLOUR", 0, 15, "")
+            ];
+        case "MACRO_SPR":
+            return [
+                scr_slot(2, "SPRITE", "RANGE", 0, 7,   ""),
+                scr_slot(3, "X",      "RANGE", 0, 344, ""),
+                scr_slot(4, "Y",      "RANGE", 0, 255, ""),
+                scr_slot(5, "FRAME",  "RANGE", 0, 255, "")
+            ];
+        case "MACRO_SPR_ENABLE":
+            return [scr_slot(1, "SPRITE MASK", "RANGE", 0, 255, "")];
+        case "MACRO_SPR_EXPAND":
+            return [
+                scr_slot(1, "EXPAND X MASK", "RANGE", 0, 255, ""),
+                scr_slot(2, "EXPAND Y MASK", "RANGE", 0, 255, "")
+            ];
+        case "MACRO_PRIORITY":
+            return [scr_slot(1, "BEHIND MASK", "RANGE", 0, 255, "")];
+        case "MACRO_SID":
+            return [
+                scr_slot(2, "TRACK",  "RANGE", 0, 31, ""),
+                scr_slot(3, "VOLUME", "RANGE", 0, 15, "")
+            ];
+        case "MACRO_SID_PAUSE":
+            return [scr_slot(1, "MUSIC", "MODE", 0, 1, "Pause=0,Resume=1")];
+        case "MACRO_METASCROLL":
+            return [
+                scr_slot(2,  "MAP",               "RANGE", 0, 15,  ""),
+                scr_slot(8,  "BORDER BLANK CHAR", "RANGE", 0, 255, ""),
+                scr_slot(11, "TOP ROWS OMITTED",  "RANGE", 0, 8,   ""),
+                scr_slot(12, "BOTTOM ROWS OMITTED", "RANGE", 0, 8, "")
+            ];
+        case "MACRO_TEXT_SCROLL":
+            return [
+                scr_slot(1, "ROW",    "RANGE",  0, 24, ""),
+                scr_slot(2, "COLOUR", "COLOUR", 0, 15, ""),
+                scr_slot(3, "SPEED",  "RANGE",  1, 8,  ""),
+                scr_slot(6, "TEXT",   "TEXT",   0, 48, ""),
+                scr_slot(7, "PRE NOPS",  "RANGE", 0, 63, ""),
+                scr_slot(8, "POST NOPS", "RANGE", 0, 63, "")
+            ];
+        case "MACRO_SEEK":
+            return [
+                scr_slot(2, "TARGET X",      "RANGE", 0, 344, ""),
+                scr_slot(3, "TARGET Y",      "RANGE", 0, 255, ""),
+                scr_slot(4, "SPEED",         "RANGE", 1, 8,   ""),
+                scr_slot(5, "NEAR DISTANCE", "RANGE", 0, 255, ""),
+                scr_slot(6, "NEAR SPEED",    "RANGE", 0, 8,   "")
+            ];
+        case "MACRO_MOVE":
+            return [
+                scr_slot(11, "MIN X",   "RANGE", 0,  344, ""),
+                scr_slot(12, "MAX X",   "RANGE", 0,  344, ""),
+                scr_slot(13, "MIN Y",   "RANGE", 0,  255, ""),
+                scr_slot(14, "MAX Y",   "RANGE", 0,  255, "")
+            ];
+        case "MACRO_ANIM":
+            return [scr_slot(1, "SPEED (FRAMES)", "RANGE", 1, 255, "")];
+        case "MACRO_CLR_SCREEN":
+            return [scr_slot(2, "FILL CHAR", "RANGE", 0, 255, "")];
+        case "MACRO_MATH":
+            return [scr_slot(4, "OPERAND", "RANGE", -128, 127, "")];
+        case "MACRO_GET_CHAR":
+            return [
+                scr_slot(1, "COLUMN", "RANGE", 0, 39, ""),
+                scr_slot(4, "ROW",    "RANGE", 0, 24, "")
+            ];
+        case "MACRO_RANDOM":
+            return [
+                scr_slot(3, "CLAMP",   "MODE",  0, 1,   "Off=0,On=1"),
+                scr_slot(4, "MINIMUM", "RANGE", 0, 255, ""),
+                scr_slot(5, "MAXIMUM", "RANGE", 0, 255, "")
+            ];
+        case "MACRO_MAP_SWITCH":
+            return [scr_slot(2, "MAP", "RANGE", 0, 15, "")];
+        case "MACRO_MAP":
+            return [
+                scr_slot(2, "WIDTH",  "RANGE", 1, 40, ""),
+                scr_slot(3, "HEIGHT", "RANGE", 1, 25, "")
+            ];
+        case "MACRO_MOVE_BMP_BLOCK":
+            return [
+                scr_slot(3, "SOURCE COLUMN", "RANGE", 0, 39, ""),
+                scr_slot(4, "SOURCE ROW",    "RANGE", 0, 24, ""),
+                scr_slot(5, "DEST COLUMN",   "RANGE", 0, 39, ""),
+                scr_slot(6, "DEST ROW",      "RANGE", 0, 24, ""),
+                scr_slot(7, "WIDTH",         "RANGE", 1, 40, ""),
+                scr_slot(8, "HEIGHT",        "RANGE", 1, 25, "")
+            ];
+        case "MACRO_CLEAR_BMP_RECT":
+            return [
+                scr_slot(2, "COLUMN", "RANGE", 0, 39, ""),
+                scr_slot(3, "ROW",    "RANGE", 0, 24, ""),
+                scr_slot(4, "WIDTH",  "RANGE", 1, 40, ""),
+                scr_slot(5, "HEIGHT", "RANGE", 1, 25, "")
+            ];
+        case "MACRO_VOI64_MASTER":
+            return [
+                scr_slot(1, "PITCH",  "RANGE", 0, 255, ""),
+                scr_slot(2, "SPEED",  "RANGE", 0, 255, ""),
+                scr_slot(3, "THROAT", "RANGE", 0, 255, ""),
+                scr_slot(4, "MOUTH",  "RANGE", 0, 255, "")
+            ];
+        case "MACRO_VECTOR_PAGE":
+            return [scr_slot(2, "PAGE", "RANGE", 0, 7, "")];
+    }
+    return [];
+}
+
+/// The entry for a slot, or undefined when the slot has no name.
+function scr_macro_slot_find(_names, _slot) {
+    for (var _i = 0; _i < array_length(_names); _i++) {
+        if (_names[_i].slot == _slot) {
+            return _names[_i];
+        }
+    }
+    return undefined;
+}
+
+/// Point a param at a named slot: label, kind and range follow it.
+function scr_creator_slot_apply(_p, _info) {
+    _p.slot    = _info.slot;
+    _p.label   = string_upper(string_char_at(_info.name, 1)) + string_lower(string_delete(_info.name, 1, 1));
+    _p.kind    = _info.kind;
+    _p.vmin    = _info.vmin;
+    _p.vmax    = _info.vmax;
+    if (_info.options != "") {
+        _p.options = _info.options;
+    }
+}
+
+/// Step to the previous / next named slot. The label follows only if it
+/// was still the old slot's name (or the default), so a label the
+/// developer typed is never overwritten.
+function scr_creator_slot_step(_p, _names, _dir) {
+    var _cur = -1;
+    for (var _i = 0; _i < array_length(_names); _i++) {
+        if (_names[_i].slot == _p.slot) {
+            _cur = _i;
+        }
+    }
+    var _next = 0;
+    if (_cur >= 0) {
+        _next = clamp(_cur + _dir, 0, array_length(_names) - 1);
+    } else if (_dir < 0) {
+        _next = array_length(_names) - 1;
+    }
+    var _keep_label = true;
+    if (_p.label == "PARAM") {
+        _keep_label = false;
+    }
+    if (_cur >= 0) {
+        var _old = _names[_cur].name;
+        var _old_auto = string_upper(string_char_at(_old, 1)) + string_lower(string_delete(_old, 1, 1));
+        if (_p.label == _old_auto) {
+            _keep_label = false;
+        }
+    }
+    var _label_was = _p.label;
+    scr_creator_slot_apply(_p, _names[_next]);
+    if (_keep_label) {
+        _p.label = _label_was;
+    }
+}
+
+
+// ====================================================================
+// PARAM CARDS
+//
+// Every param is drawn on the canvas as a card UNLESS its node belongs to a
+// UI panel - it is one or the other. Turn the panel off (EDIT) or delete
+// the box and the node's params come back as cards:
+//   ORG unfolded - the node's cards sit to the right of its P tab, joined
+//                  to it by a bracket.
+//   ORG folded   - every card in the block stacks under the ORG
+//                  header, with a sub-heading per node. An ORG below that
+//                  the stack would land on is pushed down out of the way.
+// Cards are drawn in obj_workspace_manager Draw End, over the nodes, and
+// own the pointer while it is over them (global.creator_card_hot).
+// ====================================================================
+
+#macro CREATOR_CARD_W     280
+#macro CREATOR_CARD_GAP   22
+#macro CREATOR_CARD_CLEAR 40
+
+/// Every node a raised UI panel drives - those params live in the panel.
+function scr_creator_panelled_nodes() {
+    var _out = [];
+    with (obj_mapping_box) {
+        if (!is_panel) {
+            continue;
+        }
+        var _nodes = scr_creator_panel_nodes(id);
+        for (var _i = 0; _i < array_length(_nodes); _i++) {
+            array_push(_out, _nodes[_i]);
+        }
+    }
+    return _out;
+}
+
+/// The header a hidden node is folded under, or noone.
+function scr_creator_fold_anchor(_n) {
+    if (_n.org_parent != noone) {
+        if (instance_exists(_n.org_parent)) {
+            if (_n.org_parent.collapsed) {
+                return _n.org_parent;
+            }
+        }
+        return noone;
+    }
+    if (!global.init_collapsed) {
+        return noone;
+    }
+    var _init = noone;
+    with (obj_c64_node) {
+        if (node_type == "INIT") {
+            _init = id;
+            break;
+        }
+    }
+    return _init;
+}
+
+function scr_creator_card_new(_x1, _y1, _w) {
+    return { x1: _x1, y1: _y1, x2: _x1 + _w, y2: _y1, items: [], anchor: noone, tab: noone, col: make_colour_rgb(80, 200, 255) };
+}
+
+/// Lay one node's params into a card. _sub adds the node's name
+/// as a heading. Returns the y under the last row.
+function scr_creator_card_add_node(_card, _n, _y, _sub) {
+    var _x1 = _card.x1 + CREATOR_PANEL_PAD;
+    var _x2 = _card.x2 - CREATOR_PANEL_PAD;
+    if (_sub) {
+        var _it = scr_creator_item("sub", _x1, _y, _x2, _y + CREATOR_PANEL_SUB);
+        _it.text = string_upper(scr_creator_node_name(_n));
+        array_push(_card.items, _it);
+        _y += CREATOR_PANEL_SUB;
+    }
+    for (var _i = 0; _i < array_length(_n.params); _i++) {
+        scr_creator_param_row(_card.items, _n, _i, _x1, _x2, _y, true, 0);
+        _y += scr_creator_param_row_h(_n.params[_i], true);
+    }
+    return _y;
+}
+
+/// Every card on the canvas this frame. Font is set for string widths.
+function scr_creator_cards_build() {
+    var _cards = [];
+    var _font_b = draw_get_font();
+    draw_set_font_l(fnt_c64_code);
+
+    // Nodes with params: visible ones get a card beside them; folded ones are
+    // grouped under their header. Nodes a UI panel drives are left to it.
+    var _panelled = scr_creator_panelled_nodes();
+    var _beside   = [];
+    var _folded   = [];
+    var _anchors  = [];
+    with (obj_c64_node) {
+        if (array_length(params) == 0) {
+            continue;
+        }
+        if (macro_owner != noone) {
+            continue;
+        }
+        if (creator_covered) {
+            continue;
+        }
+        var _in_panel = false;
+        for (var _k = 0; _k < array_length(_panelled); _k++) {
+            if (_panelled[_k] == id) {
+                _in_panel = true;
+                break;
+            }
+        }
+        if (_in_panel) {
+            continue;
+        }
+        if (scr_node_is_hidden(id)) {
+            var _a = scr_creator_fold_anchor(id);
+            if (_a != noone) {
+                array_push(_folded, id);
+                array_push(_anchors, _a);
+            }
+        } else {
+            array_push(_beside, id);
+        }
+    }
+
+    for (var _i = 0; _i < array_length(_beside); _i++) {
+        var _n  = _beside[_i];
+        var _tr = scr_creator_tab_rect(_n);
+        var _c  = scr_creator_card_new(_tr.x2 + CREATOR_CARD_GAP, _n.y, CREATOR_CARD_W);
+        _c.tab  = _n;
+        var _y  = scr_creator_card_add_node(_c, _n, _c.y1 + 6, false);
+        _c.y2   = _y + 4;
+        array_push(_cards, _c);
+    }
+
+    // One stack per folded header, nodes in spine order.
+    var _done = [];
+    for (var _i = 0; _i < array_length(_anchors); _i++) {
+        var _a = _anchors[_i];
+        var _seen = false;
+        for (var _d = 0; _d < array_length(_done); _d++) {
+            if (_done[_d] == _a) {
+                _seen = true;
+            }
+        }
+        if (_seen) {
+            continue;
+        }
+        array_push(_done, _a);
+        var _group = [];
+        for (var _j = 0; _j < array_length(_folded); _j++) {
+            if (_anchors[_j] == _a) {
+                array_push(_group, _folded[_j]);
+            }
+        }
+        array_sort(_group, function(_p, _q) {
+            return _p.y - _q.y;
+        });
+        // As wide as the header plus one grid tile each side, centred on it.
+        var _c = scr_creator_card_new(_a.x + _a.x_indent - 20, _a.y + _a.height + 8, _a.width + 40);
+        _c.anchor = _a;
+        var _y = _c.y1 + 4;
+        for (var _g = 0; _g < array_length(_group); _g++) {
+            _y = scr_creator_card_add_node(_c, _group[_g], _y, true);
+        }
+        _c.y2 = _y + 4;
+        array_push(_cards, _c);
+    }
+
+    draw_set_font_l(_font_b);
+    return _cards;
+}
+
+/// Push any ORG a folded stack would land on down below it, snapped to the
+/// 20px grid with some clearance. Never while something is being dragged.
+function scr_creator_cards_make_room() {
+    if (global.any_node_dragging) {
+        exit;
+    }
+    var _box_drag = false;
+    with (obj_mapping_box) {
+        if (is_dragging || is_resizing) {
+            _box_drag = true;
+        }
+    }
+    if (_box_drag) {
+        exit;
+    }
+    var _moved = false;
+    for (var _i = 0; _i < array_length(global.creator_cards); _i++) {
+        var _c = global.creator_cards[_i];
+        if (_c.anchor == noone) {
+            continue;
+        }
+        var _a      = _c.anchor;
+        var _bottom = _c.y2 + CREATOR_CARD_CLEAR;
+        with (obj_c64_node) {
+            if (id == _a) {
+                continue;
+            }
+            if (node_type != "ORG") {
+                continue;
+            }
+            if (org_parent != noone) {
+                continue;
+            }
+            if (y <= _a.y || y >= _bottom) {
+                continue;
+            }
+            var _ox1 = x + x_indent;
+            var _ox2 = _ox1 + width;
+            if (_ox2 <= _c.x1 || _ox1 >= _c.x2) {
+                continue;
+            }
+            y = ceil(_bottom / 20) * 20;
+            _moved = true;
+        }
+    }
+    if (_moved) {
+        global.addresses_dirty  = true;
+        global.autosave_dirty   = true;
+        global.relayout_frames  = max(global.relayout_frames, 3);
+        obj_workspace_manager.flow_overlay_dirty = true;
+    }
+}
+
+/// Begin Step pointer handling. True when a card owns the pointer.
+function scr_creator_cards_step() {
+    var _bar = global.creator_card_bar;
+    var _mx  = mouse_x;
+    var _my  = mouse_y;
+
+    // Slider drag in progress: keeps the pointer until release.
+    if (_bar.active) {
+        global.creator_card_hot = true;
+        if (scr_workspace_mouse_check_button(mb_left) && instance_exists(_bar.n)) {
+            if (_bar.pidx < array_length(_bar.n.params)) {
+                var _f = clamp((_mx - _bar.x1) / max(1, _bar.x2 - _bar.x1), 0, 1);
+                scr_param_write(_bar.n, _bar.n.params[_bar.pidx], _bar.lo + _f * (_bar.hi - _bar.lo));
+            }
+        } else {
+            _bar.active = false;
+        }
+        return true;
+    }
+
+    var _over = noone;
+    for (var _i = 0; _i < array_length(global.creator_cards); _i++) {
+        var _c = global.creator_cards[_i];
+        if (point_in_rectangle(_mx, _my, _c.x1, _c.y1, _c.x2, _c.y2)) {
+            _over = _c;
+        }
+    }
+    if (!is_struct(_over)) {
+        return false;
+    }
+    global.creator_card_hot = true;
+    if (scr_workspace_mouse_check_button_pressed(mb_left)) {
+        scr_creator_items_press(_over.items, _mx, _my, _bar);
+    }
+    return true;
+}
+
+/// obj_workspace_manager Draw End (room space, over the nodes).
+function scr_creator_draw_cards() {
+    if (array_length(global.creator_cards) == 0) {
+        exit;
+    }
+    var _font_b   = draw_get_font();
+    var _halign_b = draw_get_halign();
+    var _valign_b = draw_get_valign();
+    draw_set_font_l(fnt_c64_code);
+    draw_set_alpha(1);
+
+    for (var _i = 0; _i < array_length(global.creator_cards); _i++) {
+        var _c = global.creator_cards[_i];
+        // Bracket from the node's P tab to its card.
+        if (_c.tab != noone) {
+            if (instance_exists(_c.tab)) {
+                var _tr = scr_creator_tab_rect(_c.tab);
+                var _ty = (_tr.y1 + _tr.y2) * 0.5;
+                var _bx = _tr.x2 + floor(CREATOR_CARD_GAP * 0.5);
+                draw_set_colour(_c.col);
+                draw_line_width(_tr.x2, _ty, _bx, _ty, 2);
+                draw_line_width(_bx, _c.y1 + 8, _bx, _c.y2 - 8, 2);
+                draw_line_width(_bx, _c.y1 + 8, _c.x1, _c.y1 + 8, 2);
+                draw_line_width(_bx, _c.y2 - 8, _c.x1, _c.y2 - 8, 2);
+            }
+        }
+        scr_creator_skin_node_frame(_c.x1, _c.y1, _c.x2 - _c.x1, _c.y2 - _c.y1, 3, _c.col);
+        scr_creator_draw_items(_c.items, _c.col);
+    }
+
+    draw_set_font_l(_font_b);
+    draw_set_halign(_halign_b);
+    draw_set_valign(_valign_b);
+    draw_set_alpha(1);
+}
+
+
+/// TEXT popup for a card / panel param. Enter or OK saves, Esc or CANCEL
+/// leaves the text as it was. Owns input while open (scr_creator_panel_active).
+function scr_creator_draw_text_edit() {
+    var _n = global.creator_text_node;
+    if (global.creator_text_pidx >= array_length(_n.params)) {
+        global.creator_text_node = noone;
+        global.creator_field     = "";
+        exit;
+    }
+    var _p  = _n.params[global.creator_text_pidx];
+    var _gw = display_get_gui_width();
+    var _gh = display_get_gui_height();
+    var _pw = 720;
+    var _ph = 170;
+    var _px = floor((_gw - _pw) / 2);
+    var _py = floor((_gh - _ph) / 2);
+    scr_creator_skin_panel(_px, _py, _pw, _ph);
+
+    draw_set_font_l(fnt_C64_Angled);
+    draw_set_halign(fa_left);
+    draw_set_valign(fa_top);
+    draw_set_colour(c_white);
+    draw_text_l(_px + 16, _py + 14, string_upper(_p.label));
+    draw_set_font_l(fnt_c64_tiny);
+    draw_set_colour(make_colour_rgb(190, 190, 230));
+    draw_text_l(_px + 16, _py + 44, "UP TO " + string(round(_p.vmax)) + " CHARACTERS. ENTER SAVES, ESC CANCELS.");
+    draw_set_font_l(fnt_C64_Angled);
+
+    // Keep the field live: a click inside the popup must not drop it.
+    if (global.creator_field == "") {
+        global.creator_field = "ptext";
+    }
+    var _max = max(1, round(_p.vmax));
+    if (string_length(keyboard_string) > _max) {
+        keyboard_string = string_copy(keyboard_string, 1, _max);
+    }
+    // Clicks outside the field (OK / CANCEL) must not auto-commit it;
+    // OK saves explicitly, CANCEL must not save at all.
+    global.creator_commit = false;
+    var _cur = scr_param_read(_n, _p);
+    var _r   = scr_creator_field("ptext", _px + 16, _py + 72, _px + _pw - 16, _py + 102, _cur.str);
+    var _done = false;
+    if (!is_undefined(_r)) {
+        scr_param_write_text(_n, _p, _r);
+        _done = true;
+    }
+    var _by = _py + _ph - 46;
+    if (scr_creator_btn(_px + _pw - 316, _by, _px + _pw - 166, _by + 30, "OK", false)) {
+        scr_param_write_text(_n, _p, global.creator_field_text);
+        _done = true;
+    }
+    if (scr_creator_btn(_px + _pw - 156, _by, _px + _pw - 16, _by + 30, "CANCEL", false)) {
+        _done = true;
+    }
+    if (keyboard_check_pressed(vk_escape)) {
+        _done = true;
+    }
+    if (_done) {
+        global.creator_text_node = noone;
+        global.creator_field     = "";
+        global.creator_commit    = false;
+    }
 }

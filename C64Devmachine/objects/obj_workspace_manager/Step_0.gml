@@ -471,8 +471,33 @@ if (box_popup_open) {
         box_cursor_pos--;
         keyboard_string = "";
     }
-    if (keyboard_check_pressed(vk_left))  box_cursor_pos = max(0, box_cursor_pos - 1);
-    if (keyboard_check_pressed(vk_right)) box_cursor_pos = min(string_length(box_popup_name), box_cursor_pos + 1);
+    // Cursor: LEFT / RIGHT move once on press, then repeat while held
+    // (a short pause first, like a normal text field).
+    var _rep_dir = 0;
+    if (keyboard_check(vk_left))  _rep_dir = -1;
+    if (keyboard_check(vk_right)) _rep_dir = 1;
+    if (_rep_dir == 0) {
+        box_key_rep_dir   = 0;
+        box_key_rep_timer = 0;
+    } else {
+        var _rep_move = false;
+        if (_rep_dir != box_key_rep_dir) {
+            box_key_rep_dir   = _rep_dir;
+            box_key_rep_timer = 24;    // frames before repeating starts
+            _rep_move = true;
+        } else {
+            box_key_rep_timer--;
+            if (box_key_rep_timer <= 0) {
+                box_key_rep_timer = 3; // frames between repeats
+                _rep_move = true;
+            }
+        }
+        if (_rep_move) {
+            box_cursor_pos = clamp(box_cursor_pos + _rep_dir, 0, string_length(box_popup_name));
+        }
+    }
+    if (keyboard_check_pressed(vk_home)) box_cursor_pos = 0;
+    if (keyboard_check_pressed(vk_end))  box_cursor_pos = string_length(box_popup_name);
     exit; // block all other step logic while popup is open
 }
 
@@ -1026,6 +1051,18 @@ if (is_entering_text && !_was_entering_text) {
 _was_entering_text = is_entering_text;
 
 if (is_entering_text) {
+    // The node being edited can be destroyed under the open field (undo,
+    // load, delete). Its id is then stale and every read below throws
+    // "Unable to find instance". Close the field instead.
+    if (input_target_node != noone && !instance_exists(input_target_node)) {
+        is_entering_text   = false;
+        input_target_node  = noone;
+        input_target_index = 0;
+        input_sel_start    = -1;
+        input_sel_end      = -1;
+        keyboard_string    = "";
+        exit;
+    }
     if (global.show_info_window) is_entering_text = false;
 
     var target        = input_target_node;
@@ -2605,6 +2642,12 @@ if (build_trigger && _editor_released) trigger_build = true;
 if (build_trigger && !global.asset_reload_in_progress && !_editor_released) {
 	show_debug_message("[F6-A] set: c64u=" + string(trigger_c64u) + " build=" + string(trigger_build) + " ip=" + global.c64u_ip);
         trigger_build = false;
+        // Re-lay the program before building. Asset-driven macro sizes (a
+        // painted SPRITE_MASK, a re-tagged map...) change without a workspace
+        // mouse release, so the proxies can still hold the old layout and the
+        // next ORG would be built on top of the grown macro.
+        global.addresses_dirty = true;
+        scr_c64_do_update_addresses();
         global.egg_temp_node_ids = [];
         
         // --- LAZY NAMING PROMPT ON FIRST BUILD ---
@@ -4940,6 +4983,7 @@ var _in_gui = ((global.gui_mouse_x <= shelf_width) && (!expert_mode || global.gu
            || (global.gui_mouse_x >= (global.gui_w - 20 - 280))
            || global.showcode_mouse_over
            || global.cbc_button_hot
+           || global.creator_card_hot
            || is_entering_text
            || box_popup_open
            || global.show_info_window

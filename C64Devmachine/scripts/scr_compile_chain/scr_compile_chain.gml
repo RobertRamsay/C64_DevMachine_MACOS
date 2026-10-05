@@ -13901,6 +13901,10 @@ case "MACRO_COLL_LINE": {
     var _result_var  = (array_length(_id.instructions[0]) > 4) ? string(_id.instructions[0][4]) : "";
     var _off_x_var   = (array_length(_id.instructions[0]) > 5) ? string(_id.instructions[0][5]) : "";
     var _off_y_var   = (array_length(_id.instructions[0]) > 6) ? string(_id.instructions[0][6]) : "";
+    var _thick       = 0;
+    if (array_length(_id.instructions[0]) > 7 && is_real(_id.instructions[0][7])) {
+        _thick = clamp(real(_id.instructions[0][7]), 0, 3);
+    }
 
     var _uid = string(_id.id);
     _uid = string_replace_all(_uid, " ", "_");
@@ -13933,6 +13937,14 @@ case "MACRO_COLL_LINE": {
 
     var _lut_label = _lc_name + "_LINE_LUT";
 
+    // WIDE X asset: lines are in 2-pixel X units (0-159 = full screen), so the
+    // probe X is built as 9 bits — the sprite's MSB from $D010 when PX is a
+    // sprite X register — plus the signed offset, then halved.
+    var _wide = false;
+    if (_lc_asset.type == "LINE_COLL") {
+        _wide = _lc_asset.meta.wide_x;
+    }
+
     array_push(_list, ["jsr_abs", _sub_lbl,     _id]);
     array_push(_list, ["sta_abs", _result_addr, _id]);
     array_push(_list, ["jmp_abs", _skip,        _id]);
@@ -13951,12 +13963,47 @@ case "MACRO_COLL_LINE": {
     // byte/signed-byte variables; 6502 ADC naturally provides the desired
     // modulo-256 coordinate behaviour. Caching also prevents gameplay code or
     // an IRQ changing PX/PY halfway through a multi-record table scan.
-    array_push(_list, ["lda_abs", _px_addr, _id]);
-    if (_off_x_addr != 0) {
-        array_push(_list, ["clc",     0,           _id]);
-        array_push(_list, ["adc_abs", _off_x_addr, _id]);
+    if (!_wide) {
+        array_push(_list, ["lda_abs", _px_addr, _id]);
+        if (_off_x_addr != 0) {
+            array_push(_list, ["clc",     0,           _id]);
+            array_push(_list, ["adc_abs", _off_x_addr, _id]);
+        }
+        array_push(_list, ["sta_zp", 0xF3, _id]);
+    } else {
+        // $F3 = X lo, $F4 = X hi (bit 8). $F4 is rewritten with probe Y below.
+        array_push(_list, ["lda_abs", _px_addr, _id]);
+        array_push(_list, ["sta_zp",  0xF3,     _id]);
+        array_push(_list, ["lda_imm", 0,        _id]);
+        array_push(_list, ["sta_zp",  0xF4,     _id]);
+        if (_px_addr >= 0xD000 && _px_addr <= 0xD00E && ((_px_addr - 0xD000) mod 2) == 0) {
+            var _msb_bit = 1 << ((_px_addr - 0xD000) div 2);
+            array_push(_list, ["lda_abs", 0xD010,   _id]);
+            array_push(_list, ["and_imm", _msb_bit, _id]);
+            array_push(_list, ["cmp_imm", 1,        _id]);   // C = MSB set
+            array_push(_list, ["lda_imm", 0,        _id]);
+            array_push(_list, ["rol_a",   0,        _id]);
+            array_push(_list, ["sta_zp",  0xF4,     _id]);
+        }
+        if (_off_x_addr != 0) {
+            // $F5 = offset sign extension ($00 / $FF)
+            array_push(_list, ["lda_abs", _off_x_addr, _id]);
+            array_push(_list, ["asl_a",   0,           _id]);
+            array_push(_list, ["lda_imm", 0,           _id]);
+            array_push(_list, ["adc_imm", 0xFF,        _id]);
+            array_push(_list, ["eor_imm", 0xFF,        _id]);
+            array_push(_list, ["sta_zp",  0xF5,        _id]);
+            array_push(_list, ["lda_zp",  0xF3,        _id]);
+            array_push(_list, ["clc",     0,           _id]);
+            array_push(_list, ["adc_abs", _off_x_addr, _id]);
+            array_push(_list, ["sta_zp",  0xF3,        _id]);
+            array_push(_list, ["lda_zp",  0xF4,        _id]);
+            array_push(_list, ["adc_zp",  0xF5,        _id]);
+            array_push(_list, ["sta_zp",  0xF4,        _id]);
+        }
+        array_push(_list, ["lsr_zp", 0xF4, _id]);
+        array_push(_list, ["ror_zp", 0xF3, _id]);
     }
-    array_push(_list, ["sta_zp", 0xF3, _id]);
 
     array_push(_list, ["lda_abs", _py_addr, _id]);
     if (_off_y_addr != 0) {
@@ -14119,16 +14166,26 @@ case "MACRO_COLL_LINE": {
     array_push(_list, ["lda_zp",  0xF5,     _id]);
     array_push(_list, ["beq",     "L_LXCMP_" + _uid, _id]); // short, stays local — OK direct
     array_push(_list, ["jmp_abs", _cmp_ymaj, _id]);
-    array_push(_list, ["label",   "L_LXCMP_" + _uid]);
-    array_push(_list, ["lda_zp",  0xFD,     _id]);
-    array_push(_list, ["cmp_zp",  0xF4,     _id]);
-    array_push(_list, ["beq",     _hit_lbl, _id]); // short, stays local — OK direct
-    array_push(_list, ["jmp_abs", _next_lbl, _id]);
-    array_push(_list, ["label",   _cmp_ymaj]);
-    array_push(_list, ["lda_zp",  0xFD,     _id]);
-    array_push(_list, ["cmp_zp",  0xF3,     _id]);
-    array_push(_list, ["beq",     _hit_lbl, _id]); // short, stays local — OK direct
-    array_push(_list, ["jmp_abs", _next_lbl, _id]);
+    // THICK > 0: hit when (probe - minor_at) mod 256 is within +/-THICK.
+    var _axis_probe = [0xF4, 0xF3];   // X-major tests probe Y, Y-major probe X
+    var _axis_label = ["L_LXCMP_" + _uid, _cmp_ymaj];
+    for (var _ax = 0; _ax < 2; _ax++) {
+        array_push(_list, ["label", _axis_label[_ax]]);
+        if (_thick == 0) {
+            array_push(_list, ["lda_zp",  0xFD,             _id]);
+            array_push(_list, ["cmp_zp",  _axis_probe[_ax], _id]);
+            array_push(_list, ["beq",     _hit_lbl,         _id]); // short, stays local — OK direct
+        } else {
+            array_push(_list, ["lda_zp",  _axis_probe[_ax], _id]);
+            array_push(_list, ["sec",     0,                _id]);
+            array_push(_list, ["sbc_zp",  0xFD,             _id]);
+            array_push(_list, ["cmp_imm", _thick + 1,       _id]);
+            array_push(_list, ["bcc",     _hit_lbl,         _id]); // 0..THICK above
+            array_push(_list, ["cmp_imm", 256 - _thick,     _id]);
+            array_push(_list, ["bcs",     _hit_lbl,         _id]); // 1..THICK below
+        }
+        array_push(_list, ["jmp_abs", _next_lbl, _id]);
+    }
 
     array_push(_list, ["label", _next_lbl]);
     // Advance table pointer by 6 bytes (record size) and loop.
@@ -19747,8 +19804,17 @@ if (_a.type == "BITMAP" || _a.type == "BITMAP_KLA") {
             }
 			
 		    } else if (_a.type == "SPRITE_SET") {
+	            if (scr_sprite_strip_active(_a)) {
+	                // STRIPS: sprites written back as the game's packed strips
+	                // (see scr_sprite_strip_bytes), not as 64-byte blocks.
+	                var _strip = scr_sprite_strip_bytes(_a);
+	                for (var _bb = 0; _bb < array_length(_strip); _bb++) {
+	                    array_push(instruction_list, ["byte", _strip[_bb]]);
+	                }
+	            } else {
 	            for (var _bb = 0; _bb < _sz; _bb++) {
 	                array_push(instruction_list, ["byte", buffer_peek(_buf, _bb, buffer_u8)]);
+	            }
 	            }
 			    } else if (_a.type == "CHAR_SET") {
 		    var _chr_inject_sz = min(_sz, 2048);
@@ -19817,9 +19883,9 @@ if (_a.type == "BITMAP" || _a.type == "BITMAP_KLA") {
 		        }
 		        continue;
 		    }
-		    // RLE ROOMS map: room pointer table + band/run streams (see
-		    // scr_map_rle_rooms_encode). Nothing else is emitted.
-		    if (_map_raw == 2) {
+		    // RLE ROOMS / RLE STREAM map: room pointer table(s) + streams
+		    // (see scr_map_rle_rooms_encode). Nothing else is emitted.
+		    if (_map_raw == 2 || _map_raw == 3) {
 		        var _rle = scr_map_rle_rooms_encode(_a);
 		        for (var _bb = 0; _bb < array_length(_rle); _bb++) {
 		            array_push(instruction_list, ["byte", _rle[_bb]]);

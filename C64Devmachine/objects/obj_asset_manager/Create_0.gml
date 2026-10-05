@@ -40,8 +40,32 @@ map_view_cache = {
     col2_c      : c_black,
     ecm_c       : array_create(4, c_black),
     pal         : array_create(16, c_black),
-    pal_sum     : -1
+    pal_sum     : -1,
+    // ROOM VIEW (RLE maps with meta.room_view): each room drawn with its
+    // own charset and colour bands, the way the game shows it
+    rv_on       : false,
+    rv_key      : "",
+    rv_rw       : 1,       // room size in cells
+    rv_rh       : 1,
+    rv_rx       : 1,       // rooms across
+    rv_n        : 0,       // rooms with a view entry
+    rv_slot     : [],      // room -> charset slot (0 = the map's CHR)
+    rv_chr      : [noone], // slot -> charset asset
+    rv_atlas    : [-1],    // slot -> glyph atlas surface (slot 0 uses atlas)
+    rv_crc      : [-1],    // slot -> charset crc the atlas was built from
+    rv_bg       : [],      // (room * room_h + row) -> background colour
+    rv_c1       : [],      //                         -> MC colour 1
+    rv_c2       : []       //                         -> MC colour 2
 };
+map_show_tags   = false;   // map editor [T]: char tag (tile type) badges on every cell
+map_top_mode    = 0;       // map editor top panel: 0 = STAMPS, 1 = ROOM PREVIEW (room maps) [G]
+map_hover_room  = -1;      // room under the mouse last frame (RLE room maps)
+map_prev_room   = 0;       // room shown in ROOM PREVIEW
+map_prev_follow = true;    // ROOM PREVIEW follows the room under the mouse
+map_prev_on     = false;   // ROOM PREVIEW is showing this frame (top panel)
+map_prev_x1     = 0;       // its area: left, right, top (bottom = canvas top)
+map_prev_x2     = 0;
+map_prev_y1     = 0;
 // bitmap editor:
 bmp_ref_asset_name = "";
 bmp_ref_vy1        = 0;
@@ -895,7 +919,9 @@ manifest_draw_preview = function(_asset, _viewer_x, _row_y) {
         var _colors = []; for(var _t=0; _t<8; _t++) array_push(_colors,scr_c64_pepto_colour(_t));
         for (var _l=0; _l<array_length(_lines); _l++) {
             var _ln=_lines[_l]; draw_set_color(_colors[clamp(_ln.type,0,7)]);
-            draw_line_width(_ix+_ln.x1*_scale,_iy+_ln.y1*_scale,_ix+_ln.x2*_scale,_iy+_ln.y2*_scale,2);
+            var _wxs = 1;
+            if (_meta.wide_x) { _wxs = 2; }
+            draw_line_width(_ix+_ln.x1*_wxs*_scale,_iy+_ln.y1*_scale,_ix+_ln.x2*_wxs*_scale,_iy+_ln.y2*_scale,2);
         }
         draw_set_color(c_white); draw_text_l(_x+8,_iy+_image_h+6,string(array_length(_lines))+" collision lines");
         draw_set_color(c_ltgray); draw_text_l(_x+8,_iy+_image_h+20,"Colour indicates line type");

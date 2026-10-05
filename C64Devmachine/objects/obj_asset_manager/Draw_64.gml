@@ -828,6 +828,21 @@ if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list))
         _vy1 = 40;
         _vy2 = _gui_h - 40;
     }
+    // LINE_COLL: full screen. Must match obj_asset_manager Step.
+    if (_asset.type == "LINE_COLL") {
+        _vx1 = 30;
+        _vx2 = _gui_w - 30;
+        _vy1 = 40;
+        _vy2 = _gui_h - 40;
+    }
+    // MAP_DATA: almost the whole screen - the map wants the height.
+    // Must match obj_asset_manager Step.
+    if (_asset.type == "MAP_DATA") {
+        _vx1 = 12;
+        _vx2 = _gui_w - 12;
+        _vy1 = 8;
+        _vy2 = _gui_h - 8;
+    }
 	
     var _vw    = _vx2 - _vx1;
     var _vh    = _vy2 - _vy1;
@@ -1590,6 +1605,27 @@ draw_set_color(c_ltgray);
 		    draw_set_color(_chr_name != "" ? c_lime : make_color_rgb(150, 150, 150));
 		    draw_text_l(_cpbx1 + 10, _cy-2, _chr_name != "" ? _chr_name : L("-- PICK --"));
 
+		    // ---- STAMPS / ROOM PREVIEW (room maps share the stamp area) ----
+		    var _tp_rooms = (real(_m.raw_chars) >= 2 && real(_m.room_w) > 0 && real(_m.room_h) > 0);
+		    map_prev_on = false;
+		    if (_tp_rooms) {
+		        var _tpx1 = _cpbx2 + 10;
+		        var _tp_lbl = ["STAMPS", "ROOM PREVIEW"];
+		        for (var _tpi = 0; _tpi < 2; _tpi++) {
+		            var _tbx1 = _tpx1 + _tpi * 106;
+		            var _tby1 = _cpby1 - 24;
+		            if (scr_mrp_button(_tbx1, _tby1, _tbx1 + 100, _tby1 + 18, _tp_lbl[_tpi], map_top_mode == _tpi, _mx, _my) == 1) {
+		                map_top_mode = _tpi;
+		            }
+		        }
+		    }
+		    if (_tp_rooms && map_top_mode == 1) {
+		        // drawn under ---- CANVAS ---- once the canvas top is known, so it fits
+		        map_prev_on = true;
+		        map_prev_x1 = _cpbx2 + 226;
+		        map_prev_x2 = _vx2 - 236;
+		        map_prev_y1 = _vy1 + 34;
+		    } else {
 		    // ---- TILE STORE BANK ----
 		    var _bank_max   = 128;
 		    var _bank_sh    = 14;
@@ -1855,6 +1891,8 @@ draw_set_color(c_ltgray);
 		        if (_dn_hov && mouse_check_button_pressed(mb_left))
 		            global.map_tile_bank_scroll += 1;
 		    }
+
+		    } // STAMPS
 
 // ---- MC MODE TOGGLE (hidden when linked CHAR_SET is ECM) ----
 	    // Early ECM check — _chr_asset_ref itself isn't resolved until further
@@ -2167,10 +2205,10 @@ _cy += 22;
 	    if (!variable_struct_exists(_m, "raw_chars")) {
 	        _m.raw_chars = 0;
 	    }
-	    var _raw_on     = clamp(real(_m.raw_chars), 0, 2);
-	    var _rw_labels  = ["FULL MAP", "RAW CHARS", "RLE ROOMS"];
-	    var _rw_cols    = [make_color_rgb(30,30,45), make_color_rgb(90,40,20), make_color_rgb(20,70,40)];
-	    var _rw_tcols   = [make_color_rgb(80,80,100), make_color_rgb(255,170,80), make_color_rgb(120,255,160)];
+	    var _raw_on     = clamp(real(_m.raw_chars), 0, 3);
+	    var _rw_labels  = ["FULL MAP", "RAW CHARS", "RLE ROOMS", "RLE STREAM"];
+	    var _rw_cols    = [make_color_rgb(30,30,45), make_color_rgb(90,40,20), make_color_rgb(20,70,40), make_color_rgb(20,50,80)];
+	    var _rw_tcols   = [make_color_rgb(80,80,100), make_color_rgb(255,170,80), make_color_rgb(120,255,160), make_color_rgb(120,200,255)];
 	    var _rwx1  = _sw_x + _sw_sz + 52;
 	    var _rwx2  = _rwx1 + 90;
 	    var _rwy1  = _cy + 2;
@@ -2184,7 +2222,8 @@ _cy += 22;
 	    draw_text_l(_rwx1 + 45, _rwy1 + 3, _rw_labels[_raw_on]);
 	    draw_set_halign(fa_left);
 	    if (_rwhov && mouse_check_button_pressed(mb_left)) {
-	        // FULL MAP -> RAW CHARS -> RLE ROOMS -> FULL MAP.
+	        // FULL MAP -> RAW CHARS -> RLE ROOMS -> RLE STREAM -> FULL MAP.
+	        // RLE STREAM: same rooms, Bruce Lee's run / literal stream format.
 	        // RLE ROOMS needs a room size; a map that never had one gets a
 	        // full screen (40x25) - set room_w/room_h/room_count in the file
 	        // for other sizes (Saboteur: 30x17, 121 rooms).
@@ -2197,6 +2236,8 @@ _cy += 22;
 	                _m.room_h     = 25;
 	                _m.room_count = 0;
 	            }
+	        } else if (_raw_on == 2) {
+	            _m.raw_chars = 3;
 	        } else {
 	            _m.raw_chars = 0;
 	        }
@@ -2343,6 +2384,10 @@ var _zmx1  = _vx2 - _btn_bw * 2 - 6;
 		    var _cv_y1 = _cy;
 		    var _cv_x2 = _vx2 - 10;
 		    var _cv_y2 = _vy2 - (_map_ecm_mode ? 195 : 80);
+		    // ROOM PREVIEW (top panel) - fills the space above the canvas
+		    if (map_prev_on) {
+		        scr_map_room_preview_panel(_asset, map_prev_x1, map_prev_y1, map_prev_x2, _cv_y1 - 6, _mx, _my);
+		    }
 		    // OBJECT LAYER bar gets its own strip under the canvas (RLE ROOMS
 		    // maps with an object asset); the colour / tile rows move down.
 		    var _obj_bar_h = 0;
@@ -2581,11 +2626,65 @@ draw_set_color(_cell_bg_col);
 
 	    }
 
+	    // ── TAGS overlay [T]: each cell's char tag (the charset's tile type) ──
+	    // A badge in the cell's corner, coloured per tag; the strip under the
+	    // canvas lists every tag the map uses. Room maps with a ROOM VIEW read
+	    // the tag from the charset that room is drawn with.
+	    if (keyboard_check_pressed(ord("T")) && !scr_ctrl_held()) {
+	        map_show_tags = !map_show_tags;
+	    }
+	    if (map_show_tags) {
+	        var _tg_used = array_create(256, false);
+	        var _tg_any  = false;
+	        for (var _row = _start_row; _row < _end_row; _row++) {
+	            for (var _col = _start_col; _col < _end_col; _col++) {
+	                var _tg_chr = _chr_asset_ref;
+	                if (map_view_cache.rv_on && map_view_cache.asset == _asset) {
+	                    var _tg_rx = _col div map_view_cache.rv_rw;
+	                    var _tg_ri = (_row div map_view_cache.rv_rh) * map_view_cache.rv_rx + _tg_rx;
+	                    if (_tg_rx < map_view_cache.rv_rx && _tg_ri < map_view_cache.rv_n) {
+	                        var _tg_sl = map_view_cache.rv_slot[_tg_ri];
+	                        if (_tg_sl > 0) _tg_chr = map_view_cache.rv_chr[_tg_sl];
+	                    }
+	                }
+	                if (_tg_chr == noone) continue;
+	                var _tg_types = _tg_chr.meta[$ "tile_types"];
+	                if (!is_array(_tg_types)) continue;
+	                var _tg_ch = _m.char_grid[_row * _gw + _col];
+	                if (_tg_ch < 0 || _tg_ch >= array_length(_tg_types)) continue;
+	                var _tg_t = real(_tg_types[_tg_ch]);
+	                if (_tg_t <= 0) continue;
+	                _tg_used[clamp(_tg_t, 0, 255)] = true;
+	                _tg_any = true;
+	                var _tgx = _cv_x1 + (_col - _start_col) * _cs;
+	                var _tgy = _cv_y1 + (_row - _start_row) * _cs;
+	                var _tgs = max(3, _cs div 3);
+	                draw_set_color(scr_room_map_type_col(_tg_t));
+	                draw_rectangle(_tgx, _tgy, _tgx + _tgs, _tgy + _tgs, false);
+	                draw_set_color(c_black);
+	                draw_rectangle(_tgx, _tgy, _tgx + _tgs, _tgy + _tgs, true);
+	            }
+	        }
+	        var _tg_line = "TAGS [T]:";
+	        if (!_tg_any) {
+	            _tg_line += " NONE IN VIEW";
+	        } else {
+	            for (var _tq = 1; _tq < 256; _tq++) {
+	                if (_tg_used[_tq]) _tg_line += " " + string(_tq);
+	            }
+	        }
+	        draw_set_font_l(fnt_c64_tiny);
+	        draw_set_color(make_color_rgb(20, 20, 30));
+	        draw_rectangle(_cv_x1 + 2, _cv_y2 - 18, _cv_x1 + string_width(_tg_line) + 16, _cv_y2 - 2, false);
+	        draw_set_color(c_aqua);
+	        draw_text(_cv_x1 + 9, _cv_y2 - 13 - scr_lang_lift(), _tg_line);
+	    }
+
 	    // ── RLE ROOMS overlay: room borders + room numbers ──
 	    // Rooms are room_w x room_h cells, numbered left to right, top to
 	    // bottom - the order the pointer table is emitted in. Cells past
 	    // room_count are not emitted, so they are shaded out.
-	    if (real(_m.raw_chars) == 2 && real(_m.room_w) > 0 && real(_m.room_h) > 0) {
+	    if (real(_m.raw_chars) >= 2 && real(_m.room_w) > 0 && real(_m.room_h) > 0) {
 	        var _rw_c   = real(_m.room_w);
 	        var _rh_c   = real(_m.room_h);
 	        var _rx_n   = _gw div _rw_c;
@@ -2689,8 +2788,17 @@ draw_set_color(_cell_bg_col);
 	                draw_text_l(_bx1 + 6, _by1 + 5, _tag);
 	            }
 	        }
+	        // ROOM PREVIEW lives in the top panel (STAMPS / ROOM PREVIEW toggle,
+	        // scr_map_room_preview_panel); it follows the room under the mouse.
+	        if (keyboard_check_pressed(ord("G")) && !scr_ctrl_held()) {
+	            if (map_top_mode == 1) { map_top_mode = 0; } else { map_top_mode = 1; }
+	        }
+	        if (keyboard_check_pressed(ord("H")) && !scr_ctrl_held()) {
+	            _m.view_y2 = !_m.view_y2;
+	        }
+	        map_hover_room = _hov_room;
 	        if (_hov_room >= 0) {
-	            var _hint = "ROOM " + string(_hov_room) + "  (" + string(_rw_c) + "x" + string(_rh_c) + ")";
+	            var _hint = "ROOM " + string(_hov_room) + "  (" + string(_rw_c) + "x" + string(_rh_c) + ")   [G] ROOM PREVIEW  [H] Y x2  [T] TAGS";
 	            if (_hov_room >= _r_used) { _hint += "  NOT EMITTED"; }
 	            draw_set_color(make_color_rgb(20, 20, 30));
 	            draw_rectangle(_cv_x2 - string_width(_hint) - 16, _cv_y2 - 18, _cv_x2 - 2, _cv_y2 - 2, false);

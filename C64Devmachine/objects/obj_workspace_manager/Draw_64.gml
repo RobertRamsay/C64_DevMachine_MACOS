@@ -1207,6 +1207,8 @@ if (gui_menu_open == 7 || gui_menu_open == 8) {
     // All bundled JSONs and catalog IDs remain available for later work.
     var _visible_templates = [
         0 // SHMUP V
+        ,-3 // --- TEST ---
+        ,16 // PARAMS TEST (Creator params / cards / panels test bed)
         // ,1 // V.SHMUP (PRO)
         // ,2 // H.SHMUP (LITE)
         // ,3 // H.SHMUP (PRO)
@@ -1218,7 +1220,7 @@ if (gui_menu_open == 7 || gui_menu_open == 8) {
         // ,9 // TOP DOWN (PRO)
     ];
     // PORTS: negative entries are sub-headers (-1 GAMES, -2 MUSIC+GFX), not clickable
-    var _port_headers = ["GAMES", "MUSIC+GFX"];
+    var _port_headers = ["GAMES", "MUSIC+GFX", "TEST"];
     if (gui_menu_open == 8) _visible_templates = [-1, 10, 11, 13, 14, 15, -2, 12]; // ZYRONS ESCAPE, SPY HUNTER, SABOTEUR, R-TYPE, BRUCE LEE | WIZBALL
     var _th = array_length(_visible_templates) * 24 + 24;
     draw_sprite_stretched(spr_glassSlice, niceSliceFrm, _tx, _ty, _tw, _th);
@@ -3231,11 +3233,30 @@ if (global.show_info_window && instance_exists(global.info_node)) {
 	    draw_rectangle(_nfx1, _nfy1, _nfx2, _nfy2, false);
 	    draw_set_color(c_aqua);
 	    draw_rectangle(_nfx1, _nfy1, _nfx2, _nfy2, true);
-	    var _blinker  = (current_time mod 600 < 300) ? "|" : " ";
-	    var _vis_name = string_insert(_blinker, box_popup_name, box_cursor_pos + 1);
 	    draw_set_font_l(fnt_c64_code);
+	    var _name_x = _nfx1 + 6;
+	    // Click in the field puts the cursor at the nearest letter gap.
+	    if (mouse_check_button_pressed(mb_left)
+	        && gui_mouse_x >= _nfx1 && gui_mouse_x <= _nfx2
+	        && gui_mouse_y >= _nfy1 && gui_mouse_y <= _nfy2) {
+	        var _best_pos  = 0;
+	        var _best_dist = abs(gui_mouse_x - _name_x);
+	        for (var _ci = 1; _ci <= string_length(box_popup_name); _ci++) {
+	            var _gap_x = _name_x + string_width(string_copy(box_popup_name, 1, _ci));
+	            if (abs(gui_mouse_x - _gap_x) < _best_dist) {
+	                _best_dist = abs(gui_mouse_x - _gap_x);
+	                _best_pos  = _ci;
+	            }
+	        }
+	        box_cursor_pos = _best_pos;
+	    }
 	    draw_set_color(c_yellow);
-	    draw_text_l(_nfx1 + 6, _nfy1 + 4, _vis_name);
+	    draw_text(_name_x, _nfy1 + 4 - scr_lang_lift(), box_popup_name);
+	    // Cursor bar drawn between letters, so the text never shifts under it.
+	    if (current_time mod 600 < 300) {
+	        var _cur_x = _name_x + string_width(string_copy(box_popup_name, 1, box_cursor_pos));
+	        draw_line_width(_cur_x, _nfy1 + 4, _cur_x, _nfy2 - 4, 1);
+	    }
 
 	    // Duplicate warning
 	    if (box_popup_name_dupe) {

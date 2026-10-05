@@ -57,6 +57,63 @@ function scr_map_cache_build_atlas(_c, _buf) {
     return _changed;
 }
 
+/// Glyph atlas for one charset buffer into a buffer laid out as above.
+/// Used for the extra ROOM VIEW charsets (no per-glyph change tracking:
+/// a change to one of those charsets redraws the whole map).
+function scr_map_cache_fill_atlas_buf(_ab, _buf) {
+    var _bsize = buffer_get_size(_buf);
+    buffer_fill(_ab, 0, buffer_u32, 0, buffer_get_size(_ab));
+    for (var _ch = 0; _ch < 256; _ch++) {
+        var _ax = (_ch mod 16) * 8;
+        var _ay = (_ch div 16) * 8;
+        for (var _r = 0; _r < 8; _r++) {
+            var _off = _ch * 8 + _r;
+            if (_off >= _bsize) continue;
+            var _byte = buffer_peek(_buf, _off, buffer_u8);
+            if (_byte == 0) continue;
+            var _py = _ay + _r;
+            for (var _b = 0; _b < 8; _b++) {
+                if (_byte & (0x80 >> _b)) {
+                    buffer_poke(_ab, ((_py * 128) + _ax + _b) * 4, buffer_u32, 0xFFFFFFFF);
+                }
+            }
+            for (var _p = 0; _p < 4; _p++) {
+                var _bits = (_byte >> (6 - _p * 2)) & 0x03;
+                if (_bits == 0) continue;
+                var _sy = _py + _bits * 128;
+                var _sx = _ax + _p * 2;
+                buffer_poke(_ab, ((_sy * 128) + _sx) * 4,     buffer_u32, 0xFFFFFFFF);
+                buffer_poke(_ab, ((_sy * 128) + _sx + 1) * 4, buffer_u32, 0xFFFFFFFF);
+            }
+        }
+    }
+    for (var _sy2 = 512; _sy2 < 520; _sy2++) {
+        for (var _sx2 = 0; _sx2 < 8; _sx2++) {
+            buffer_poke(_ab, ((_sy2 * 128) + _sx2) * 4, buffer_u32, 0xFFFFFFFF);
+        }
+    }
+}
+
+/// ROOM VIEW: charset slot and colours for the cell at col,row.
+/// Returns [atlas, bg, col1, col2] - the map's own when the cell has no room view.
+function scr_map_cache_cell_look(_c, _col, _row) {
+    var _look = [_c.atlas, _c.bg_c, _c.col1_c, _c.col2_c];
+    if (!_c.rv_on) return _look;
+    var _rx_i = _col div _c.rv_rw;
+    if (_rx_i >= _c.rv_rx) return _look;
+    var _ri = (_row div _c.rv_rh) * _c.rv_rx + _rx_i;
+    if (_ri >= _c.rv_n) return _look;
+    var _sl = _c.rv_slot[_ri];
+    if (_sl > 0) {
+        if (surface_exists(_c.rv_atlas[_sl])) _look[0] = _c.rv_atlas[_sl];
+    }
+    var _bi = _ri * _c.rv_rh + (_row mod _c.rv_rh);
+    _look[1] = _c.rv_bg[_bi];
+    _look[2] = _c.rv_c1[_bi];
+    _look[3] = _c.rv_c2[_bi];
+    return _look;
+}
+
 function scr_map_cache_draw_cell(_c, _m, _col, _row) {
     var _idx   = _row * _c.gw + _col;
     var _char  = _m.char_grid[_idx];
@@ -67,22 +124,23 @@ function scr_map_cache_draw_cell(_c, _m, _col, _row) {
     }
     var _x = _col * 8;
     var _y = _row * 8;
-    var _at = _c.atlas;
+    var _look = scr_map_cache_cell_look(_c, _col, _row);
+    var _at   = _look[0];
 
     if (_c.mixed == 1 && _ov == 1) {
-        draw_surface_part_ext(_at, 0, 512, 8, 8, _x, _y, 1, 1, _c.bg_c, 1);
+        draw_surface_part_ext(_at, 0, 512, 8, 8, _x, _y, 1, 1, _look[1], 1);
         if (_char >= 0 && _char < 256) {
             var _ax = (_char mod 16) * 8;
             var _ay = (_char div 16) * 8;
-            draw_surface_part_ext(_at, _ax, _ay + 128, 8, 8, _x, _y, 1, 1, _c.col1_c, 1);
-            draw_surface_part_ext(_at, _ax, _ay + 256, 8, 8, _x, _y, 1, 1, _c.col2_c, 1);
+            draw_surface_part_ext(_at, _ax, _ay + 128, 8, 8, _x, _y, 1, 1, _look[2], 1);
+            draw_surface_part_ext(_at, _ax, _ay + 256, 8, 8, _x, _y, 1, 1, _look[3], 1);
             draw_surface_part_ext(_at, _ax, _ay + 384, 8, 8, _x, _y, 1, 1, _c.pal[_col_v & 0x07], 1);
         }
         return;
     }
 
     var _real = _char;
-    var _bgc  = _c.bg_c;
+    var _bgc  = _look[1];
     if (_c.ecm) {
         _real = _char mod 64;
         _bgc  = _c.ecm_c[clamp(_char div 64, 0, 3)];
@@ -160,6 +218,91 @@ function scr_map_cache_update(_c, _asset, _chr, _p) {
     var _ovg = _m[$ "override_grid"];
     if (is_array(_ovg)) {
         _c.ov_len = array_length(_ovg);
+    }
+
+    // ROOM VIEW: meta.room_view[room] = { chr: charset name ("" = the map's),
+    //   bands: [[first row, bg, mc1, mc2], ...] }. Rows of a room take the
+    //   last band whose first row is at or above them; no band = the map's.
+    var _rv    = _m[$ "room_view"];
+    var _rv_on = false;
+    if (is_array(_rv) && array_length(_rv) > 0 && real(_m.raw_chars) >= 2
+        && real(_m.room_w) > 0 && real(_m.room_h) > 0) {
+        _rv_on = true;
+    }
+    var _rv_key = "";
+    if (_rv_on) {
+        _rv_key = json_stringify(_rv);
+    }
+    if (_c.rv_on != _rv_on || _c.rv_key != _rv_key) _full = true;
+    _c.rv_on  = _rv_on;
+    _c.rv_key = _rv_key;
+    if (_rv_on) {
+        _c.rv_rw = real(_m.room_w);
+        _c.rv_rh = real(_m.room_h);
+        _c.rv_rx = max(1, _gw div _c.rv_rw);
+        _c.rv_n  = array_length(_rv);
+        _c.rv_slot = array_create(_c.rv_n, 0);
+        _c.rv_bg   = array_create(_c.rv_n * _c.rv_rh, _c.bg_c);
+        _c.rv_c1   = array_create(_c.rv_n * _c.rv_rh, _c.col1_c);
+        _c.rv_c2   = array_create(_c.rv_n * _c.rv_rh, _c.col2_c);
+        _c.rv_chr[0] = _chr;
+        for (var _ri = 0; _ri < _c.rv_n; _ri++) {
+            var _ent = _rv[_ri];
+            if (!is_struct(_ent)) continue;
+            // charset slot
+            var _cn = _ent[$ "chr"];
+            if (is_string(_cn) && _cn != "" && _cn != _chr.name) {
+                var _sl = -1;
+                for (var _k = 1; _k < array_length(_c.rv_chr); _k++) {
+                    if (_c.rv_chr[_k] != noone && _c.rv_chr[_k].name == _cn) { _sl = _k; break; }
+                }
+                if (_sl == -1) {
+                    var _ca = noone;
+                    var _al = obj_asset_manager.asset_list;
+                    for (var _ai = 0; _ai < ds_list_size(_al); _ai++) {
+                        var _aa = ds_list_find_value(_al, _ai);
+                        if (_aa.type == "CHAR_SET" && _aa.name == _cn) { _ca = _aa; break; }
+                    }
+                    if (_ca != noone && buffer_exists(_ca.buffer)) {
+                        array_push(_c.rv_chr, _ca);
+                        array_push(_c.rv_atlas, -1);
+                        array_push(_c.rv_crc, -1);
+                        _sl = array_length(_c.rv_chr) - 1;
+                    }
+                }
+                if (_sl > 0) _c.rv_slot[_ri] = _sl;
+            }
+            // colour bands
+            var _bands = _ent[$ "bands"];
+            if (is_array(_bands)) {
+                for (var _rr = 0; _rr < _c.rv_rh; _rr++) {
+                    for (var _bi = 0; _bi < array_length(_bands); _bi++) {
+                        var _bd = _bands[_bi];
+                        if (real(_bd[0]) <= _rr) {
+                            var _o = _ri * _c.rv_rh + _rr;
+                            _c.rv_bg[_o] = scr_c64_pepto_colour(real(_bd[1]) & 0x0F);
+                            _c.rv_c1[_o] = scr_c64_pepto_colour(real(_bd[2]) & 0x0F);
+                            _c.rv_c2[_o] = scr_c64_pepto_colour(real(_bd[3]) & 0x0F);
+                        }
+                    }
+                }
+            }
+        }
+        // extra charsets: (re)build their atlases when they change
+        for (var _k = 1; _k < array_length(_c.rv_chr); _k++) {
+            var _kc = _c.rv_chr[_k];
+            if (_kc == noone || !buffer_exists(_kc.buffer)) continue;
+            var _kcrc = buffer_crc32(_kc.buffer, 0, buffer_get_size(_kc.buffer));
+            if (!surface_exists(_c.rv_atlas[_k]) || _c.rv_crc[_k] != _kcrc) {
+                if (!surface_exists(_c.rv_atlas[_k])) _c.rv_atlas[_k] = surface_create(128, 520);
+                var _tmp = buffer_create(128 * 520 * 4, buffer_fixed, 1);
+                scr_map_cache_fill_atlas_buf(_tmp, _kc.buffer);
+                buffer_set_surface(_tmp, _c.rv_atlas[_k], 0);
+                buffer_delete(_tmp);
+                _c.rv_crc[_k] = _kcrc;
+                _full = true;
+            }
+        }
     }
 
     // surfaces
@@ -253,4 +396,194 @@ function scr_map_cache_update(_c, _asset, _chr, _p) {
 
     gpu_set_tex_filter(_old_tf);
     return true;
+}
+
+
+/// Small text button for the ROOM PREVIEW panel (text centred in the box).
+/// Returns 1 on a left click, 2 on a right click, 0 otherwise.
+function scr_mrp_button(_x1, _y1, _x2, _y2, _label, _on, _mx, _my) {
+    var _hov = point_in_rectangle(_mx, _my, _x1, _y1, _x2, _y2);
+    var _col = make_color_rgb(30, 30, 45);
+    if (_on) { _col = make_color_rgb(40, 110, 60); }
+    else if (_hov) { _col = make_color_rgb(55, 55, 80); }
+    draw_set_color(_col);
+    draw_rectangle(_x1, _y1, _x2, _y2, false);
+    draw_set_font_l(fnt_c64_tiny);
+    draw_set_color(c_white);
+    draw_set_halign(fa_center);
+    draw_set_valign(fa_middle);
+    draw_text((_x1 + _x2) * 0.5, (_y1 + _y2) * 0.5 - scr_lang_lift(), _label);
+    draw_set_valign(fa_top);
+    draw_set_halign(fa_left);
+    if (_hov && mouse_check_button_pressed(mb_left)) return 1;
+    if (_hov && mouse_check_button_pressed(mb_right)) return 2;
+    return 0;
+}
+
+/// ROOM PREVIEW (map editor top panel, room maps): one room the way the
+/// game shows it - its own charset and colour bands (meta.room_view) and,
+/// with Y x2 on, every cell twice as tall (Bruce Lee doubles each tile row).
+/// Scaled to fill the panel height, centred, with its controls in a column
+/// beside it:
+///   < ROOM >        previous / next room      FOLLOW  track the mouse room
+///   Y x2 / TAGS     row doubling / tag badges
+///   CHR             L-click next charset, R-click back to the map's own
+///   band ROW        L +1 / R -1                swatches L next / R previous colour
+///   X               delete the band            + BAND  add one under the last
+function scr_map_room_preview_panel(_asset, _x1, _y1, _x2, _y2, _mx, _my) {
+    var _m   = _asset.meta;
+    var _rw  = real(_m.room_w);
+    var _rh  = real(_m.room_h);
+    var _gw  = real(_m.grid_w);
+    var _rx  = max(1, _gw div _rw);
+    var _rn  = _rx * max(1, real(_m.grid_h) div _rh);
+    if (real(_m.room_count) > 0 && real(_m.room_count) < _rn) _rn = real(_m.room_count);
+    if (_y2 - _y1 < 40) return;
+    if (map_prev_follow && map_hover_room >= 0 && map_hover_room < _rn) map_prev_room = map_hover_room;
+    map_prev_room = clamp(map_prev_room, 0, max(0, _rn - 1));
+    var _r = map_prev_room;
+
+    // ---- layout: preview scaled to the height, controls beside it ----
+    var _ysc  = 1;
+    if (_m.view_y2) _ysc = 2;
+    var _pw   = _rw * 8;
+    var _ph   = _rh * 8 * _ysc;
+    var _colw = 214;
+    var _sc   = min((_y2 - _y1 - 4) / _ph, (_x2 - _x1 - _colw - 16) / _pw);
+    _sc = max(0.25, _sc);
+    var _vw = _pw * _sc;
+    var _vh = _ph * _sc;
+    var _gx = _x1 + max(0, ((_x2 - _x1) - (_vw + 12 + _colw)) * 0.5);
+    var _px = _gx + 2;
+    var _py = _y1 + 2;
+
+    draw_set_color(make_color_rgb(12, 12, 20));
+    draw_rectangle(_gx - 4, _y1 - 2, _gx + _vw + 12 + _colw + 4, _y2, false);
+    var _c = map_view_cache;
+    if (_c.asset == _asset && surface_exists(_c.surf)) {
+        var _tf = gpu_get_tex_filter();
+        gpu_set_tex_filter(false);
+        draw_surface_part_ext(_c.surf, (_r mod _rx) * _pw, (_r div _rx) * _rh * 8, _pw, _rh * 8,
+            _px, _py, _sc, _sc * _ysc, c_white, 1);
+        gpu_set_tex_filter(_tf);
+    }
+    draw_set_color(c_yellow);
+    draw_rectangle(_px - 1, _py - 1, _px + _vw, _py + _vh, true);
+
+    // ---- controls column ----
+    var _cx = _px + _vw + 10;
+    var _cy = _y1 + 2;
+    var _bh = 18;
+    var _st = _bh + 4;
+    if (scr_mrp_button(_cx, _cy, _cx + 24, _cy + _bh, "<", false, _mx, _my) == 1) {
+        map_prev_follow = false;
+        map_prev_room = (map_prev_room + _rn - 1) mod _rn;
+    }
+    draw_set_font_l(fnt_c64_tiny);
+    draw_set_color(c_yellow);
+    draw_set_halign(fa_center);
+    draw_set_valign(fa_middle);
+    draw_text(_cx + 72, _cy + _bh * 0.5 - scr_lang_lift(), "ROOM " + string(_r));
+    draw_set_valign(fa_top);
+    draw_set_halign(fa_left);
+    if (scr_mrp_button(_cx + 120, _cy, _cx + 144, _cy + _bh, ">", false, _mx, _my) == 1) {
+        map_prev_follow = false;
+        map_prev_room = (map_prev_room + 1) mod _rn;
+    }
+    if (scr_mrp_button(_cx + 150, _cy, _cx + _colw, _cy + _bh, "FOLLOW", map_prev_follow, _mx, _my) == 1) {
+        map_prev_follow = !map_prev_follow;
+    }
+    _cy += _st;
+    if (scr_mrp_button(_cx, _cy, _cx + 104, _cy + _bh, "Y x2", _m.view_y2, _mx, _my) == 1) {
+        _m.view_y2 = !_m.view_y2;
+        _m.is_dirty = true;
+    }
+    if (scr_mrp_button(_cx + 110, _cy, _cx + _colw, _cy + _bh, "TAGS", map_show_tags, _mx, _my) == 1) {
+        map_show_tags = !map_show_tags;
+    }
+    _cy += _st;
+
+    // the room's view entry (created on the first edit)
+    if (!is_array(_m.room_view)) _m.room_view = [];
+    var _ent = { chr: "", bands: [] };
+    if (_r < array_length(_m.room_view) && is_struct(_m.room_view[_r])) _ent = _m.room_view[_r];
+    if (!is_string(_ent[$ "chr"])) _ent.chr = "";
+    var _edited = false;
+
+    // charset
+    var _chr_lbl = "CHR: MAP";
+    if (_ent.chr != "") _chr_lbl = "CHR: " + _ent.chr;
+    var _cb = scr_mrp_button(_cx, _cy, _cx + _colw, _cy + _bh, _chr_lbl, false, _mx, _my);
+    if (_cb != 0) {
+        var _names = [];
+        for (var _ai = 0; _ai < ds_list_size(asset_list); _ai++) {
+            var _aa = ds_list_find_value(asset_list, _ai);
+            if (_aa.type == "CHAR_SET") array_push(_names, _aa.name);
+        }
+        if (_cb == 2 || array_length(_names) == 0) {
+            _ent.chr = "";
+        } else {
+            var _at = -1;
+            for (var _ni = 0; _ni < array_length(_names); _ni++) {
+                if (_names[_ni] == _ent.chr) { _at = _ni; break; }
+            }
+            _ent.chr = _names[(_at + 1) mod array_length(_names)];
+        }
+        _edited = true;
+    }
+    _cy += _st;
+
+    // colour bands
+    draw_set_font_l(fnt_c64_tiny);
+    draw_set_color(c_ltgray);
+    draw_set_valign(fa_middle);
+    draw_text(_cx,       _cy + 7 - scr_lang_lift(), "ROW");
+    draw_text(_cx + 44,  _cy + 7 - scr_lang_lift(), "BG");
+    draw_text(_cx + 82,  _cy + 7 - scr_lang_lift(), "MC1");
+    draw_text(_cx + 120, _cy + 7 - scr_lang_lift(), "MC2");
+    draw_set_valign(fa_top);
+    _cy += 16;
+    if (!is_array(_ent[$ "bands"])) _ent.bands = [];
+    var _bands = _ent.bands;
+    var _del = -1;
+    for (var _bi = 0; _bi < array_length(_bands); _bi++) {
+        var _bd = _bands[_bi];
+        if (_cy + _bh > _y2 - _st) break;    // keep a row for + BAND
+        var _rb = scr_mrp_button(_cx, _cy, _cx + 32, _cy + _bh, string(real(_bd[0])), false, _mx, _my);
+        if (_rb == 1) { _bd[@ 0] = min(_rh - 1, real(_bd[0]) + 1); _edited = true; }
+        if (_rb == 2) { _bd[@ 0] = max(0, real(_bd[0]) - 1); _edited = true; }
+        for (var _k = 1; _k <= 3; _k++) {
+            var _sx1 = _cx + 44 + (_k - 1) * 38;
+            var _shov = point_in_rectangle(_mx, _my, _sx1, _cy, _sx1 + 30, _cy + _bh);
+            draw_set_color(scr_c64_pepto_colour(real(_bd[_k]) & 0x0F));
+            draw_rectangle(_sx1, _cy, _sx1 + 30, _cy + _bh, false);
+            if (_shov) { draw_set_color(c_white); } else { draw_set_color(c_black); }
+            draw_rectangle(_sx1, _cy, _sx1 + 30, _cy + _bh, true);
+            if (_shov && mouse_check_button_pressed(mb_left))  { _bd[@ _k] = (real(_bd[_k]) + 1) & 0x0F; _edited = true; }
+            if (_shov && mouse_check_button_pressed(mb_right)) { _bd[@ _k] = (real(_bd[_k]) + 15) & 0x0F; _edited = true; }
+        }
+        if (scr_mrp_button(_cx + _colw - 24, _cy, _cx + _colw, _cy + _bh, "X", false, _mx, _my) == 1) _del = _bi;
+        _cy += _st;
+    }
+    if (_del >= 0) {
+        array_delete(_bands, _del, 1);
+        _edited = true;
+    }
+    if (_cy + _bh <= _y2) {
+        if (scr_mrp_button(_cx, _cy, _cx + 104, _cy + _bh, "+ BAND", false, _mx, _my) == 1) {
+            var _nb = [0, 0, 1, 2];
+            if (array_length(_bands) > 0) {
+                var _lb = _bands[array_length(_bands) - 1];
+                _nb = [min(_rh - 1, real(_lb[0]) + 1), real(_lb[1]), real(_lb[2]), real(_lb[3])];
+            }
+            array_push(_bands, _nb);
+            _edited = true;
+        }
+    }
+
+    if (_edited) {
+        while (array_length(_m.room_view) <= _r) array_push(_m.room_view, { chr: "", bands: [] });
+        _m.room_view[_r] = _ent;
+        _m.is_dirty = true;
+    }
 }

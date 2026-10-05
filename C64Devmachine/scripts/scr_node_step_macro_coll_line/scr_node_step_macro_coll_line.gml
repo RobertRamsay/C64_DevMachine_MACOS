@@ -2,6 +2,7 @@
 function scr_node_step_macro_coll_line(_draw_x) {
     var _hh = 24, _lh = 16, _inst = instructions[0], _lx = _draw_x + 8, _rx = _draw_x + width - 6, _cy = y + _hh + 4;
     while (array_length(_inst) < 7) array_push(_inst, "");
+    if (array_length(_inst) < 8) array_push(_inst, 0);
     var _hit = function(_x1, _x2, _yy) { return point_in_rectangle(mouse_x, mouse_y, _x1, _yy + 4, _x2, _yy + 10); };
 
     // LUT (LINE_COLL asset picker)
@@ -105,6 +106,19 @@ function scr_node_step_macro_coll_line(_draw_x) {
         label_picker_list       = [];
         label_picker_target     = id;
         label_picker_index      = 4;
+        exit;
+    }
+    _cy += _lh;
+
+    // THICK — click cycles EXACT, +/-1, +/-2, +/-3
+    if (_hit(_lx + 44, _rx, _cy)) {
+        var _t = real(_inst[7]) + 1;
+        if (_t > 3) { _t = 0; }
+        _inst[7] = _t;
+        // THICK changes the macro's size, so re-lay everything after it now.
+        global.addresses_dirty = true;
+        global.undo_dirty      = true;
+        scr_c64_do_update_addresses();
         exit;
     }
     _cy += _lh;

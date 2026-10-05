@@ -1,4 +1,6 @@
 if (scr_workspace_input_blocked()) exit;
+// A pinned param card drawn over this box owns the click.
+if (global.creator_card_hot && !is_dragging && !is_resizing) exit;
 // CREATOR UI PANEL: facade widgets and the UI PANEL / SHOW UI / NO UI buttons.
 if (scr_creator_box_step(id)) exit;
 /// @desc Mapping Box - Resize, Drag, Delete, Double-click Edit
@@ -99,6 +101,11 @@ if (_tab_hov && ( !scr_workspace_input_blocked() && scr_primary_pressed() ) && !
         drag_float_ox = [];
         drag_float_oy = [];
         with (obj_c64_node) {
+            // A UI panel is linked to its nodes, not sitting on them:
+            // it moves on its own and leaves every node where it is.
+            if (other.is_panel) {
+                break;
+            }
             var _nx = x + (width  * 0.5);
             var _ny = y + (height * 0.5);
             var _inside = (_nx >= other.x && _nx <= other.x + other.box_w &&

@@ -697,13 +697,15 @@ function scr_room_map_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
     // Collider lines of the shown room, labelled by type
     var _lc = scr_line_coll_find_asset(_rooms[_show_room].coll);
     if (!is_undefined(_lc) && variable_struct_exists(_lc.meta, "lines")) {
+        var _lwx = 1;
+        if (_lc.meta.wide_x) { _lwx = 2; }
         for (var _li = 0; _li < array_length(_lc.meta.lines); _li++) {
             var _ln = _lc.meta.lines[_li];
             var _lt = real(_ln.type);
             draw_set_color(scr_room_map_type_col(_lt));
-            draw_line_width(_qx + _ln.x1 * _sc, _qy + _ln.y1 * _sc, _qx + _ln.x2 * _sc, _qy + _ln.y2 * _sc, 2);
+            draw_line_width(_qx + _ln.x1 * _lwx * _sc, _qy + _ln.y1 * _sc, _qx + _ln.x2 * _lwx * _sc, _qy + _ln.y2 * _sc, 2);
             if (_lt >= 2) {
-                var _mxl = _qx + (_ln.x1 + _ln.x2) * 0.5 * _sc;
+                var _mxl = _qx + (_ln.x1 + _ln.x2) * 0.5 * _lwx * _sc;
                 var _myl = _qy + (_ln.y1 + _ln.y2) * 0.5 * _sc;
                 draw_set_color(c_black);
                 draw_rectangle(_mxl - 9, _myl - 14, _mxl + 9, _myl - 3, false);
@@ -1261,6 +1263,11 @@ function scr_room_map_open_bitmap(_name) {
 function scr_map_rle_rooms_encode(_a) {
     var _out = [];
     var _m   = _a.meta;
+    // RLE STREAM maps share every caller of this function (emit, size,
+    // memory bar, D64) - only the byte format differs.
+    if (real(_m.raw_chars) == 3) {
+        return scr_map_rle_stream_encode(_a);
+    }
     var _mw  = real(_m.map_w);
     var _mh  = real(_m.map_h);
     var _rw  = real(_m.room_w);
@@ -1352,9 +1359,132 @@ function scr_map_rle_rooms_encode(_a) {
 }
 
 
+/// ====================================================================
+/// MAP_DATA "RLE STREAM" export (raw_chars == 3)
+///
+/// Rooms are laid out as for RLE ROOMS (room_w x room_h chars, numbered
+/// left to right, top to bottom). Emitted:
+///     lo table      one byte per room - low byte of its stream address
+///     hi table      one byte per room - high byte
+///     streams       one per unique room, the room's chars row after row:
+///         n, char       n = 1-127: n copies of char
+///         $80+n, chars  n = 1-127: the next n chars as they are
+///         $80           end of room
+/// Identical rooms share one stream. This is the room format Bruce Lee
+/// (Datasoft) reads; a split lo / hi table is what its ROOM_DRAW indexes.
+///
+/// stream_flag_colour (0-7, -1 = off): a cell painted that colour gets
+/// bit 7 set on its char - Bruce Lee marks the cells it draws dark that
+/// way. With it off the char is emitted as it is (0-255).
+/// ====================================================================
+function scr_map_rle_stream_encode(_a) {
+    var _out = [];
+    var _m   = _a.meta;
+    var _mw  = real(_m.map_w);
+    var _mh  = real(_m.map_h);
+    var _rw  = real(_m.room_w);
+    var _rh  = real(_m.room_h);
+    if (_rw < 1 || _rh < 1) return _out;
+    var _gw = real(_m.grid_w);
+    if (_gw < _mw) _gw = _mw;
+    var _cg = _m.char_grid;
+    var _kg = _m.colour_grid;
+    var _flag = real(_m.stream_flag_colour);
+    var _rx_n = _mw div _rw;
+    var _ry_n = _mh div _rh;
+    var _n    = _rx_n * _ry_n;
+    var _cnt  = real(_m.room_count);
+    if (_cnt > 0 && _cnt < _n) _n = _cnt;
+    if (_n < 1) return _out;
+
+    var _streams = [];   // encoded bytes per unique room
+    var _keys    = [];   // string key per unique room, for sharing
+    var _room_of = [];   // room index -> unique stream index
+    for (var _r = 0; _r < _n; _r++) {
+        var _ox = (_r mod _rx_n) * _rw;
+        var _oy = (_r div _rx_n) * _rh;
+        // the room's bytes, row after row
+        var _cells = [];
+        for (var _y = 0; _y < _rh; _y++) {
+            for (var _x = 0; _x < _rw; _x++) {
+                var _gi = (_oy + _y) * _gw + _ox + _x;
+                var _b  = 0;
+                if (_gi < array_length(_cg)) _b = _cg[_gi] & 0xFF;
+                if (_flag >= 0) {
+                    _b = _b & 0x7F;
+                    if (_gi < array_length(_kg)) {
+                        if ((_kg[_gi] & 0x07) == _flag) _b = _b | 0x80;
+                    }
+                }
+                array_push(_cells, _b);
+            }
+        }
+        // runs of 3+ become n,char; everything else goes in literal blocks
+        var _st  = [];
+        var _lit = [];
+        var _i   = 0;
+        var _len = array_length(_cells);
+        while (_i <= _len) {
+            var _run = 0;
+            if (_i < _len) {
+                _run = 1;
+                while (_i + _run < _len && _run < 127 && _cells[_i + _run] == _cells[_i]) _run++;
+            }
+            if (_run >= 3 || _i == _len) {
+                var _lp = 0;
+                while (_lp < array_length(_lit)) {
+                    var _ln = min(127, array_length(_lit) - _lp);
+                    array_push(_st, 0x80 | _ln);
+                    for (var _k = 0; _k < _ln; _k++) array_push(_st, _lit[_lp + _k]);
+                    _lp += _ln;
+                }
+                _lit = [];
+                if (_i == _len) break;
+                array_push(_st, _run, _cells[_i]);
+                _i += _run;
+            } else {
+                array_push(_lit, _cells[_i]);
+                _i++;
+            }
+        }
+        array_push(_st, 0x80);
+        var _key = json_stringify(_st);
+        var _found = -1;
+        for (var _k = 0; _k < array_length(_keys); _k++) {
+            if (_keys[_k] == _key) { _found = _k; break; }
+        }
+        if (_found == -1) {
+            array_push(_keys, _key);
+            array_push(_streams, _st);
+            _found = array_length(_streams) - 1;
+        }
+        array_push(_room_of, _found);
+    }
+
+    // stream start offsets, after the two tables
+    var _offs = [];
+    var _pos  = _n * 2;
+    for (var _s = 0; _s < array_length(_streams); _s++) {
+        array_push(_offs, _pos);
+        _pos += array_length(_streams[_s]);
+    }
+    for (var _r = 0; _r < _n; _r++) {
+        array_push(_out, (real(_a.address) + _offs[_room_of[_r]]) & 0xFF);
+    }
+    for (var _r = 0; _r < _n; _r++) {
+        array_push(_out, ((real(_a.address) + _offs[_room_of[_r]]) >> 8) & 0xFF);
+    }
+    for (var _s = 0; _s < array_length(_streams); _s++) {
+        var _st2 = _streams[_s];
+        for (var _b = 0; _b < array_length(_st2); _b++) array_push(_out, _st2[_b]);
+    }
+    return _out;
+}
+
+
 /// Bytes a MAP_DATA asset really puts in C64 memory, from its address.
 ///   RAW CHARS  : the char plane only (map_w * map_h)
-///   RLE ROOMS  : the pointer table + room streams
+///   RLE ROOMS  : the pointer table + room streams (RLE STREAM: tables + streams)
 ///   FULL MAP   : the whole buffer (char + colour planes)
 /// The buffer itself is always three planes, so its size must never be used
 /// as the asset's memory extent for the first two modes - doing so claimed
@@ -1368,7 +1498,7 @@ function scr_map_emit_size(_a) {
     if (_mode == 1) {
         return _a.meta.map_w * _a.meta.map_h;
     }
-    if (_mode == 2) {
+    if (_mode == 2 || _mode == 3) {
         return array_length(scr_map_rle_rooms_encode(_a));
     }
     if (buffer_exists(_a.buffer)) {
