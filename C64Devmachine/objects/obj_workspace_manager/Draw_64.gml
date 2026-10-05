@@ -1221,7 +1221,12 @@ if (gui_menu_open == 7 || gui_menu_open == 8) {
     ];
     // PORTS: negative entries are sub-headers (-1 GAMES, -2 MUSIC+GFX), not clickable
     var _port_headers = ["GAMES", "MUSIC+GFX", "TEST"];
-    if (gui_menu_open == 8) _visible_templates = [-1, 10, 11, 13, 14, 15, -2, 12]; // ZYRONS ESCAPE, SPY HUNTER, SABOTEUR, R-TYPE, BRUCE LEE | WIZBALL
+    if (gui_menu_open == 8) {
+        _visible_templates = [-1, 10, 11, 13 // ZYRONS ESCAPE, SPY HUNTER, SABOTEUR
+            // ,14 // R-TYPE - reserved for a future version
+            // ,15 // BRUCE LEE - reserved for a future version
+            , -2, 12]; // | WIZBALL
+    }
     var _th = array_length(_visible_templates) * 24 + 24;
     draw_sprite_stretched(spr_glassSlice, niceSliceFrm, _tx, _ty, _tw, _th);
     draw_set_font_l(fnt_C64_Angled);
@@ -2629,6 +2634,12 @@ if(global.workspace_disk_mode) {
     var _bt_txt = "BUILD: ";
     var _bt_col = make_color_rgb(150, 220, 255);
     var _bt_warn = "";
+    // A program that loads its own files from disk only works as a D64.
+    var _bt_disk_only = scr_workspace_needs_disk();
+    if (_bt_disk_only) {
+        global.build_target = 0;
+        _bt_warn = "  (DISK ONLY)";
+    }
     if (global.build_target == 0) {
         if (global.workspace_disk_mode) {
             _bt_txt += "D64";
@@ -2661,7 +2672,9 @@ if(global.workspace_disk_mode) {
     if (_bt_hov) {
         _bt_col = c_white;
         if (scr_workspace_mouse_check_button_pressed(mb_left) && !global.ui_click_consumed) {
-            global.build_target = (global.build_target + 1) mod 3;
+            if (!_bt_disk_only) {
+                global.build_target = (global.build_target + 1) mod 3;
+            }
             global.ui_click_consumed = true;
         }
     }

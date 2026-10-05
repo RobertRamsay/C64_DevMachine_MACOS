@@ -16,7 +16,7 @@ showcode_refresh_requested = false;
 editor_layout_refresh_requested = false;
 
 
-global.build_date = "October 3rd, 2026"; // edit this string for each release
+global.build_date = "October 5th, 2026"; // edit this string for each release
 
 // sid64 (reSID) preview audio — see scr_sid64_audio. Model/engine changes go
 // through scr_sid64_reconfigure so the preview cache is rebuilt.
@@ -204,15 +204,14 @@ welcome_credits_y      = 0;
 welcome_mode           = 0;      // 0 = welcome / what's new, 1 = guided tour list
 welcome_tour_scroll    = 0;      // first visible row in the tour list
 welcome_whats_new = [
-    "NEW PORT - SPY HUNTER added to PORTS (the full 1984 cartridge, editable).",
-    "NEW - MUSIC MAKER samples: WAV import, DIGI track and an NMI-safe player.",
-    "NEW - MUSIC MAKER JAM mode (mono / poly) and vibrato inside instruments.",
-    "NEW - SID SONG VOICE LOCK: a game can borrow a voice for sound effects.",
-    "NEW - META TILESET MAP CHAINS: build levels / courses from maps, with tables.",
-    "NEW - META TILESET RAW ROWS (top-down or bottom-up) for custom scrollers.",
-    "REFINED - Tileset maps can be named (double-click a tab) and sized per map.",
-    "REFINED - Piano shows every playing note, instrument panel tidied up.",
-    "REFINED - Tile map editor is full screen, editors hide the workspace.",
+    "NEW PORT - SABOTEUR added to PORTS (the full game, editable).",
+    "NEW - CREATOR layer: parameter cards and UI panels on mapping boxes.",
+    "NEW - SPRITE MASK asset + macro: sprites walk behind the scenery.",
+    "NEW - LINE COLL asset + COLL-LINE macro: line-based collision.",
+    "NEW - BITMAP OBJECTS (blitters) and ROOM MAPS with RLE rooms.",
+    "NEW - BUILD TARGET PRG EXO: Exomizer-crunched PRG output.",
+    "REFINED - Hover a JSR / JMP and press ENTER to jump to its label.",
+    "REFINED - Node info panels rewritten with clear section headings.",
     "",
     "SHARE your Custom Code blocks like a PRO in the Discord user-code-blocks channel.",
     "SUPPORT the development by leaving a review on ITCH and buying the PRO version.",
@@ -908,6 +907,12 @@ label_search_info    = [];     // parallel to label_search_results: {node, def, 
 label_search_pending = noone;  // result waiting for its folded ORG to reflow
 label_search_pending_frac = 0.2;
 label_search_reflow  = 0;      // frames left while node layout runs under the modal
+
+// ---- JSR/JMP ENTER -> JUMP TO LABEL ----
+label_jump_pending = noone;    // LABEL waiting for its folded ORG to reflow
+label_jump_reflow  = 0;        // frames left before the camera moves to it
+label_jump_fx_node = noone;    // LABEL showing the arrival pulse
+label_jump_fx_t    = 1;        // 0..1 progress of the pulse (1 = finished)
 
 // MACRO_REU asset drop-down (ASSET mode) — drawn in Draw_64 so it sits on top
 reu_pick_open   = false;

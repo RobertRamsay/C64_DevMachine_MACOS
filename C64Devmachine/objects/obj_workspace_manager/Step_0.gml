@@ -8,6 +8,23 @@ if (exo_pending) {
 scr_template_step();
 scr_tour_question_step();
 
+// Enter on a JSR/JMP node unfolded the ORG holding its label: let the layout
+// settle for a few frames, then centre the camera on the label.
+if (label_jump_reflow > 0) {
+    label_jump_reflow -= 1;
+    global.addresses_dirty = true;
+    scr_c64_do_update_addresses();
+    if (label_jump_reflow == 0) {
+        if (instance_exists(label_jump_pending)) {
+            scr_focus_camera_on_node(label_jump_pending);
+            camera_set_view_pos(cam_view, cam_x, cam_y);
+            label_jump_fx_node = label_jump_pending;
+            label_jump_fx_t    = 0;
+        }
+        label_jump_pending = noone;
+    }
+}
+
 // Record what a clean workspace looks like, then start any tour that asked
 // for the restart that produced it.
 if (tour_baseline_timer > 0) {
@@ -3421,6 +3438,10 @@ show_debug_message(_pbuf_dbg2);
         }
     }
 
+    // DISK ONLY workspaces always build the D64, whatever the switch says.
+    if (scr_workspace_needs_disk()) {
+        global.build_target = 0;
+    }
     if (_has_load_org && _has_loader && global.build_target == 0) {
         // ---------------------------------------------------------
         // Compute TRUE boot size by trimming trailing bytes that fall
@@ -4394,6 +4415,9 @@ if (export_trigger) {
                 }
             }
         }
+    }
+    if (scr_workspace_needs_disk()) {
+        global.build_target = 0;
     }
     var _exp_build_d64 = (_exp_has_load_org && _exp_has_loader && global.build_target == 0);
 

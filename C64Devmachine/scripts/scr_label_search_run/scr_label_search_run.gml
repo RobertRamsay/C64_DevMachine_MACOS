@@ -238,3 +238,95 @@ function scr_label_search_source(_node, _hit) {
     if (_hit.line > 0) _text += " / LINE " + string(_hit.line);
     return _text;
 }
+
+/// @desc Enter on a JSR/JMP node: centre the camera on the LABEL (or
+/// NAMED_LOC) node it names. A label in a folded ORG unfolds it first and the
+/// camera move waits for the layout. A label defined only inside a code block
+/// opens that block at the definition line instead.
+function scr_label_jump_goto(_name) {
+    var _wm = obj_workspace_manager;
+    var _target = noone;
+    var _target_y = 0;
+    with (obj_c64_node) {
+        if (node_type != "LABEL" && node_type != "NAMED_LOC") continue;
+        if (array_length(instructions) == 0) continue;
+        if (array_length(instructions[0]) < 2) continue;
+        if (string(instructions[0][1]) != _name) continue;
+        // Topmost first if a name is somehow defined twice
+        if (_target == noone || y < _target_y) {
+            _target = id;
+            _target_y = y;
+        }
+    }
+
+    if (_target == noone) {
+        var _hits = scr_label_search_run(_name);
+        if (array_length(_hits) > 0) {
+            var _hit = _wm.label_search_info[0];
+            if (_hit.def && _hit.node.node_type == "MACRO_CODE" && _hit.line > 0 && _hit.row == 0 && _hit.slot == 1) {
+                scr_label_search_open_code_line(_hit.node, _hit.line);
+            }
+        }
+        return;
+    }
+
+    if (scr_node_is_hidden(_target)) {
+        var _owner = _target;
+        if (instance_exists(_target.macro_owner)) {
+            _owner = _target.macro_owner;
+        }
+        if (instance_exists(_owner.org_parent)) {
+            if (_owner.org_parent.collapsed) {
+                scr_org_set_collapsed(_owner.org_parent, false);
+            }
+        } else if (global.init_collapsed) {
+            var _init = scr_init_anchor();
+            if (instance_exists(_init)) {
+                scr_org_set_collapsed(_init, false);
+            }
+        }
+        _wm.label_jump_pending = _target;
+        _wm.label_jump_reflow  = 4;
+        return;
+    }
+
+    scr_focus_camera_on_node(_target);
+    camera_set_view_pos(_wm.cam_view, _wm.cam_x, _wm.cam_y);
+    _wm.label_jump_fx_node = _target;
+    _wm.label_jump_fx_t    = 0;
+}
+
+/// @desc Arrival pulse for a JSR/JMP jump: three borders expand out from the
+/// LABEL node, fading white to grey over one second. Draw End, world space.
+function scr_label_jump_fx_draw() {
+    var _wm = obj_workspace_manager;
+    if (_wm.label_jump_fx_t >= 1) return;
+    if (!instance_exists(_wm.label_jump_fx_node)) {
+        _wm.label_jump_fx_t = 1;
+        return;
+    }
+
+    _wm.label_jump_fx_t = min(1, _wm.label_jump_fx_t + (delta_time / 1000000));
+
+    var _n   = _wm.label_jump_fx_node;
+    var _x1  = _n.x + _n.x_indent;
+    var _y1  = _n.y;
+    var _x2  = _x1 + _n.width;
+    var _y2  = _y1 + _n.height;
+    var _old_col   = draw_get_colour();
+    var _old_alpha = draw_get_alpha();
+
+    // Each ring starts 0.2s after the last and lives 0.6s
+    for (var _r = 0; _r < 3; _r++) {
+        var _p = (_wm.label_jump_fx_t - (_r * 0.2)) / 0.6;
+        if (_p <= 0 || _p >= 1) continue;
+        var _grow = 4 + (_p * 40);
+        draw_set_colour(merge_colour(c_white, c_gray, _p));
+        draw_set_alpha(1 - _p);
+        draw_rectangle(_x1 - _grow, _y1 - _grow, _x2 + _grow, _y2 + _grow, true);
+        draw_rectangle(_x1 - _grow - 1, _y1 - _grow - 1, _x2 + _grow + 1, _y2 + _grow + 1, true);
+    }
+
+    draw_set_colour(_old_col);
+    draw_set_alpha(_old_alpha);
+}
