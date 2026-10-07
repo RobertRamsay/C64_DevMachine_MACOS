@@ -6516,6 +6516,24 @@ var _use_sid = 0;
     }
 var _jsr_mode = (array_length(_curr.instructions[0]) > 11 && is_real(_curr.instructions[0][11])) ? real(_curr.instructions[0][11]) : 0;
 
+// STANDALONE: with no MACRO_SID, the scroller installs and owns its own
+// raster IRQ - unless IRQ nodes (MACRO_IRQ / MACRO_IRQ_HANDLER) already own
+// the interrupt, in which case it still needs MACRO_SID to chain through.
+var _ts_own_irq = false;
+if (_use_sid == 0) {
+    _ts_own_irq = true;
+    with (obj_c64_node) {
+        if ((node_type == "MACRO_IRQ" || node_type == "MACRO_IRQ_HANDLER") && is_connected && org_parent == noone) {
+            _ts_own_irq = false;
+            break;
+        }
+    }
+}
+// Same line MACRO_SID chains to, so PRE/POST-NOP tuning is identical.
+// Two lines early: a full line of slack, so however late the handler starts
+// the raster wait below still ends at the start of the row above.
+var _ts_scroll_raster = clamp(50 + (_row * 8) - 2, 0, 255);
+
 // [14] hires_col_override - 1 = keep _colNN colour bytes literal (0-7,
 // hi-res per-cell VIC override) even when the map is MC. Does NOT affect
 // _ts_d016 below: $D016 MCM is a screen-wide register and must still
@@ -6574,10 +6592,10 @@ var _ts_hires_override = (array_length(_curr.instructions[0]) > 14 && is_real(_c
         " txt=$"     + string_upper(decimal_to_hex(_txt_addr)));
 
 // ════════════════════════════════════════════════════════
-    // STANDALONE MODE — not supported, requires MACRO_SID
-    // Warning is shown on the node itself
+    // NO OWNER - IRQ nodes own the interrupt but there is no MACRO_SID to
+    // chain through. Warning is shown on the node itself.
     // ════════════════════════════════════════════════════════
-if (_use_sid == 0) {
+if (_use_sid == 0 && !_ts_own_irq) {
 
         array_push(_list, ["jsr",      _SINIT,  _id]);
         if (_jsr_mode == 0) {
@@ -6588,7 +6606,7 @@ if (_use_sid == 0) {
         }
 
     // ════════════════════════════════════════════════════════
-    // SID MODE
+    // SID MODE (MACRO_SID chains to the scroll IRQ) or OWN IRQ MODE
     // ════════════════════════════════════════════════════════
 } else {
 
@@ -6617,8 +6635,6 @@ if (_jsr_mode == 0) {
 		
         array_push(_list, ["lda_imm",   0xFF,                           _id]);
         array_push(_list, ["sta_abs",   0xD019,                         _id]); // ack VIC IRQ
-        // PRE-NOP Delay
-		 repeat(_pre_nop) { array_push(_list, ["nop", 0, _id]); }
         array_push(_list, ["lda_abs",   0xD011,                         _id]);
         array_push(_list, ["sta_lab",   _v_d011,                        _id]);
         array_push(_list, ["lda_abs",   0xD016,                         _id]);
@@ -6650,15 +6666,37 @@ if (_jsr_mode == 0) {
 // Wait until we are AT the scroll row raster before touching $D016
         // This prevents map rows above seeing HR mode during the IRQ setup
         var _rw2 = _p + "rw2";
-        array_push(_list, ["lda_imm",    _raster & 0xFF,               _id]);
+        // Wait until the raster has REACHED the line (>=), not for that exact
+        // line: an IRQ that runs a few cycles long must not miss it and wait a
+        // whole frame, which starves the main loop and stops the scroll.
         array_push(_list, ["label",      _rw2]);
-        array_push(_list, ["cmp_abs",    0xD012,                       _id]);
-        array_push(_list, ["bne",        _rw2,                         _id]);
+        array_push(_list, ["lda_abs",    0xD012,                       _id]);
+        array_push(_list, ["cmp_imm",    _raster & 0xFF,               _id]);
+        array_push(_list, ["bcc",        _rw2,                         _id]);
+        // Last line of the row above. Use the wait to mask the saved $D016
+        // into its restore value (fine scroll 7), then idle so the $D016
+        // write below lands in this line's right border, not mid-line.
+        array_push(_list, ["lda_lab",    _v_d016,                      _id]);
+        array_push(_list, ["and_imm",    0xF8,                         _id]);
+        array_push(_list, ["ora_imm",    0x07,                         _id]);
+        array_push(_list, ["sta_lab",    _v_d016,                      _id]);
+        var _rwd = _p + "rwd";
+        array_push(_list, ["ldx_imm",    4,                            _id]);
+        array_push(_list, ["label",      _rwd]);
+        array_push(_list, ["dex",        0,                            _id]);
+        array_push(_list, ["bne",        _rwd,                         _id]);
+        // PRE-NOP: fine-tunes when the scroll starts (top edge of the row),
+        // as POST-NOP does for where it ends. The default 6 lands the write
+        // in the border between the two rows.
+        repeat(_pre_nop) { array_push(_list, ["nop", 0, _id]); }
         // NOW safe to switch $D016 to HR fine scroll — we are on the scroll row
         array_push(_list, ["lda_imm",   0xC8,                           _id]); // 40-col base, HR
         array_push(_list, ["and_imm",   0xF0,                           _id]);
         array_push(_list, ["ora_lab",   _v_dir,                         _id]);
         array_push(_list, ["sta_abs",   0xD016,                         _id]);
+        // Preload the restores so they can go out back to back after the wait.
+        array_push(_list, ["ldx_lab",   _v_d018,                        _id]);
+        array_push(_list, ["ldy_lab",   _v_dd00,                        _id]);
         // Wait for end of scroll row
         var _rw3 = _p + "rw3";
         array_push(_list, ["lda_imm",    (_raster + 8) & 0xFF,         _id]);
@@ -6668,11 +6706,14 @@ if (_jsr_mode == 0) {
         // POST-NOP Delay
         repeat(_post_nop) { array_push(_list, ["nop", 0, _id]); }
 		
-// Restore $DD00 and $D018 first — bank and charset pointer
-        array_push(_list, ["lda_lab",   _v_dd00,                        _id]);
-        array_push(_list, ["sta_abs",   0xDD00,                         _id]);
-        array_push(_list, ["lda_lab",   _v_d018,                        _id]);
-        array_push(_list, ["sta_abs",   0xD018,                         _id]);
+        // Restore $D016 FIRST — fine scroll back to 7 (value masked when it was
+        // saved) — then charset and bank 4 cycles apart, so all three land in
+        // the border before the next row's bad line. Doing $D016 last let the
+        // scroll leak into the top of the row below.
+        array_push(_list, ["lda_lab",   _v_d016,                        _id]);
+        array_push(_list, ["sta_abs",   0xD016,                         _id]);
+        array_push(_list, ["stx_abs",   0xD018,                         _id]);
+        array_push(_list, ["sty_abs",   0xDD00,                         _id]);
         array_push(_list, ["lda_lab",   _v_d011,                        _id]);
         array_push(_list, ["sta_abs",   0xD011,                         _id]);
         // Restore $D016 last — fine scroll=7 (no scroll active) + MC bit from map mode
@@ -6681,19 +6722,28 @@ if (_jsr_mode == 0) {
         //array_push(_list, ["ora_imm",   0x07,                           _id]);
         //array_push(_list, ["sta_abs",   0xD016,                         _id]);
 		
-		// Restore $D016 — use saved value to preserve Multicolor/40-col mode, but reset fine scroll to 7
-        array_push(_list, ["lda_lab",   _v_d016,                        _id]);
-        array_push(_list, ["and_imm",   0xF8,                           _id]); // Keep bits 7-3 (Mode/Width)
-        array_push(_list, ["ora_imm",   0x07,                           _id]); // Force bits 2-0 to 7 (No scroll)
-        array_push(_list, ["sta_abs",   0xD016,                         _id]);
 		
-        // Repoint back to sid_irq
-        array_push(_list, ["lda_lab_lo", "sid_irq",                     _id]);
-        array_push(_list, ["sta_abs",    0x0314,                       _id]);
-        array_push(_list, ["lda_lab_hi", "sid_irq",                     _id]);
-        array_push(_list, ["sta_abs",    0x0315,                       _id]);
-        array_push(_list, ["lda_imm",    global.sid_irq_line,          _id]);
-        array_push(_list, ["sta_abs",    0xD012,                       _id]);
+        if (_use_sid == 1) {
+            // Repoint back to sid_irq
+            array_push(_list, ["lda_lab_lo", "sid_irq",                     _id]);
+            array_push(_list, ["sta_abs",    0x0314,                       _id]);
+            array_push(_list, ["lda_lab_hi", "sid_irq",                     _id]);
+            array_push(_list, ["sta_abs",    0x0315,                       _id]);
+            array_push(_list, ["lda_imm",    global.sid_irq_line,          _id]);
+            array_push(_list, ["sta_abs",    0xD012,                       _id]);
+        } else {
+            // Own IRQ: stay on this handler, re-arm for the next frame, and
+            // scan the keyboard as MACRO_SID's handler does (CIA IRQs are off).
+            array_push(_list, ["lda_imm",    _ts_scroll_raster,            _id]);
+            array_push(_list, ["sta_abs",    0xD012,                       _id]);
+            array_push(_list, ["lda_zp",     0x01,                         _id]);
+            array_push(_list, ["pha",        0,                            _id]);
+            array_push(_list, ["lda_imm",    0x37,                         _id]);
+            array_push(_list, ["sta_zp",     0x01,                         _id]);
+            array_push(_list, ["jsr",        0xEA87,                       _id]);
+            array_push(_list, ["pla",        0,                            _id]);
+            array_push(_list, ["sta_zp",     0x01,                         _id]);
+        }
         array_push(_list, ["pla",        0,                            _id]);
         array_push(_list, ["tay",        0,                            _id]);
         array_push(_list, ["pla",        0,                            _id]);
@@ -6722,6 +6772,27 @@ array_push(_list, ["label",   _SINIT]);
     array_push(_list, ["sta_lab", _v_speed0,               _id]);
     array_push(_list, ["lda_imm", 7,                       _id]);  // always start left
     array_push(_list, ["sta_lab", _v_dir,                  _id]);
+    if (_use_sid == 0 && _ts_own_irq) {
+        // Own IRQ: raster IRQ at the scroll row straight into the handler.
+        array_push(_list, ["sei",        0,                  _id]);
+        array_push(_list, ["lda_lab_lo", _p + "scroll",      _id]);
+        array_push(_list, ["sta_abs",    0x0314,             _id]);
+        array_push(_list, ["lda_lab_hi", _p + "scroll",      _id]);
+        array_push(_list, ["sta_abs",    0x0315,             _id]);
+        array_push(_list, ["lda_imm",    0x7F,               _id]);  // CIA1 IRQs off
+        array_push(_list, ["sta_abs",    0xDC0D,             _id]);
+        array_push(_list, ["lda_abs",    0xDC0D,             _id]);  // ack any pending
+        array_push(_list, ["lda_abs",    0xD011,             _id]);
+        array_push(_list, ["and_imm",    0x7F,               _id]);  // raster bit 8 = 0
+        array_push(_list, ["sta_abs",    0xD011,             _id]);
+        array_push(_list, ["lda_imm",    _ts_scroll_raster,  _id]);
+        array_push(_list, ["sta_abs",    0xD012,             _id]);
+        array_push(_list, ["lda_imm",    0xFF,               _id]);
+        array_push(_list, ["sta_abs",    0xD019,             _id]);
+        array_push(_list, ["lda_imm",    0x01,               _id]);  // raster IRQ on
+        array_push(_list, ["sta_abs",    0xD01A,             _id]);
+        array_push(_list, ["cli",        0,                  _id]);
+    }
     array_push(_list, ["rts",     0,                       _id]);
 
     // ════════════════════════════════════════════════════════
@@ -6830,7 +6901,9 @@ array_push(_list, ["label",   _SINIT]);
     array_push(_list, ["cmp_imm", 0xDF,      _id]);
     array_push(_list, ["bcs",     _notrk,    _id]);
     array_push(_list, ["and_imm", 0x0F,      _id]);
-    array_push(_list, ["jsr",     "sid_init_entry", _id]);
+    if (_use_sid == 1) {
+        array_push(_list, ["jsr",     "sid_init_entry", _id]);   // #/trkNN: no SID, nothing to start
+    }
     // FIX: Advance pointer and fetch next char immediately
     array_push(_list, ["jsr",     _p + "adv_ptr", _id]);
     array_push(_list, ["jmp",     _tps,      _id]);
@@ -6891,7 +6964,7 @@ array_push(_list, ["label",   _SINIT]);
     array_push(_list, ["label",   _v_speed0]); array_push(_list, ["byte", _speed,  _id]);
     array_push(_list, ["label",   _v_speed1]); array_push(_list, ["byte", 0x00,    _id]);
 array_push(_list, ["label",   _v_d011]);   array_push(_list, ["byte", 0x1B,     _id]);
-    array_push(_list, ["label",   _v_d016]);   array_push(_list, ["byte", _ts_d016, _id]);
+    array_push(_list, ["label",   _v_d016]);   array_push(_list, ["byte", _ts_d016 | 0x07, _id]);
     array_push(_list, ["label",   _v_d018]);   array_push(_list, ["byte", 0x80,    _id]);
 array_push(_list, ["label",   _v_dd00]);   array_push(_list, ["byte", 0x02,    _id]);
 
@@ -6909,6 +6982,11 @@ array_push(_list, ["label",   _v_dd00]);   array_push(_list, ["byte", 0x02,    _
 
 	_txt_str = string_replace_all(_txt_str, "\n", "");
 	_txt_str = string_replace_all(_txt_str, "\r", "");
+	// Inline text: end on a space so the message does not run into itself
+	// when it loops. Asset text is left exactly as written.
+	if (_text_src == 0 && string_length(_txt_str) > 0 && string_char_at(_txt_str, string_length(_txt_str)) != " ") {
+		_txt_str += " ";
+	}
     var _si = 1;
     while (_si <= string_length(_txt_str)) {
         if (string_copy(_txt_str, _si, 1) == "_") {
@@ -7717,7 +7795,7 @@ if (!_found_valid_sid) {
             if (string_digits(_sfx2) == _sfx2 && string_length(_sfx2) > 3) _saved_alias_sid = "";
         }
         var _hook_p = (_saved_alias_sid != "") ? (_saved_alias_sid + "_") : ("ts" + string(real(id)) + "_");
-		        var _scroll_raster = clamp(50 + (clamp(real(id.instructions[0][1]), 0, 24) * 8) -1, 0, 255); // EDIT for early the -1
+		        var _scroll_raster = clamp(50 + (clamp(real(id.instructions[0][1]), 0, 24) * 8) - 2, 0, 255); // two lines early: see MACRO_TEXT_SCROLL
 show_debug_message("SID raster-chain to: [" + _hook_p + "scroll] raster=$" + string_upper(decimal_to_hex(_scroll_raster)));				
 		        show_debug_message("SID scroll hook: _hook_p=[" + _hook_p + "] full label=[" + _hook_p + "scroll]");
 		        array_push(_list, ["lda_lab_lo", _hook_p + "scroll", _id]);				 
@@ -17581,6 +17659,7 @@ case "MACRO_CODE": {
                     // they're counted — an inline data table protected by
                     // a JMP rather than relocated is real, in-place bytes.
                     var _relocated = false;
+                    var _src_line  = 0;
                     for (var _pi = 0; _pi < array_length(_parsed); _pi++) {
                         var _inst = _parsed[_pi];
                         if (_inst[0] == "label") {
@@ -17597,10 +17676,13 @@ case "MACRO_CODE": {
                                 array_push(_list, ["byte", _inst[_bxi], _byte_id]);
                             }
                         } else {
-                           if (_inst[0] == "_line_map_" || _inst[0] == "const") continue;
+                           if (_inst[0] == "_line_map_") { _src_line = _inst[1]; continue; }
+                           if (_inst[0] == "const") continue;
 	                        var _tagged = [_inst[0], _inst[1], _id];
 	                        if (array_length(_inst) > 2)
 	                            array_push(_tagged, _inst[2]);
+	                        // [4] = source line, so assembler errors can name it
+	                        _tagged[4] = _src_line;
 	                        array_push(_list, _tagged);
                         }
                     }
@@ -19708,6 +19790,7 @@ for (var _oi = 0; _oi < array_length(_org_nodes); _oi++) {
 			if (_a.type == "BYTE_DATA"  ) array_push(_all_assets, _a);
 			if (_a.type == "META_TILESET" && _a.meta.raw_rows >= 1) array_push(_all_assets, _a);
 			if (_a.type == "LINE_COLL"  ) array_push(_all_assets, _a);
+			if (_a.type == "PICKUP_TABLE") array_push(_all_assets, _a);
 			if (_a.type == "BMP_OBJECTS") array_push(_all_assets, _a);
 			if (_a.type == "SFX_DATA" && ds_map_exists(_used_sfx, _a.name) && !ds_map_exists(_load_org_linked, _a.name)) array_push(_all_assets, _a);
 			if (_a.type == "SFX_DATA" && ds_map_exists(_load_org_linked, _a.name)) array_push(_all_assets, _a);
@@ -19821,6 +19904,18 @@ if (_a.type == "BITMAP" || _a.type == "BITMAP_KLA") {
 		    for (var _bb = 0; _bb < _chr_inject_sz; _bb++) {
 		        array_push(instruction_list, ["byte", buffer_peek(_buf, _bb, buffer_u8)]);
 		    }
+			} else if (_a.type == "PICKUP_TABLE") {
+			    // Pickup lists from the linked room map (scr_pickup_encode);
+			    // <NAME>_LO / <NAME>_HI label the room index for the game code.
+			    scr_pickup_sync(_a);
+			    var _pt = scr_pickup_encode(_a);
+			    var _ph = scr_pickup_hi_offset(_a);
+			    array_push(instruction_list, ["label", _a.name + "_LO"]);
+			    if (_ph == 0) array_push(instruction_list, ["label", _a.name + "_HI"]);
+			    for (var _bb = 0; _bb < array_length(_pt); _bb++) {
+			        if (_bb == _ph && _ph > 0) array_push(instruction_list, ["label", _a.name + "_HI"]);
+			        array_push(instruction_list, ["byte", _pt[_bb]]);
+			    }
 			} else if (_a.type == "BYTE_DATA" || _a.type == "LINE_COLL" || _a.type == "BMP_OBJECTS") {
 			    for (var _bb = 0; _bb < _sz; _bb++) {
 			        array_push(instruction_list, ["byte", buffer_peek(_buf, _bb, buffer_u8)]);

@@ -178,8 +178,13 @@ var _addr_total = 65536;
                                 _data_sz    = 0;
                                 _data_lines = [];
                             } else if (_pt == "const") {
+                                // An equate names memory; it claims only its declared size.
+                                // is_const lets the conflict passes ignore equate-vs-equate
+                                // overlaps: two names for the same bytes are aliases (scratch
+                                // reuse, a name for one byte inside a named table), not a clash.
                                 if (array_length(_parsed[_pi]) > 2 && is_real(_parsed[_pi][2])) {
-                                    array_push(code_seg_cache, { addr: _parsed[_pi][2], size: 2, lines: [_cur_line], no_conflict: false });
+                                    var _csz = (array_length(_parsed[_pi]) > 3 && is_real(_parsed[_pi][3])) ? max(1, _parsed[_pi][3]) : 1;
+                                    array_push(code_seg_cache, { addr: _parsed[_pi][2], size: _csz, lines: [_cur_line], no_conflict: false, is_const: true });
                                 }
                             } else if (_pt == "byte" || _pt == "string") {
                                 _data_sz += array_length(_parsed[_pi]) - 1;
@@ -214,7 +219,7 @@ var _addr_total = 65536;
                     var _mc_name = (code_descriptor != "") ? code_descriptor : (node_title != "" ? node_title : "MACRO_CODE");
                     for (var _sci = 0; _sci < array_length(code_seg_cache); _sci++) {
                         var _csc = code_seg_cache[_sci];
-                        array_push(_segments, { addr: _csc.addr, size: _csc.size, lines: _csc.lines, col: make_color_rgb(180, 120, 255), type: "CODE", name: _mc_name, node_id: id, no_conflict: _csc.no_conflict, conflict: false });
+                        array_push(_segments, { addr: _csc.addr, size: _csc.size, lines: _csc.lines, col: make_color_rgb(180, 120, 255), type: "CODE", name: _mc_name, node_id: id, no_conflict: _csc.no_conflict, conflict: false, is_const: variable_struct_exists(_csc, "is_const") && _csc.is_const });
                     }
                     if (total_node_size > 0) {
                         array_push(_segments, { addr: pc_address, size: total_node_size, col: make_color_rgb(180, 120, 255), type: "CODE", name: _mc_name, lines: [], node_id: id, no_conflict: false, conflict: false });
@@ -426,6 +431,9 @@ var _addr_total = 65536;
                     var _src = (array_length(instructions[0]) > 9 && is_real(instructions[0][9])) ? real(instructions[0][9]) : 0;
                     var _taddr = is_real(instructions[0][5]) ? real(instructions[0][5]) : 0xC000;
                     var _tlen  = string_length(string(instructions[0][6])) + 1;
+                    // Inline text gets a trailing space at compile time if it lacks one.
+                    var _ttxt  = string(instructions[0][6]);
+                    if (_src == 0 && _ttxt != "" && string_char_at(_ttxt, string_length(_ttxt)) != " ") _tlen += 1;
 
                     // If in Asset Mode, fetch the real address from the Asset Manager
                     if (_src == 1 && array_length(instructions[0]) > 10) {
@@ -739,6 +747,10 @@ var _addr_total = 65536;
                 case "BYTE_DATA":
                     if (buffer_exists(_a.buffer)) { _seg_size = buffer_get_size(_a.buffer); _seg_col = make_color_rgb(180, 120, 255); }
                     break;
+                case "PICKUP_TABLE":
+                    _seg_size = max(1, array_length(scr_pickup_encode(_a)));
+                    _seg_col  = make_color_rgb(255, 200, 120);
+                    break;
                 case "BMP_OBJECTS":
                     if (buffer_exists(_a.buffer)) { _seg_size = buffer_get_size(_a.buffer); _seg_col = make_color_rgb(255, 140, 60); }
                     if (real(_a.meta.colour_addr) > 0 && array_length(_a.meta.objects) > 0) {
@@ -911,6 +923,9 @@ var _addr_total = 65536;
             if (_s2.addr >= _s1.addr + _s1.size) break;
             if (_s1.node_id == _s2.node_id && _s1.node_id != noone) continue;
             if (_s1.name == _s2.name && _s1.node_id == noone && _s2.node_id == noone) continue;
+            // Two equates overlapping are two names for the same memory, never a clash
+            if (variable_struct_exists(_s1, "is_const") && _s1.is_const
+            &&  variable_struct_exists(_s2, "is_const") && _s2.is_const) continue;
             var _s1_org = (_s1.type == "NODE" || _s1.type == "VARIABLE_BLOCK");
             var _s2_org = (_s2.type == "NODE" || _s2.type == "VARIABLE_BLOCK");
             var _s1_is_dbuf = (string_pos("(BUF)", _s1.name) > 0);

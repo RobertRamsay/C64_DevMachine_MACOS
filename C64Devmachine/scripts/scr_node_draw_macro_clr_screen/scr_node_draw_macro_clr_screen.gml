@@ -56,7 +56,12 @@ function scr_node_draw_macro_clr_screen(_draw_x, _y) {
     var _end = _scr_base + 0x3F7;
     var _eh  = decimal_to_hex(_end);
     while (string_length(_eh) < 4) _eh = "0" + _eh;
+    _ly += 4;   // clear of the FILL row
     draw_set_font_l(fnt_c64_pico);
     draw_set_color(make_color_rgb(80, 120, 180));
     scr_node_macro_text_l(_draw_x + 8, _ly, L("WIPES $") + string_upper(_sb_hex) + "-$" + string_upper(_eh));
+    // New nodes fill with $20 (space); say how to clear with char / tile 0.
+    _ly += 12;
+    draw_set_color(make_color_rgb(70, 100, 150));
+    scr_node_macro_text_l(_draw_x + 8, _ly, L("$20 = SPACE. FOR CHAR/TILE 0, SET FILL 0"));
 }

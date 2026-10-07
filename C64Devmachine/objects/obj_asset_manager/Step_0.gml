@@ -1,4 +1,5 @@
 scr_sid_asset_update();
+scr_node_preview_update();
 if (!viewer_open) { manifest_preview_name = ""; manifest_preview_owner = undefined; }
 if (!viewer_open && scr_workspace_input_blocked()) exit;
 /// @desc obj_asset_manager Step
@@ -68,7 +69,7 @@ if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list))
     }
     // LINE_COLL: full screen (left tools / centred canvas / right list) -
     // same bounds as Draw GUI
-    if (asset_list[|viewer_asset].type == "LINE_COLL") {
+    if (asset_list[|viewer_asset].type == "LINE_COLL" || asset_list[|viewer_asset].type == "PICKUP_TABLE" || asset_list[|viewer_asset].type == "CHAR_SET") {
         _wide_modal = true;
         _vx1 = 30;
         _vx2 = _gui_w - 30;
@@ -2239,6 +2240,11 @@ if (mouse_check_button_pressed(mb_left) && !global.any_picker_open && !(_wide_mo
 				_new_asset.meta.is_save_file           = false;
 				_new_asset.meta.save_file_size          = 256;
                 scr_asset_byte_data_flush(_new_asset);
+            }
+           if (_type == "PICKUP_TABLE") {
+                // Pickup lists built from a room map (scr_pickup_*)
+                _new_asset.meta.pick      = scr_pickup_default();
+                _new_asset.meta.pick_undo = [];
             }
            if (_type == "LINE_COLL") {
                 _new_asset.meta.line_string           = "";

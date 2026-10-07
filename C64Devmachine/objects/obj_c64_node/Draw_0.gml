@@ -198,7 +198,7 @@ if (height_dirty) {
 	case "MACRO_HUD":        height = _G * 9;  break;   // 3 rows + size/entry-point report
 	case "MACRO_SID_SONG":   height = _G * 7;  break;   // 3 rows + 5-line pico footer
 	case "MACRO_GET_CHAR":   height = _G * 7;  break; 
-    case "MACRO_CLR_SCREEN": height = _G * 4;  break;
+    case "MACRO_CLR_SCREEN": height = _G * 5;  break;   // + FILL hint line
 	case "MACRO_MATH":       height = _G * 5;  break;    
     case "NAMED_LOC":   height = _G * 3;  break;         // 60
     case "NEW_STR":     height = _G * 4;  break;         // 100
@@ -308,8 +308,8 @@ var _raw_h = header_h + (array_length(instructions) * _line_gap) + _bottom_pad +
 switch (node_type) {
     case "COMMENT":
         // scr_comment_sync_layout (top of this event) has already set width
-        // from comment_w_mult. Re-forcing the standard width here would throw
-        // that away every frame.
+        // from comment_w (or legacy comment_w_mult). Re-forcing the standard
+        // width here would throw that away every frame.
         break;
     case "DATA_TEXT":
         draw_set_font_l(fnt_c64_code);
@@ -403,6 +403,9 @@ if (label_picker_open) {
             draw_set_color(_rhov ? c_lime : c_yellow);
             draw_set_font_l(fnt_c64_tiny);
             draw_text_l(_px + 4, _ry + 2, _alist[_idx]);
+            if (global.tour_active) {
+                scr_tour_capture_world("PICK:" + string_upper(string(_alist[_idx])), _px + 1, _ry, _px + _pw - 1, _ry + _row_h);
+            }
         }
 
         var _up_hov   = point_in_rectangle(mouse_x, mouse_y, _px + 4,        _arrow_y, _px + 20,        _arrow_y + 16);
@@ -753,6 +756,10 @@ var _active_list = [];
             draw_set_color(_rhov ? c_lime : (label_picker_group == "KERNAL" ? make_color_rgb(200, 160, 255) : c_yellow));
             draw_set_font_l(fnt_c64_tiny);
             draw_text_l(_px + 4, _ry + 2, _row_txt);
+            // Guided tours can point at one row, e.g. PICK:MAIN.
+            if (global.tour_active) {
+                scr_tour_capture_world("PICK:" + string_upper(string(_row_txt)), _px + 1, _ry, _px + _pw - 1, _ry + _row_h);
+            }
         }
 
         // Scroll arrows
@@ -1351,6 +1358,10 @@ if (_lod_header) {
                 _title_max_w -= (string_width_l("[INFO]") + 8);
                 draw_set_font_l(_tw_font);
             }
+            if (scr_node_has_preview(node_type)) {
+                // and clear of the play button just left of it
+                _title_max_w = min(_title_max_w, (width * 0.8) - 30);
+            }
             if (string_width_l(_disp_title) > _title_max_w && string_length(_disp_title) > 1) {
                 while (string_length(_disp_title) > 1 && string_width_l(_disp_title) > _title_max_w) {
                     _disp_title = string_copy(_disp_title, 1, string_length(_disp_title) - 1);
@@ -1376,6 +1387,33 @@ if (_lod_header) {
         }
 
         draw_set_font_l(fnt_c64_code);
+    }
+
+    // ---- PLAY / STOP BUTTON (SID SONG, SFX and SID nodes) ----
+    // A right-pointing triangle just left of the [INFO] hotspot plays the
+    // node's music or effect; while it sounds it becomes a stop square.
+    // The click is taken in Step_0 before the header drag.
+    if (scr_node_has_preview(node_type)) {
+        var _pb_x1  = draw_x + (width * 0.8) - 16;
+        var _pb_y1  = y + 7;
+        var _pb_hot = point_in_rectangle(mouse_x, mouse_y, _pb_x1 - 3, y + 2, _pb_x1 + 13, y + 22);
+        var _pb_on  = scr_node_preview_is(id);
+        if (_pb_on) {
+            draw_set_color(make_color_rgb(120, 255, 120));
+        } else if (_pb_hot) {
+            draw_set_color(c_white);
+        } else {
+            draw_set_color(merge_colour(_text_col, _head_col, 0.35));
+        }
+        if (_pb_on) {
+            draw_rectangle(_pb_x1 + 1, _pb_y1 + 1, _pb_x1 + 9, _pb_y1 + 9, false);
+        } else {
+            draw_triangle(_pb_x1, _pb_y1, _pb_x1, _pb_y1 + 10, _pb_x1 + 10, _pb_y1 + 5, false);
+        }
+        draw_set_color(_text_col);
+        if (global.tour_active) {
+            scr_tour_capture_world("FIELD:" + node_type + ":play", _pb_x1 - 3, y + 2, _pb_x1 + 13, y + 22);
+        }
     }
 
     // ---- [INFO] BADGE ----
@@ -2015,6 +2053,12 @@ if (node_type == "LABEL") {
 if (node_type == "LABEL") {
     draw_set_color(c_yellow);
     draw_text_l(draw_x + 8, _yy-6, "ID: " + _display_val);
+    // Guided tour: the name to click. A label not yet on the spine reports
+    // as FREELABEL so "name the new label" steps find the right one.
+    if (global.tour_active && _ii == 0) {
+        scr_tour_capture_world(is_connected ? "FIELD:LABEL:name" : "FIELD:FREELABEL:name",
+            draw_x + 4, _yy - 8, draw_x + 12 + string_width_l("ID: " + _display_val), _yy + 10);
+    }
     
 // (removed: sid_exit auto-adjust hint no longer needed)
 
@@ -2041,6 +2085,11 @@ if (node_type == "LABEL") {
         if (global.tour_active && is_connected && node_type == "NORMAL" && scr_tour_num(_raw_val) == 0) {
             scr_tour_capture_world("OPERAND0:" + _inst_lower,
                 _cursor_x - 2, _yy - 1, _cursor_x + string_width_l(_display_val) + 2, _yy + 13);
+        }
+        // ...and any operand of that opcode, whatever it holds (JMP MAIN).
+        if (global.tour_active && is_connected && node_type == "NORMAL") {
+            scr_tour_capture_world("OPERAND:" + _inst_lower,
+                _cursor_x - 2, _yy - 1, _cursor_x + max(24, string_width_l(_display_val)) + 2, _yy + 13);
         }
         
         // 3. Draw Suffix immediately after value (e.g., ",X")
@@ -2125,48 +2174,26 @@ draw_set_font_l(fnt_c64_code);
 // One standard node width per step, 1x to 3x. Drawn last so nothing
 // painted earlier in this event sits on top of them.
 // =============================================================
-// While this comment is being typed into, the handles are hidden - the header
-// is part of the click-away/caret area then, and a stray < or > would resize
-// the node mid-sentence. This block is separate from the body draw above, so
+// While this comment is being typed into, the corner handle is hidden so a
+// click near the corner is a caret click, not a resize. This block is separate from the body draw above, so
 // the test has to be made again here.
 var _cw_editing = (instance_exists(obj_workspace_manager)
                 && obj_workspace_manager.is_entering_text
                 && obj_workspace_manager.input_target_node == id
                 && obj_workspace_manager.input_target_index == 0);
 
-if (node_type == "COMMENT" && global.comments_visible && !_cw_editing) {
-    var _cw_mult = 1;
-    if (variable_instance_exists(id, "comment_w_mult")) {
-        _cw_mult = clamp(round(comment_w_mult), 1, 3);
+// Corner resize handle (bottom right), like a mapping box.
+if (node_type == "COMMENT" && global.comments_visible && !_cw_editing && !collapsed) {
+    var _crx2 = draw_x + width;
+    var _cry2 = y + height;
+    var _crhov = point_in_rectangle(mouse_x, mouse_y, _crx2 - 16, _cry2 - 16, _crx2, _cry2);
+    draw_set_color(make_color_rgb(150, 150, 150));
+    if (_crhov || comment_resizing) {
+        draw_set_color(c_white);
     }
-    var _cw_h  = 16;
-    var _cw_y  = y + 4;
-    var _cw_rx = draw_x + width - 20;
-    var _cw_lx = draw_x + width - 38;
-
-    var _cw_l_on  = (_cw_mult > 1);
-    var _cw_r_on  = (_cw_mult < 3);
-    var _cw_l_hov = _cw_l_on && point_in_rectangle(mouse_x, mouse_y, _cw_lx, _cw_y, _cw_lx + 16, _cw_y + _cw_h);
-    var _cw_r_hov = _cw_r_on && point_in_rectangle(mouse_x, mouse_y, _cw_rx, _cw_y, _cw_rx + 16, _cw_y + _cw_h);
-
-    draw_set_font_l(fnt_c64_tiny);
-    draw_set_halign(fa_center);
-    draw_set_valign(fa_middle);
-
-    draw_set_color(_cw_l_hov ? make_color_rgb(95, 95, 95) : make_color_rgb(48, 48, 48));
-    draw_rectangle(_cw_lx, _cw_y, _cw_lx + 16, _cw_y + _cw_h, false);
-    draw_set_color(_cw_l_on ? (_cw_l_hov ? c_white : make_color_rgb(205, 205, 205))
-                            : make_color_rgb(85, 85, 85));
-    draw_text_l(_cw_lx + 8, _cw_y + _cw_h * 0.5, "<");
-
-    draw_set_color(_cw_r_hov ? make_color_rgb(95, 95, 95) : make_color_rgb(48, 48, 48));
-    draw_rectangle(_cw_rx, _cw_y, _cw_rx + 16, _cw_y + _cw_h, false);
-    draw_set_color(_cw_r_on ? (_cw_r_hov ? c_white : make_color_rgb(205, 205, 205))
-                            : make_color_rgb(85, 85, 85));
-    draw_text_l(_cw_rx + 8, _cw_y + _cw_h * 0.5, ">");
-
-    draw_set_halign(fa_left);
-    draw_set_valign(fa_top);
+    draw_set_alpha(0.8);
+    draw_triangle(_crx2, _cry2, _crx2 - 16, _cry2, _crx2, _cry2 - 16, false);
+    draw_set_alpha(1.0);
 }
 
 // =============================================================

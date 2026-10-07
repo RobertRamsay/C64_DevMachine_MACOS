@@ -491,6 +491,7 @@ if (bmp_picker_open && instance_exists(bmp_picker_node)) {
     draw_rectangle(_pdx, _pdy, _pdx + _pw, _pdy + _total_h, false);
     draw_set_color(make_color_rgb(80, 80, 120));
     draw_rectangle(_pdx, _pdy, _pdx + _pw, _pdy + _total_h, true);
+    if (global.tour_active) scr_tour_capture("PICKER:BITMAP", _pdx, _pdy, _pdx + _pw, _pdy + _total_h);
 
     if (array_length(_matches) == 0) {
         draw_set_font_l(fnt_c64_tiny);
@@ -693,6 +694,7 @@ if (spr_picker_open && instance_exists(spr_picker_node)) {
     draw_rectangle(_pdx, _pdy, _pdx + _pw, _pdy + _total_h, false);
     draw_set_color(make_color_rgb(200, 120, 40));
     draw_rectangle(_pdx, _pdy, _pdx + _pw, _pdy + _total_h, true);
+    if (global.tour_active) scr_tour_capture("PICKER:SPRITE", _pdx, _pdy, _pdx + _pw, _pdy + _total_h);
 
     if (array_length(_matches) == 0) {
         draw_set_font_l(fnt_c64_tiny);
@@ -828,8 +830,8 @@ if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list))
         _vy1 = 40;
         _vy2 = _gui_h - 40;
     }
-    // LINE_COLL: full screen. Must match obj_asset_manager Step.
-    if (_asset.type == "LINE_COLL") {
+    // LINE_COLL / PICKUP_TABLE / CHAR_SET: full screen. Must match obj_asset_manager Step.
+    if (_asset.type == "LINE_COLL" || _asset.type == "PICKUP_TABLE" || _asset.type == "CHAR_SET") {
         _vx1 = 30;
         _vx2 = _gui_w - 30;
         _vy1 = 40;
@@ -1318,17 +1320,6 @@ case "CHAR_SET": {
     var _cp_row_h  = _cp_sw + 6;
     draw_set_font_l(fnt_c64_tiny);
 	
-	// draw some instructions to the right:
-	var _ins_x = _vx1 + 550;
-	var _ins_y = _cy ;
-	draw_set_color(c_ltgrey);
-	draw_text_l(_ins_x,_ins_y,
-	L("INSTRUCTIONS:\n")+
-	"\n"+
-	L("CTRL + Click / Drag to multi select\n")+
-	L("Delete or Backspace to clear selected\n")+
-	L("CTRL + C to COPY and CTRL + V to PASTE"));
-	// end instructions. Modfy for mac os
 	
 	
 	
@@ -1388,6 +1379,24 @@ case "CHAR_SET": {
     }
     _cy += _cp_row_count * _cp_row_h + 8;
 
+    // ---- INSTRUCTIONS (left column, under the colour rows) ----
+    draw_set_font_l(fnt_c64_tiny);
+    draw_set_color(make_color_rgb(150, 150, 190));
+    draw_text_l(_vx1 + 10, _cy, L("INSTRUCTIONS:"));
+    draw_set_color(c_ltgrey);
+    var _ins_lines = [
+        L("CTRL + CLICK / DRAG IN THE CHARSET TO MULTI SELECT"),
+        L("DELETE OR BACKSPACE CLEARS THE SELECTED CHARS"),
+        L("CTRL + C TO COPY, CTRL + V TO PASTE"),
+        L("MIDDLE DRAG OR SPACE + DRAG ON THE EDITOR SLIDES THE CHAR"),
+        L("ARROWS OVER THE EDITOR: SLIDE 1 PIXEL (WRAP BUTTON = WRAP)"),
+        L("ARROWS OVER THE CHARSET: PICK THE NEXT CHAR")
+    ];
+    for (var _ili = 0; _ili < array_length(_ins_lines); _ili++) {
+        draw_text_l(_vx1 + 20, _cy + 16 + _ili * 14, _ins_lines[_ili]);
+    }
+    _cy += 16 + array_length(_ins_lines) * 14 + 8;
+
     // Surface key for grid drawn after REFERENCED BY
     var _use_mc_surf  = (_chr_mc == 1) &&
                         variable_struct_exists(_asset.meta, "preview_surf_mc") &&
@@ -1398,10 +1407,14 @@ case "CHAR_SET": {
 
 // ---- INLINE PIXEL EDITOR (top-right) ----
     // MC/HR toggle for the tile editor
-var _ted_x1  = _vx2 - 220;
+    // editor: 32px cells (256x256 grid) + its button column, right-aligned
+    var _ced_cell = 32;
+    var _ced_x    = _vx2 - (8 * _ced_cell) - 8 - 80 - 24;
+    var _ced_y    = _vy1 + 38;
+    var _ted_x1  = _ced_x;
     var _ted_x2  = _ted_x1 + 80;
-      var _ted_y1  = _vy1 + 206;
-    var _ted_y2  = _vy1 + 220;
+    var _ted_y1  = _ced_y + 8 * _ced_cell + 40;
+    var _ted_y2  = _ted_y1 + 16;
     var _tedhov  = point_in_rectangle(_mx, _my, _ted_x1, _ted_y1, _ted_x2, _ted_y2);
     var _ted_bg_cols  = [make_color_rgb(30, 30, 45), make_color_rgb(160, 80, 20), make_color_rgb(20, 80, 90)];
     var _ted_txt_cols = [make_color_rgb(80, 80, 100), make_color_rgb(255, 160, 60), make_color_rgb(80, 220, 240)];
@@ -1411,14 +1424,16 @@ var _ted_x1  = _vx2 - 220;
     draw_set_font_l(fnt_c64_tiny);
     draw_set_color(_ted_txt_cols[_chr_mc]);
     draw_set_halign(fa_center);
-    draw_text_l(_ted_x1 + 40, _ted_y1 -1, _ted_labels[_chr_mc]);
+    draw_text_l(_ted_x1 + 40, _ted_y1 + 2, _ted_labels[_chr_mc]);
     draw_set_halign(fa_left);
     if (_tedhov && mouse_check_button_pressed(mb_left)) {
         _asset.meta.mc_mode = (_chr_mc + 1) mod 3;
         scr_asset_chr_build_preview(_asset);
 		_asset.meta.is_dirty = true;
     }
-    scr_chr_editor_draw(_asset, _vx2 - 220, _vy1 + 38, _chr_mc);
+    scr_chr_editor_draw(_asset, _ced_x, _ced_y, _chr_mc, true, true, _ced_cell);
+    // everything after this (REFERENCED BY, the charset grid) starts below the editor
+    _cy = max(_cy, _ted_y2 + 12);
 } break;	
 
 	
@@ -2395,6 +2410,126 @@ var _zmx1  = _vx2 - _btn_bw * 2 - 6;
 		        _obj_bar_h = 30;
 		    }
 		    _cv_y2 -= _obj_bar_h;
+
+		    // ---- SCROLLBARS: one along the right of the map, one along the
+		    // bottom when the map is wider than the view. They sit OUTSIDE the
+		    // canvas rectangle (the canvas shrinks to make room), so a click or
+		    // drag on a bar can never paint; and painting is held off while a
+		    // bar is being dragged even if the pointer wanders onto the map.
+		    var _sb_t   = 14;                                   // bar thickness
+		    var _sb_cs  = 8 * _zoom;
+		    _cv_x2 -= (_sb_t + 2);
+		    var _sb_need_h = (_gw * _sb_cs) > (_cv_x2 - _cv_x1);
+		    // _sb_h_room: the strip the bottom bar takes. The map gives it up,
+		    // and everything drawn below the map (object bar, COLOUR / help rows,
+		    // TILE row) is pushed down by the same amount - so those rows keep
+		    // their old place and the bar never sits on top of them.
+		    var _sb_h_room = 0;
+		    if (_sb_need_h) {
+		        _sb_h_room = _sb_t + 2;
+		        _cv_y2 -= _sb_h_room;
+		    }
+		    var _sb_vis_r = max(1, floor((_cv_y2 - _cv_y1) / _sb_cs));
+		    var _sb_vis_c = max(1, floor((_cv_x2 - _cv_x1) / _sb_cs));
+		    var _sb_max_r = max(0, _gh - _sb_vis_r);
+		    var _sb_max_c = max(0, _gw - _sb_vis_c);
+		    // vertical bar geometry
+		    var _sbv_x1 = _cv_x2 + 2;
+		    var _sbv_x2 = _sbv_x1 + _sb_t;
+		    var _sbv_y1 = _cv_y1;
+		    var _sbv_y2 = _cv_y2;
+		    var _sbv_len = _sbv_y2 - _sbv_y1;
+		    var _sbv_th  = max(20, floor(_sbv_len * min(1, _sb_vis_r / max(1, _gh))));
+		    var _sbv_pos = min(_m.scroll_y, _sb_max_r);
+		    var _sbv_ty  = _sbv_y1;
+		    if (_sb_max_r > 0) {
+		        _sbv_ty = _sbv_y1 + floor((_sbv_len - _sbv_th) * _sbv_pos / _sb_max_r);
+		    }
+		    var _sbv_hov = point_in_rectangle(_mx, _my, _sbv_x1, _sbv_y1, _sbv_x2, _sbv_y2);
+		    // horizontal bar geometry
+		    var _sbh_x1 = _cv_x1;
+		    var _sbh_x2 = _cv_x2;
+		    var _sbh_y1 = _cv_y2 + 2;
+		    var _sbh_y2 = _sbh_y1 + _sb_t;
+		    var _sbh_len = _sbh_x2 - _sbh_x1;
+		    var _sbh_tw  = max(20, floor(_sbh_len * min(1, _sb_vis_c / max(1, _gw))));
+		    var _sbh_pos = min(_m.scroll_x, _sb_max_c);
+		    var _sbh_tx  = _sbh_x1;
+		    if (_sb_max_c > 0) {
+		        _sbh_tx = _sbh_x1 + floor((_sbh_len - _sbh_tw) * _sbh_pos / _sb_max_c);
+		    }
+		    var _sbh_hov = _sb_need_h && point_in_rectangle(_mx, _my, _sbh_x1, _sbh_y1, _sbh_x2, _sbh_y2);
+		    // press: on the thumb grabs it where clicked; on the track jumps the
+		    // thumb there (centred) and keeps dragging
+		    if (mouse_check_button_pressed(mb_left) && map_sb_drag == 0) {
+		        if (_sbv_hov && _sb_max_r > 0) {
+		            map_sb_drag = 1;
+		            if (_my >= _sbv_ty && _my <= _sbv_ty + _sbv_th) {
+		                map_sb_grab = _my - _sbv_ty;
+		            } else {
+		                map_sb_grab = _sbv_th * 0.5;
+		            }
+		        } else if (_sbh_hov && _sb_max_c > 0) {
+		            map_sb_drag = 2;
+		            if (_mx >= _sbh_tx && _mx <= _sbh_tx + _sbh_tw) {
+		                map_sb_grab = _mx - _sbh_tx;
+		            } else {
+		                map_sb_grab = _sbh_tw * 0.5;
+		            }
+		        }
+		    }
+		    if (map_sb_drag != 0) {
+		        if (mouse_check_button(mb_left) == false || window_has_focus() == false) {
+		            map_sb_drag = 0;
+		        } else if (map_sb_drag == 1 && _sb_max_r > 0) {
+		            var _sbv_f = (_my - map_sb_grab - _sbv_y1) / max(1, _sbv_len - _sbv_th);
+		            _m.scroll_y = clamp(round(_sbv_f * _sb_max_r), 0, _sb_max_r);
+		        } else if (map_sb_drag == 2 && _sb_max_c > 0) {
+		            var _sbh_f = (_mx - map_sb_grab - _sbh_x1) / max(1, _sbh_len - _sbh_tw);
+		            _m.scroll_x = clamp(round(_sbh_f * _sb_max_c), 0, _sb_max_c);
+		        }
+		    }
+		    // wheel over a bar scrolls (over the map it still zooms)
+		    if (_sbv_hov) {
+		        if (mouse_wheel_up())   _m.scroll_y = max(0, _m.scroll_y - 3);
+		        if (mouse_wheel_down()) _m.scroll_y = min(_sb_max_r, _m.scroll_y + 3);
+		    }
+		    if (_sbh_hov) {
+		        if (mouse_wheel_up())   _m.scroll_x = max(0, _m.scroll_x - 3);
+		        if (mouse_wheel_down()) _m.scroll_x = min(_sb_max_c, _m.scroll_x + 3);
+		    }
+		    // recompute thumbs after any change this frame, then draw
+		    _sbv_pos = min(_m.scroll_y, _sb_max_r);
+		    if (_sb_max_r > 0) {
+		        _sbv_ty = _sbv_y1 + floor((_sbv_len - _sbv_th) * _sbv_pos / _sb_max_r);
+		    }
+		    _sbh_pos = min(_m.scroll_x, _sb_max_c);
+		    if (_sb_max_c > 0) {
+		        _sbh_tx = _sbh_x1 + floor((_sbh_len - _sbh_tw) * _sbh_pos / _sb_max_c);
+		    }
+		    draw_set_color(make_color_rgb(22, 22, 34));
+		    draw_rectangle(_sbv_x1, _sbv_y1, _sbv_x2, _sbv_y2, false);
+		    if (map_sb_drag == 1) {
+		        draw_set_color(make_color_rgb(120, 200, 255));
+		    } else if (_sbv_hov) {
+		        draw_set_color(make_color_rgb(110, 130, 170));
+		    } else {
+		        draw_set_color(make_color_rgb(75, 85, 115));
+		    }
+		    draw_rectangle(_sbv_x1 + 2, _sbv_ty, _sbv_x2 - 2, _sbv_ty + _sbv_th, false);
+		    if (_sb_need_h) {
+		        draw_set_color(make_color_rgb(22, 22, 34));
+		        draw_rectangle(_sbh_x1, _sbh_y1, _sbh_x2, _sbh_y2, false);
+		        if (map_sb_drag == 2) {
+		            draw_set_color(make_color_rgb(120, 200, 255));
+		        } else if (_sbh_hov) {
+		            draw_set_color(make_color_rgb(110, 130, 170));
+		        } else {
+		            draw_set_color(make_color_rgb(75, 85, 115));
+		        }
+		        draw_rectangle(_sbh_tx, _sbh_y1 + 2, _sbh_tx + _sbh_tw, _sbh_y2 - 2, false);
+		    }
+
 		    var _cv_w  = _cv_x2 - _cv_x1;
 		    var _cv_h  = _cv_y2 - _cv_y1;
 
@@ -2818,7 +2953,7 @@ draw_set_color(_cell_bg_col);
 	            _m.obj_sel = clamp(_m.obj_sel, 0, _ocount - 1);
 	            if (_m.obj_mode) { _m.show_objects = true; }
 
-	            _obj_bar_hover = point_in_rectangle(_mx, _my, _cv_x1, _cv_y2 + 2, _cv_x2, _cv_y2 + _obj_bar_h);
+	            _obj_bar_hover = point_in_rectangle(_mx, _my, _cv_x1, _cv_y2 + 2 + _sb_h_room, _cv_x2, _cv_y2 + _obj_bar_h + _sb_h_room);
 	            // placing / deleting / picking (EDIT on, pointer in a room, not on the bar)
 	            //   L-click        place the held object
 	            //   R-click        delete the object under the pointer
@@ -2900,7 +3035,7 @@ draw_set_color(_cell_bg_col);
 	            // the bar sits outside the canvas: lift the canvas clip
 	            gpu_set_scissor(0, 0, window_get_width(), window_get_height());
 	            var _obh  = 18;
-	            var _oby  = _cv_y2 + 6;
+	            var _oby  = _cv_y2 + 6 + _sb_h_room;   // below the bottom scrollbar
 	            var _obx0  = _cv_x1 + 4;
 	            var _obar_x2 = _cv_x2;
 	            draw_set_color(make_color_rgb(16, 18, 28));
@@ -2977,7 +3112,8 @@ draw_set_color(_cell_bg_col);
     if (!variable_struct_exists(_m, "map_undo_stack")) _m.map_undo_stack = [];
     if (!variable_struct_exists(_m, "map_redo_stack")) _m.map_redo_stack = [];
 
-    var _mouse_in_canvas = point_in_rectangle(_mx, _my, _cv_x1, _cv_y1, _cv_x2, _cv_y2) && !_m.obj_mode && !_obj_bar_hover;
+    // map_sb_drag: no painting while a scrollbar is being dragged
+    var _mouse_in_canvas = point_in_rectangle(_mx, _my, _cv_x1, _cv_y1, _cv_x2, _cv_y2) && !_m.obj_mode && !_obj_bar_hover && map_sb_drag == 0;
 
     // A pan ends when the pointer leaves the map or the middle button /
     // SPACE is no longer held. The release check below only runs while the
@@ -3628,7 +3764,7 @@ draw_set_color(_cell_bg_col);
     }
 
 // ---- COLOUR PALETTE STRIP (always visible) ----
-	    var _pal_y = _cv_y2 + 6 + _obj_bar_h;
+	    var _pal_y = _cv_y2 + 6 + _obj_bar_h + _sb_h_room;   // below the bottom scrollbar
 	    var _sw    = 22;
 	    var _sh    = 16;
 	    draw_set_font_l(fnt_c64_tiny);
@@ -3837,9 +3973,42 @@ for (var _pi = 0; _pi < _cp_cnt; _pi++) {
 		            draw_rectangle(_px1 - 1, _cp_y - 1, _px1 + _cp_sz + 1, _cp_y + _cp_sz + 1, true);
 		            draw_rectangle(_px1, _cp_y, _px1 + _cp_sz, _cp_y + _cp_sz, true);
 		        }
-		       if (_phov && mouse_check_button_pressed(mb_left)) {
+		       // ALT + LMB / RMB: this char's tag (tile type) up / down, 0=NONE
+		       // ..16, wrapping - the same tags the META_TILESET strip sets, kept
+		       // on the map's charset. [T] shows them on the map.
+		       if (_phov && keyboard_check(vk_alt)
+		           && (mouse_check_button_pressed(mb_left) || mouse_check_button_pressed(mb_right))) {
+		           if (_chr_asset_ref != noone) {
+		               if (!is_array(_chr_asset_ref.meta[$ "tile_types"])) {
+		                   _chr_asset_ref.meta.tile_types = array_create(256, 0);
+		               }
+		               if (_ci < array_length(_chr_asset_ref.meta.tile_types)) {
+		                   var _tt_cur = real(_chr_asset_ref.meta.tile_types[_ci]);
+		                   if (mouse_check_button_pressed(mb_left)) {
+		                       _tt_cur = (_tt_cur + 1) mod 17;
+		                   } else {
+		                       _tt_cur = (_tt_cur + 16) mod 17;
+		                   }
+		                   _chr_asset_ref.meta.tile_types[_ci] = _tt_cur;
+		                   _chr_asset_ref.meta.is_dirty = true;
+		               }
+		           }
+		       } else if (_phov && mouse_check_button_pressed(mb_left)) {
             _m.active_char = _ci;
         }
+		       // tag badge + number on the strip tile
+		       if (_chr_asset_ref != noone && is_array(_chr_asset_ref.meta[$ "tile_types"])) {
+		           if (_ci < array_length(_chr_asset_ref.meta.tile_types)) {
+		               var _tt_b = real(_chr_asset_ref.meta.tile_types[_ci]);
+		               if (_tt_b > 0) {
+		                   draw_set_color(scr_room_map_type_col(_tt_b));
+		                   draw_rectangle(_px1, _cp_y, _px1 + 11, _cp_y + 9, false);
+		                   draw_set_font_l(fnt_c64_tiny);
+		                   draw_set_color(c_black);
+		                   draw_text(_px1 + 1, _cp_y - scr_lang_lift(), string(_tt_b));
+		               }
+		           }
+		       }
     }
 	
     // Char strip scroll (wheel over strip area)
@@ -4098,6 +4267,9 @@ case "SPRITE_SET": {
         var _v2by1 = _cy;
         var _v2by2 = _cy + 22;
         spred64_v2_btn_y = _v2by1; // store for Step click detection
+        if (global.tour_active) {
+            scr_tour_capture("ASSET:SPR_EDIT", _v2bx1, _v2by1, _v2bx2, _v2by2);
+        }
         var _v2_open = (spred64_v2.active && spred64_v2.asset_index == viewer_asset);
         var _v2_hov  = point_in_rectangle(_mx, _my, _v2bx1, _v2by1, _v2bx2, _v2by2);
         draw_set_color(_v2_open
@@ -5268,46 +5440,47 @@ if (point_in_rectangle(_mx, _my, _sx, _sy, _sx + _sw, _sy + _sh)) {
     _asset.meta.hud_py = -1;
 }
 
-// 8x8 grid overlay when pixel-zoomed to 100%+
-if (_asset.meta.bmp_zoom > bmp_ui_zoom_cap) {
-	var _pxz_g   = _asset.meta.bmp_zoom / bmp_ui_zoom_cap;
+// GRIDS over the canvas. ZOOM GRID fades in past 100% zoom, scaled by its
+// strength slider; CELL GRID marks every 8x8 cell at any zoom, fully zoomed
+// out included. Each line is black with white beside it, so it shows on
+// any colour underneath.
+{
+	var _pxz_g   = max(1, _asset.meta.bmp_zoom / bmp_ui_zoom_cap);
 	var _src_w_g = max(1, 320 / _pxz_g);
 	var _src_h_g = max(1, 200 / _pxz_g);
 	var _src_x_g = clamp(_asset.meta.bmp_pan_x, 0, 320 - _src_w_g);
 	var _src_y_g = clamp(_asset.meta.bmp_pan_y, 0, 200 - _src_h_g);
-	// pixels per screen pixel
-	var _pps_x = _sw / _src_w_g;
+	if (_pxz_g <= 1) { _src_x_g = 0; _src_y_g = 0; }
+	var _pps_x = _sw / _src_w_g;   // screen pixels per surface pixel
 	var _pps_y = _sh / _src_h_g;
-	// only draw grid if each surface pixel is at least 4 screen pixels wide
-	if (_pps_x >= 4) {
+	var _g_alpha = 0;
+	if (_asset.meta.bmp_zoom > bmp_ui_zoom_cap && _pps_x >= 4) {
+	    var _max_pps = 32;
+	    var _zoom_t  = clamp((_pps_x - 4) / max(1, _max_pps - 4), 0, 1);
+	    _g_alpha = lerp(0.6, 1.0, _zoom_t) * bmp_zoom_grid_str;
+	}
+	if (bmp_cell_grid) {
+	    _g_alpha = 1;
+	}
+	if (_g_alpha > 0.01) {
 	    var _sx_sc3 = window_get_width()  / _gui_w;
 	    var _sy_sc3 = window_get_height() / display_get_gui_height();
 	    gpu_set_scissor(
 	        floor(_sx * _sx_sc3), floor(_sy * _sy_sc3),
 	        ceil(_sw * _sx_sc3),  ceil(_sh * _sy_sc3)
 	    );
-	    
-	    // Calculate transition (t) from 0.0 at min zoom (4) to 1.0 at full zoom
-	    var _max_pps = 32; // Adjust this to match your absolute maximum _pps_x
-	    var _zoom_t = clamp((_pps_x - 4) / max(1, _max_pps - 4), 0, 1);
-	    
-	    var _col_start = make_color_rgb(40, 40, 60);
-	    var _col_end   = make_color_rgb(140, 140, 170); // Lighter target color
-	    
-	    draw_set_color(merge_color(_col_start, _col_end, _zoom_t));
-	    draw_set_alpha(lerp(0.15, 1.0, _zoom_t)); // Fade smoothly from faint to solid
-	    
-	    // vertical lines every 8 surface pixels
+	    draw_set_alpha(_g_alpha);
 	    var _first_gx = floor(_src_x_g / 8) * 8;
 	    for (var _gx = _first_gx; _gx <= _src_x_g + _src_w_g; _gx += 8) {
-	        var _screen_gx = _sx + (_gx - _src_x_g) * _pps_x;
-	        draw_line(_screen_gx, _sy, _screen_gx, _sy + _sh);
+	        var _screen_gx = floor(_sx + (_gx - _src_x_g) * _pps_x);
+	        draw_set_color(c_black); draw_line(_screen_gx - 1, _sy, _screen_gx - 1, _sy + _sh);
+	        draw_set_color(c_white); draw_line(_screen_gx,     _sy, _screen_gx,     _sy + _sh);
 	    }
-	    // horizontal lines every 8 surface pixels
 	    var _first_gy = floor(_src_y_g / 8) * 8;
 	    for (var _gy = _first_gy; _gy <= _src_y_g + _src_h_g; _gy += 8) {
-	        var _screen_gy = _sy + (_gy - _src_y_g) * _pps_y;
-	        draw_line(_sx, _screen_gy, _sx + _sw, _screen_gy);
+	        var _screen_gy = floor(_sy + (_gy - _src_y_g) * _pps_y);
+	        draw_set_color(c_black); draw_line(_sx, _screen_gy - 1, _sx + _sw, _screen_gy - 1);
+	        draw_set_color(c_white); draw_line(_sx, _screen_gy,     _sx + _sw, _screen_gy);
 	    }
 	    draw_set_alpha(1.0);
 	    gpu_set_scissor(0, 0, window_get_width(), window_get_height());
@@ -7399,6 +7572,45 @@ gpu_set_texfilter(false);
 	                    }
 	                }
 
+	                // GRIDS: CELL GRID toggle and ZOOM GRID strength slider.
+	                _lty += 40;
+	                var _cg_w   = 110;
+	                var _cg_hov = point_in_rectangle(_mx, _my, _ltx, _lty, _ltx + _cg_w, _lty + 18);
+	                draw_set_color(_cg_hov ? make_color_rgb(80, 80, 100) : (bmp_cell_grid ? make_color_rgb(30, 90, 60) : make_color_rgb(40, 40, 60)));
+	                draw_rectangle(_ltx, _lty, _ltx + _cg_w, _lty + 18, false);
+	                draw_set_color(_cg_hov ? c_white : c_black);
+	                draw_rectangle(_ltx, _lty, _ltx + _cg_w, _lty + 18, true);
+	                draw_set_color(bmp_cell_grid ? c_lime : c_white);
+	                draw_text_l(_ltx + 4, _lty + 2, L("CELL GRID: ") + (bmp_cell_grid ? L("ON") : L("OFF")));
+	                if (_cg_hov && mouse_check_button_pressed(mb_left)) {
+	                    bmp_cell_grid = !bmp_cell_grid;
+	                    ini_open("c64devmachine.ini");
+	                    ini_write_real("bitmap", "cell_grid", bmp_cell_grid ? 1 : 0);
+	                    ini_close();
+	                }
+	                _lty += 28;
+	                draw_set_color(c_white);
+	                draw_text_l(_ltx, _lty, L("ZOOM GRID ") + string(round(bmp_zoom_grid_str * 100)) + "%");
+	                _lty += 18;
+	                var _zg_x2  = _ltx + _cg_w;
+	                var _zg_hov = point_in_rectangle(_mx, _my, _ltx - 4, _lty - 4, _zg_x2 + 4, _lty + 14);
+	                if (_zg_hov && mouse_check_button_pressed(mb_left)) bmp_zoom_grid_drag = true;
+	                if (bmp_zoom_grid_drag) {
+	                    bmp_zoom_grid_str = clamp((_mx - _ltx) / _cg_w, 0, 1);
+	                    if (!mouse_check_button(mb_left)) {
+	                        bmp_zoom_grid_drag = false;
+	                        ini_open("c64devmachine.ini");
+	                        ini_write_real("bitmap", "zoom_grid_strength", bmp_zoom_grid_str);
+	                        ini_close();
+	                    }
+	                }
+	                draw_set_color(make_color_rgb(40, 40, 60));
+	                draw_rectangle(_ltx, _lty, _zg_x2, _lty + 10, false);
+	                draw_set_color(make_color_rgb(90, 200, 255));
+	                draw_rectangle(_ltx, _lty, _ltx + _cg_w * bmp_zoom_grid_str, _lty + 10, false);
+	                draw_set_color((_zg_hov || bmp_zoom_grid_drag) ? c_white : c_black);
+	                draw_rectangle(_ltx, _lty, _zg_x2, _lty + 10, true);
+
 					// RIGHT SIDE TOOLS
 	                var _rtx = _thumb_x + _thumb_w + 45;
 	                var _rty = _thumb_y;
@@ -7420,6 +7632,7 @@ gpu_set_texfilter(false);
 	                    draw_rectangle(_rtx, _rty, _rtx + 70, _rty + 16, true);
 	                    draw_set_color(_active ? c_aqua : c_white);
 	                    draw_text_l(_rtx + 4, _rty , _label);
+	                    if (global.tour_active) scr_tour_capture("BMP:TOOL:" + _tname, _rtx, _rty, _rtx + 70, _rty + 16);
                         
 	                    if (_hov && mouse_check_button_pressed(mb_left)) {
 	                        if (_active && (_tname == "CIRCLE" || _tname == "RECT")) {
@@ -7613,6 +7826,7 @@ gpu_set_texfilter(false);
 	                        if (_phov && mouse_check_button_pressed(mb_right)) _asset.meta.secondary_color = _c;
 	                    }
 	                }
+	                if (global.tour_active) scr_tour_capture("BMP:PALETTE", _px - 6, _py - 6, _px + _pw + 6, _py + 16 * (_ph + 2) + 4);
 	              
 	            } // end !goto_end_editor
 					// INITIALIZE TO INTEGER SWEET SPOT
@@ -8336,6 +8550,10 @@ case "TEXT_DATA": {
         keyboard_string = "";
     }
 
+} break;
+
+case "PICKUP_TABLE": {
+    scr_pickup_editor(_asset, _vx1 + 10, _cy, _vx2 - 10, _vy2 - 12, _mx, _my);
 } break;
 
 case "LINE_COLL": {
@@ -12039,7 +12257,7 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
 // REFERENCED BY (for BITMAP, default cases — SPRITE_SET and MAP_DATA handle their own above)
     if (_asset.type == "SFX_DATA") _cy = _vy2 - 100;
 	 if (_asset.type == "BYTE_DATA" || _asset.type == "TEXT_DATA" || _asset.type == "LINE_COLL") _cy = _vy2 - 100;
-   if (_asset.type != "SPRITE_SET" && _asset.type != "MAP_DATA" && _asset.type != "BITMAP" && _asset.type != "META_TILESET" && _asset.type != "META_MAP" && _asset.type != "BITMAP_BUILDER" && _asset.type != "MUSIC_MAKER" && _asset.type != "SFX_MAKER" && _asset.type != "HUD" && _asset.type != "ROOM_MAP" && _asset.type != "ANIMATION" && _asset.type != "SPRITE_MASK" && _asset.type != "BMP_OBJECTS" && _asset.type != "SAMPLE") {
+   if (_asset.type != "SPRITE_SET" && _asset.type != "MAP_DATA" && _asset.type != "BITMAP" && _asset.type != "META_TILESET" && _asset.type != "META_MAP" && _asset.type != "BITMAP_BUILDER" && _asset.type != "MUSIC_MAKER" && _asset.type != "SFX_MAKER" && _asset.type != "HUD" && _asset.type != "ROOM_MAP" && _asset.type != "ANIMATION" && _asset.type != "SPRITE_MASK" && _asset.type != "BMP_OBJECTS" && _asset.type != "SAMPLE" && _asset.type != "PICKUP_TABLE") {
         draw_set_font_l(fnt_c64_code);
         draw_set_color(make_color_rgb(60,60,80));
         draw_line(_vx1 + 10, _cy, _vx2 - 10, _cy);
@@ -12097,7 +12315,7 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
 
     // ---- CHAR_SET GRID — drawn at bottom after REFERENCED BY ----
     if (_asset.type == "CHAR_SET") {
-        _cy += 10;
+        _cy += 24;   // room for the BKG TILE label above the grid
         if (variable_struct_exists(_asset.meta, _chr_surf_key) &&
             surface_exists(variable_struct_get(_asset.meta, _chr_surf_key))) {
             var _ps  = variable_struct_get(_asset.meta, _chr_surf_key);
@@ -12164,7 +12382,21 @@ for (var _row = 0; _row < _m.stamp_h; _row++) {
             var _cell_sz = 32 * _sc;
             draw_set_font_l(fnt_c64_tiny);
             draw_set_color(make_color_rgb(255, 180, 0));
-            draw_text_l(_dx, _cy - 40, "BKG\nTILE");
+            draw_text_l(_dx, _cy - 16, "BKG TILE");
+
+            // Arrow keys with the pointer over the charset: pick another char
+            if (point_in_rectangle(_mx, _my, _dx, _cy, _dx + _dw, _cy + _dh)) {
+                var _nav_max = _asset.meta.char_count - 1;
+                if (_asset.meta.mc_mode == 2) _nav_max = min(_nav_max, 63);
+                var _nav = chr_edit_idx;
+                if (keyboard_check_pressed(vk_left))  _nav -= 1;
+                if (keyboard_check_pressed(vk_right)) _nav += 1;
+                if (keyboard_check_pressed(vk_up))    _nav -= 16;
+                if (keyboard_check_pressed(vk_down))  _nav += 16;
+                if (_nav >= 0 && _nav <= _nav_max) {
+                    chr_edit_idx = _nav;
+                }
+            }
 
             _cy += _dh + 6;
             // Info line

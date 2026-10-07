@@ -58,6 +58,8 @@ function scr_undo_restore(_path) {
         if (variable_struct_exists(_d, "end_address"))  _n.end_address  = _d.end_address;
         if (variable_struct_exists(_d, "x_indent"))     _n.x_indent     = _d.x_indent;
         if (variable_struct_exists(_d, "comment_w_mult")) _n.comment_w_mult = clamp(round(_d.comment_w_mult), 1, 3);
+        if (variable_struct_exists(_d, "comment_w")) _n.comment_w = _d.comment_w;
+        if (variable_struct_exists(_d, "comment_h")) _n.comment_h = _d.comment_h;
         if (variable_struct_exists(_d, "stable_uid"))   _n.stable_uid   = _d.stable_uid;
 		if (variable_struct_exists(_d, "anim_alias") && _d.anim_alias != "")         _n.anim_alias       = _d.anim_alias;
         if (variable_struct_exists(_d, "scroll_alias") && _d.scroll_alias != "")     _n.scroll_alias     = _d.scroll_alias;
@@ -351,8 +353,11 @@ var _parsed = scr_parse_asm_text(_ct);
                 _data_sz = 0;
                 _data_lines = [];
             } else if (_pt == "const") {
-                if (array_length(_parsed[_pi]) > 2 && is_real(_parsed[_pi][2]))
-                    array_push(code_seg_cache, { addr: _parsed[_pi][2], size: 2, lines: [_cur_line], no_conflict: false });
+                // Same rule as scr_build_memory_bar_cache: declared size, flagged as an equate
+                if (array_length(_parsed[_pi]) > 2 && is_real(_parsed[_pi][2])) {
+                    var _csz = (array_length(_parsed[_pi]) > 3 && is_real(_parsed[_pi][3])) ? max(1, _parsed[_pi][3]) : 1;
+                    array_push(code_seg_cache, { addr: _parsed[_pi][2], size: _csz, lines: [_cur_line], no_conflict: false, is_const: true });
+                }
             } else if (_pt == "byte") {
                 _data_sz += array_length(_parsed[_pi]) - 1;
             } else if (_pt != "label") {

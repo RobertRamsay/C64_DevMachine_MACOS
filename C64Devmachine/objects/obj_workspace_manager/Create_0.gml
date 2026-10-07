@@ -16,7 +16,7 @@ showcode_refresh_requested = false;
 editor_layout_refresh_requested = false;
 
 
-global.build_date = "October 5th, 2026"; // edit this string for each release
+global.build_date = "October 12th, 2026"; // edit this string for each release
 
 // sid64 (reSID) preview audio — see scr_sid64_audio. Model/engine changes go
 // through scr_sid64_reconfigure so the preview cache is rebuilt.
@@ -156,6 +156,7 @@ ini_close();
 hideui=false;
 had_focus = true;   // tracks window focus across frames to detect regain
 opcode_extra_height=1;
+showPaletteHelper=0;
 expert_mode = false;
 
 global.pre_fs_x = 0;
@@ -204,14 +205,14 @@ welcome_credits_y      = 0;
 welcome_mode           = 0;      // 0 = welcome / what's new, 1 = guided tour list
 welcome_tour_scroll    = 0;      // first visible row in the tour list
 welcome_whats_new = [
-    "NEW PORT - SABOTEUR added to PORTS (the full game, editable).",
-    "NEW - CREATOR layer: parameter cards and UI panels on mapping boxes.",
-    "NEW - SPRITE MASK asset + macro: sprites walk behind the scenery.",
-    "NEW - LINE COLL asset + COLL-LINE macro: line-based collision.",
-    "NEW - BITMAP OBJECTS (blitters) and ROOM MAPS with RLE rooms.",
-    "NEW - BUILD TARGET PRG EXO: Exomizer-crunched PRG output.",
-    "REFINED - Hover a JSR / JMP and press ENTER to jump to its label.",
-    "REFINED - Node info panels rewritten with clear section headings.",
+    "NEW PORTS - R-TYPE and BRUCE LEE join SABOTEUR in PORTS (full games, editable).",
+    "NEW TEMPLATE - GATE-GAME: a 20-level logic-gate puzzle game.",
+    "NEW - GUIDED TOURS: step-by-step lessons with highlights (DOCUMENTS menu).",
+    "NEW - CREATOR layer: parameter cards, card modes and GO buttons on panels.",
+    "NEW - PICKUP TABLE asset and MAP TILE TAGS for room-based games.",
+    "REFINED - PLAY buttons on SID nodes, map scrollbars, bitmap CELL GRID.",
+    "REFINED - TXT SCROLL runs on its own raster IRQ when there is no SID.",
+    "REFINED - Assembler: bad branches and labels are now clear build errors.",
     "",
     "SHARE your Custom Code blocks like a PRO in the Discord user-code-blocks channel.",
     "SUPPORT the development by leaving a review on ITCH and buying the PRO version.",
@@ -790,6 +791,14 @@ cam_y           = -64;
 cam_zoom        = 1.0;
 cam_zoom_target = 1.0;
 is_panning      = false;
+
+// Edge auto-pan while dragging a node: holding a dragged node within
+// edge_pan_buffer GUI px of the canvas edge scrolls the view that way.
+// It arms only once the pointer has been inside the canvas during the drag,
+// so picking a node up from the palette or a menu does not set it off.
+edge_pan_armed  = false;
+edge_pan_buffer = 48;     // GUI px from the canvas edge
+edge_pan_speed  = 16;     // GUI px per frame at the very edge
 cam_target_x = cam_x;
 cam_target_y = cam_y;
 
@@ -1162,7 +1171,7 @@ nodeStyle     = clamp(ini_read_real("Settings", "nodeStyle",     0), 0, sprite_g
 macroStyle    = clamp(ini_read_real("Settings", "macroStyle",    0), 0, 1);
 expert_mode  = ini_read_real("Settings", "expert_mode", 0) == 1;
 opcode_helper_on       = ini_read_real("Settings", "opcode_helper",       1) == 1;
-showPaletteHelper      = ini_read_real("Settings", "palette_helper",      1) == 1;
+showPaletteHelper      = ini_read_real("Settings", "palette_helper",      0) == 1;
 global.visual_fx       = ini_read_real("Settings", "visual_fx",           1) == 1;
 global.node_destroy_fx = global.visual_fx;
 global.comments_visible = ini_read_real("Settings", "comments_visible",   1) == 1;

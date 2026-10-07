@@ -206,6 +206,10 @@ function scr_load_workspace_from_path_core(_path, _mcp = false) {
         if (variable_struct_exists(d, "end_address"))  _n.end_address  = d.end_address;
         if (variable_struct_exists(d, "x_indent"))     _n.x_indent     = d.x_indent;
         if (variable_struct_exists(d, "comment_w_mult")) _n.comment_w_mult = clamp(round(d.comment_w_mult), 1, 3);
+        // Corner-handle size (newer projects). Older ones only have
+        // comment_w_mult, which still gives their width.
+        if (variable_struct_exists(d, "comment_w")) _n.comment_w = d.comment_w;
+        if (variable_struct_exists(d, "comment_h")) _n.comment_h = d.comment_h;
         if (variable_struct_exists(d, "anim_alias")   && d.anim_alias   != "") _n.anim_alias   = d.anim_alias;
         if (variable_struct_exists(d, "scroll_alias") && d.scroll_alias != "") _n.scroll_alias = d.scroll_alias;
 		if (variable_struct_exists(d, "code_descriptor")) _n.code_descriptor = d.code_descriptor;
@@ -590,6 +594,7 @@ function scr_load_workspace_from_path_core(_path, _mcp = false) {
                 if (variable_struct_exists(_sm, "byte_string"))    _meta.byte_string    = _sm.byte_string;
                 if (variable_struct_exists(_sm, "line_string"))    _meta.line_string    = _sm.line_string;
                 if (variable_struct_exists(_sm, "lines"))          _meta.lines          = _sm.lines;
+                if (variable_struct_exists(_sm, "pick"))           _meta.pick           = _sm.pick;
                 if (variable_struct_exists(_sm, "active_type"))    _meta.active_type    = _sm.active_type;
                 if (variable_struct_exists(_sm, "ref_enabled"))    _meta.ref_enabled    = _sm.ref_enabled;
                 if (variable_struct_exists(_sm, "ref_asset_name")) _meta.ref_asset_name = _sm.ref_asset_name;
@@ -716,6 +721,10 @@ function scr_load_workspace_from_path_core(_path, _mcp = false) {
                     // actual reserved size.
                     scr_asset_byte_data_flush(_new_asset);
                 }
+            }
+            if (_ad.type == "PICKUP_TABLE") {
+                if (!variable_struct_exists(_new_asset.meta, "pick")) _new_asset.meta.pick = scr_pickup_default();
+                _new_asset.meta.pick_undo = [];
             }
             if (_ad.type == "LINE_COLL") {
                 if (!variable_struct_exists(_new_asset.meta, "lines"))          _new_asset.meta.lines = [];
@@ -1458,6 +1467,9 @@ global.kernal_unlocked = variable_struct_exists(load_data, "kernal_unlocked") ? 
     if (instance_exists(obj_workspace_manager)) {
         obj_workspace_manager.alarm[1] = 6;
     }
+
+    // Every load starts at home: zoom 1, view centred on SYSTEM INIT (as Home).
+    scr_focus_init(false);
 
     // Unsaved-changes baseline: taken a few frames from now, once the passes
     // above have settled heights / addresses, so they don't read as edits.

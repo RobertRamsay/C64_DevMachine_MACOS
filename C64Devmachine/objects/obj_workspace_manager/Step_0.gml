@@ -1748,6 +1748,10 @@ if (!is_entering_text && !global.is_any_text_active && !global.c64u_overlay_acti
 	    }
 	    _theme_key_changed = true;
 	}
+	// P: cycle where param cards go (AUTO / RIGHT / LEFT / DOCK / OFF).
+	if (_theme_keys_ok && scr_workspace_keyboard_check_pressed(ord("P"))) {
+	    scr_creator_card_mode_cycle(1);
+	}
 	if (_theme_keys_ok && scr_workspace_keyboard_check_pressed(ord("8"))) {
 	    var _nod_n = sprite_get_number(spr_9s_tile1) + 1;
 	    nodeStyle = (nodeStyle + 1) mod _nod_n;
@@ -1786,9 +1790,19 @@ if (!is_entering_text && !global.is_any_text_active && !global.c64u_overlay_acti
 
 
 
-if (scr_workspace_keyboard_check_pressed(ord("B")) && !is_entering_text && !global.is_any_text_active && !global.any_picker_open) {
-    global.box_drag_active = true;
-    box_drag_live          = false;
+
+
+// B: start placing a mapping box; B again cancels it (so does Escape).
+// Shift+B and Alt+B are node shortcuts (branch / bitmap), handled below.
+if (scr_workspace_keyboard_check_pressed(ord("B")) && !is_entering_text && !global.is_any_text_active && !global.any_picker_open
+    && !scr_workspace_keyboard_check(vk_shift) && !scr_workspace_keyboard_check(vk_alt)) {
+    if (global.box_drag_active) {
+        global.box_drag_active = false;
+        box_drag_live          = false;
+    } else {
+        global.box_drag_active = true;
+        box_drag_live          = false;
+    }
 }
 
 
@@ -1796,6 +1810,15 @@ if (scr_workspace_keyboard_check_pressed(vk_home)) {
     scr_focus_init();
     global.undo_dirty = true;
     alarm[3] = 6;
+}
+
+
+// Escape while placing a mapping box only cancels the box - never the
+// "quit?" prompt.
+if (global.box_drag_active && scr_workspace_keyboard_check_pressed(vk_escape)) {
+    global.box_drag_active = false;
+    box_drag_live          = false;
+    keyboard_clear(vk_escape);
 }
 
 if (scr_workspace_keyboard_check_pressed(vk_escape)) {
@@ -2478,6 +2501,74 @@ if (scr_workspace_keyboard_check_pressed(ord("L")) && scr_workspace_keyboard_che
 
     global.undo_dirty = true;
     alarm[3] = 6;
+}
+	
+// Alt+B: drop a BITMAP node.
+if (scr_workspace_keyboard_check_pressed(ord("B")) && scr_workspace_keyboard_check(vk_alt)
+    && !scr_workspace_keyboard_check(vk_shift) && !is_entering_text && !_hover_blocks_spawn) {
+    scr_node_spawn("MACRO_BMP", mouse_x, mouse_y);
+    global.undo_dirty = true;
+    alarm[3] = 6;
+}
+
+// Shift+B: over a branch node, cycle its type (BNE BEQ BCC BCS BPL BMI BVC
+// BVS); otherwise drop a new BNE node.
+if (scr_workspace_keyboard_check_pressed(ord("B")) && scr_workspace_keyboard_check(vk_shift)
+    && !scr_workspace_keyboard_check(vk_alt) && !is_entering_text && !global.any_picker_open) {
+    var _br_ops    = ["bne", "beq", "bcc", "bcs", "bpl", "bmi", "bvc", "bvs"];
+    var _br_cycled = false;
+    with (obj_c64_node) {
+        if (_br_cycled) {
+            break;
+        }
+        if (node_type != "NORMAL" || !scr_node_mouse_over(id)) {
+            continue;
+        }
+        if (array_length(instructions) == 0) {
+            continue;
+        }
+        var _br_mn = string_lower(string(instructions[0][0]));
+        for (var _bi = 0; _bi < 8; _bi++) {
+            if (_br_ops[_bi] == _br_mn) {
+                var _br_next = _br_ops[(_bi + 1) mod 8];
+                instructions[0][0] = _br_next;
+                node_title         = string_upper(_br_next);
+                global.addresses_dirty = true;
+                _br_cycled = true;
+                break;
+            }
+        }
+    }
+    if (!_br_cycled && !_hover_blocks_spawn) {
+        var _bn          = instance_create_depth(mouse_x, mouse_y, -500, obj_c64_node);
+        _bn.node_title   = "BNE";
+        _bn.node_type    = "NORMAL";
+        _bn.instructions = [["bne", "target"]];
+        with (_bn) { event_user(0); }
+        _bn.pc_address         = 0;
+        _bn.last_overlap_check = false;
+        with (obj_c64_node) { last_overlap_check = false; }
+    }
+    global.undo_dirty = true;
+    alarm[3] = 6;
+}
+
+if scr_workspace_keyboard_check_pressed(ord("J"))  {
+    if (scr_workspace_keyboard_check(vk_alt) && !_hover_blocks_spawn) {
+        var _n        = scr_node_spawn("MACRO_JOY", mouse_x, mouse_y);
+        _n.node_title = "JOYSTICK";
+        global.undo_dirty = true;
+        alarm[3] = 6;
+	}
+}
+
+if scr_workspace_keyboard_check_pressed(ord("M"))  {
+    if (scr_workspace_keyboard_check(vk_alt) && !_hover_blocks_spawn) {
+        var _n        = scr_node_spawn("MACRO_MOVE", mouse_x, mouse_y);
+        _n.node_title = "MACRO_MOVE";
+        global.undo_dirty = true;
+        alarm[3] = 6;
+	}
 }
 
 if (scr_workspace_keyboard_check_pressed(ord("V"))) {
@@ -3175,12 +3266,26 @@ for (var i = 0; i < array_length(final_code); i++) {
 // Reset for pass 2
 p.bytes     = [];
 p.fixups    = _p1_fixups_save;
-p.pc_override = -1; 
+p.pc_override = -1;
+p.label_seen  = {};
 
 // Pass 2: emit all instructions with labels already resolved
 for (var i = 0; i < array_length(final_code); i++) {
     var _fc_mnem = string_lower(final_code[i][0]);
     if (_fc_mnem == "_line_map_" || _fc_mnem == "const") continue;
+    // Where an assembler error points: owning node, plus the MACRO_CODE
+    // source line when the compile chain tagged one ([4]).
+    var _fc_e = final_code[i];
+    p.err_node  = noone;
+    p.err_where = "";
+    if (array_length(_fc_e) > 2 && !is_string(_fc_e[2]) && !is_array(_fc_e[2]) && !is_struct(_fc_e[2])
+    && instance_exists(_fc_e[2]) && _fc_e[2].object_index == obj_c64_node) {
+        p.err_node  = _fc_e[2];
+        p.err_where = (p.err_node.custom_title != "") ? p.err_node.custom_title : p.err_node.node_title;
+    }
+    if (array_length(_fc_e) > 4 && is_real(_fc_e[4]) && _fc_e[4] > 0) {
+        p.err_where += ((p.err_where != "") ? " " : "") + "line " + string(_fc_e[4]);
+    }
     if (array_length(final_code[i]) < 2) {
         p.assemble_instruction(_fc_mnem, 0);
         continue;
@@ -3195,6 +3300,21 @@ for (var _fi = 0; _fi < array_length(p.fixups); _fi++) {
         show_debug_message("FOX FIXUP: label=[" + string(_f.label) + "] pos=" + string(_f.pos) + " type=" + _f.type + " in_labels=" + string(ds_map_exists(p.labels, _f.label)));
 }
 p.assemble();
+// Bad label modes, long branches, unresolved and duplicate labels used to
+// build anyway with wrong bytes (or crash). Stop here and say where.
+if (array_length(p.errors) > 0) {
+    var _first_err_node = noone;
+    for (var _ei = 0; _ei < array_length(p.errors); _ei++) {
+        if (instance_exists(p.errors[_ei].node)) { _first_err_node = p.errors[_ei].node; break; }
+    }
+    if (_first_err_node != noone) scr_focus_camera_on_node(_first_err_node);
+    scr_show_message("BUILD FAILED: " + string(array_length(p.errors)) + " assembler error(s)\n\n" + p.error_text());
+    ds_map_destroy(p.labels);
+    buffer_delete(p_buf);
+    silent_build = false;
+    pending_dump = false;
+    exit;
+}
 var _vscroll_keys = ds_map_keys_to_array(p.labels);
 for (var _di = 0; _di < array_length(_vscroll_keys); _di++) {
     if (string_pos("vs", _vscroll_keys[_di]) > 0 || string_pos("Scroller", _vscroll_keys[_di]) > 0)
@@ -4503,6 +4623,12 @@ for (var i = 0; i < array_length(_exp_code); i++) {
 }
     // === FIXUP PASS: resolve all forward JSR/JMP/branch/lab references ===
     _exp_p.assemble();
+    if (array_length(_exp_p.errors) > 0) {
+        scr_show_message("EXPORT FAILED: " + string(array_length(_exp_p.errors)) + " assembler error(s)\n\n" + _exp_p.error_text());
+        ds_map_destroy(_exp_p.labels);
+        buffer_delete(_exp_buf);
+        exit;
+    }
     // === END FIXUP PASS ===
 
     // === SAME IRQ PATCHING AS F5 ===
@@ -4759,16 +4885,19 @@ if (!instance_exists(node_tooltip_node) && !global.showcode_mouse_over &&
 		        _picker_node.label_picker_scroll = min(max(0, _count - _visible), _picker_node.label_picker_scroll + 1);
 		    }
 		} else {
-		        // Normal camera zoom
+		// Normal camera zoom
 var _zoom_mul = ( !scr_workspace_input_blocked() && scr_cmd_held() ) ? 5.0 : 3.0;
+// The param dock scrolls with the wheel instead while the pointer is on it.
+if (!global.creator_dock_hover) {
 if (scr_workspace_mouse_wheel_up())   { cam_zoom_target -= zoom_speed * _zoom_mul; global.undo_dirty = true; alarm[3] = 30; } // no autosave_dirty
 if (scr_workspace_mouse_wheel_down()) { cam_zoom_target += zoom_speed * _zoom_mul; global.undo_dirty = true; alarm[3] = 30; } // no autosave_dirty
-    }
-    cam_zoom_target = clamp(cam_zoom_target, 0.3, 6.0);
-    cam_zoom        = lerp(cam_zoom, cam_zoom_target, 0.4);
-    camera_set_view_size(cam_view, 1920 * cam_zoom, 1080 * cam_zoom);
-    //global.mac_x2     = global.mac_x1 + macro_col_width;
-    global.sc_x_start = global.gui_w - 20 - 280;
+}
+	}
+	cam_zoom_target = clamp(cam_zoom_target, 0.3, 6.0);
+	cam_zoom        = lerp(cam_zoom, cam_zoom_target, 0.4);
+	camera_set_view_size(cam_view, 1920 * cam_zoom, 1080 * cam_zoom);
+	//global.mac_x2     = global.mac_x1 + macro_col_width;
+	global.sc_x_start = global.gui_w - 20 - 280;
 }
 
 if (abs(cam_zoom - cam_zoom_target) > 0.001) {
@@ -4808,6 +4937,54 @@ if (is_panning) {
     }
     }
 }
+
+// ---- EDGE AUTO-PAN WHILE DRAGGING A NODE ----
+// The canvas is the area between the palette shelf, the menu bar, the asset
+// panel and the bottom of the window. Within edge_pan_buffer of one of those
+// edges the view scrolls towards it, faster the closer the pointer gets.
+// Pointer over the shelf, menu bar or asset panel itself does not pan.
+if (_any_node_dragging && !is_panning) {
+    var _ep_l = 0;
+    if (!expert_mode && !scr_shelf_hidden()) {
+        _ep_l = shelf_width;
+    }
+    var _ep_t = sprite_get_height(spr_menu_bar);
+    var _ep_r = global.gui_w;
+    if (instance_exists(obj_asset_manager)) {
+        _ep_r = obj_asset_manager.panel_x;
+    }
+    var _ep_b  = display_get_gui_height();
+    var _ep_mx = global.gui_mouse_x;
+    var _ep_my = global.gui_mouse_y;
+    var _ep_bf = edge_pan_buffer;
+
+    var _ep_in_canvas = point_in_rectangle(_ep_mx, _ep_my, _ep_l, _ep_t, _ep_r, _ep_b);
+    if (point_in_rectangle(_ep_mx, _ep_my, _ep_l + _ep_bf, _ep_t + _ep_bf, _ep_r - _ep_bf, _ep_b - _ep_bf)) {
+        edge_pan_armed = true;
+    }
+
+    if (edge_pan_armed && _ep_in_canvas) {
+        var _ep_dx = 0;
+        var _ep_dy = 0;
+        if (_ep_mx < _ep_l + _ep_bf) {
+            _ep_dx = -(1 - ((_ep_mx - _ep_l) / _ep_bf));
+        }
+        if (_ep_mx > _ep_r - _ep_bf) {
+            _ep_dx = 1 - ((_ep_r - _ep_mx) / _ep_bf);
+        }
+        if (_ep_my < _ep_t + _ep_bf) {
+            _ep_dy = -(1 - ((_ep_my - _ep_t) / _ep_bf));
+        }
+        if (_ep_my > _ep_b - _ep_bf) {
+            _ep_dy = 1 - ((_ep_b - _ep_my) / _ep_bf);
+        }
+        cam_x += _ep_dx * edge_pan_speed * cam_zoom;
+        cam_y += _ep_dy * edge_pan_speed * cam_zoom;
+    }
+} else {
+    edge_pan_armed = false;
+}
+
 camera_set_view_pos(cam_view, cam_x, cam_y);
 
 // MISC UPDATES
@@ -4960,7 +5137,7 @@ if (!scr_workspace_keyboard_check(vk_alt) && scr_workspace_keyboard_check_releas
             // expert_mode / shelf_width live on obj_workspace_manager, which is
             // the scope this Step event already runs in.
             var _shelf_w = shelf_width;
-            if (expert_mode) {
+            if (scr_shelf_hidden()) {
                 _shelf_w = 0;
             }
 
@@ -5003,7 +5180,7 @@ if (!scr_workspace_keyboard_check(vk_alt) && scr_workspace_keyboard_check_releas
 /////////////////////////////////////////////////////////////////
 // BOX SELECT
 /////////////////////////////////////////////////////////////////
-var _in_gui = ((global.gui_mouse_x <= shelf_width) && (!expert_mode || global.gui_mouse_y < 47))
+var _in_gui = ((global.gui_mouse_x <= shelf_width) && (!scr_shelf_hidden() || global.gui_mouse_y < 47))
            || (global.gui_mouse_x >= (global.gui_w - 20 - 280))
            || global.showcode_mouse_over
            || global.cbc_button_hot
@@ -5127,7 +5304,10 @@ if (scr_workspace_mouse_check_button_pressed(mb_left)  && !box_popup_open) {
     if (instance_exists(_hit_box) && scr_workspace_keyboard_check(vk_alt)) {
         if (box_body_dbl_timer > 0 && box_body_dbl_target == _hit_box) {
             // Double-click confirmed — zoom to box
-            var _shelf_w  = expert_mode ? 0 : shelf_width;
+            var _shelf_w  = shelf_width;
+            if (scr_shelf_hidden()) {
+                _shelf_w = 0;
+            }
             var _view_w   = 1920 - _shelf_w;
             var _view_h   = 1080;
             var _fit_w    = (_hit_box.box_w > 0) ? (_view_w * 0.8) / _hit_box.box_w : 1.0;

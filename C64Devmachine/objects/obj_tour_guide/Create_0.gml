@@ -12,6 +12,15 @@ restore_showcode = false; // SHOW CODE panel hidden for the tour, put back after
 
 // Check baselines (set by scr_tour_enter_step)
 base_bmp_count = 0;
+base_spr_count   = 0;
+
+// Gentle camera glide to a drag step's DROP HERE spot.
+glide_active = false;   // camera is easing towards glide_tx / glide_ty
+glide_wait   = 0;       // frames left to wait for the drop node to exist
+glide_tx     = 0;
+glide_ty     = 0;
+glide_target = false;  // gliding to a field or node rather than a DROP HERE spot
+base_label_count = 0;
 base_undo_top  = undefined;
 base_undo_name = "";
 base_build     = 0;

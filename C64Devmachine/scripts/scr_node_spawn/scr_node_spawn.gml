@@ -646,11 +646,11 @@ case "LABEL": {
 
         // -------------------------------------------------------
         // MACRO_CLR_SCREEN
-        // [0] mnem  [1] scr_base (hex)  [2] fill (0-255)
+        // [0] mnem  [1] scr_base (hex)  [2] fill (0-255, default $20 = space)
         // -------------------------------------------------------
         case "MACRO_CLR_SCREEN":
             _n.node_title   = "CLR SCRN RAM";
-            _n.instructions = [["macro_clr_screen", 0x0400, 0]];
+            _n.instructions = [["macro_clr_screen", 0x0400, 0x20]];
             _n.pc_address   = global.start_pc;
             with (_n) { event_user(0); }
             break;
@@ -1189,8 +1189,11 @@ function scr_comment_sync_layout(_node) {
         _mult = clamp(round(_node.comment_w_mult), 1, 3);
     }
     var _node_w = global.node_display_width * _mult;
+    if (_node.comment_w > 0) {
+        _node_w = _node.comment_w;
+    }
     var _text_w = max(1, _node_w - 20);
-    var _max_ch = 25 * _mult;
+    var _max_ch = max(8, floor(25 * _node_w / global.node_display_width));
     if (_node.comment_source_cache != _raw || _node.comment_text_width != _text_w
     || _node.comment_layout_collapsed != _node.collapsed || _node.comment_layout_lang != global.lang) {
         var _lines = string_split(string_replace_all(string_replace_all(_raw, "\r\n", "\n"), "\r", "\n"), "\n");
@@ -1241,6 +1244,10 @@ function scr_comment_sync_layout(_node) {
         _node.height_dirty = true;
     }
     var _height = _node.comment_layout_height;
+    // A height set with the corner handle is a minimum; text never clips.
+    if (!_node.collapsed && _node.comment_h > _height) {
+        _height = _node.comment_h;
+    }
     if (_node.height != _height) {
         _node.height_dirty = true;
         // Use the normal spine repack, not a second delta push on the next Step.

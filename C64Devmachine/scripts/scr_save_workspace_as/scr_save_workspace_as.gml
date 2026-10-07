@@ -73,6 +73,8 @@
 	            helper_text:    variable_instance_exists(inst, "helper_text") ? inst.helper_text : "",
 				x_indent:       variable_instance_exists(inst, "x_indent") ? inst.x_indent : 0,
 				comment_w_mult: variable_instance_exists(inst, "comment_w_mult") ? inst.comment_w_mult : 1,
+				comment_w:      inst.comment_w,
+				comment_h:      inst.comment_h,
 	            anim_alias:     variable_instance_exists(inst, "anim_alias") ? inst.anim_alias : "",
 	            scroll_alias:   variable_instance_exists(inst, "scroll_alias") ? inst.scroll_alias : "",
 				code_descriptor: variable_instance_exists(inst, "code_descriptor") ? inst.code_descriptor : "Code Block",
@@ -219,6 +221,7 @@
 	        if (variable_struct_exists(_a.meta, "byte_string"))   _meta_out.byte_string   = _a.meta.byte_string;
 	        if (variable_struct_exists(_a.meta, "line_string"))   _meta_out.line_string   = _a.meta.line_string;
 	        if (variable_struct_exists(_a.meta, "lines"))         _meta_out.lines         = _a.meta.lines;
+	        if (variable_struct_exists(_a.meta, "pick"))          _meta_out.pick          = _a.meta.pick;
 	        if (variable_struct_exists(_a.meta, "active_type"))   _meta_out.active_type   = _a.meta.active_type;
 	        if (variable_struct_exists(_a.meta, "ref_enabled"))   _meta_out.ref_enabled   = _a.meta.ref_enabled;
 	        if (variable_struct_exists(_a.meta, "ref_asset_name")) _meta_out.ref_asset_name = _a.meta.ref_asset_name;

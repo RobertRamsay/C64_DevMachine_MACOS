@@ -65,6 +65,8 @@ var _base = "unsaved";
             proxy:        variable_instance_exists(inst, "proxy")       ? inst.proxy       : false,
             x_indent:     variable_instance_exists(inst, "x_indent")    ? inst.x_indent    : 0,
             comment_w_mult: variable_instance_exists(inst, "comment_w_mult") ? inst.comment_w_mult : 1,
+            comment_w:      inst.comment_w,
+            comment_h:      inst.comment_h,
 			helper_text:  variable_instance_exists(inst, "helper_text") ? inst.helper_text : "",
 			anim_alias:      variable_instance_exists(inst, "anim_alias")       ? inst.anim_alias       : "",
             scroll_alias:    variable_instance_exists(inst, "scroll_alias")     ? inst.scroll_alias     : "",
@@ -107,7 +109,7 @@ var _base = "unsaved";
                            "text","byte_string","is_save_file","save_file_size","paint_mc","map_mixed","raw_chars","tile_colours","obj_asset","room_objects","obj_row_off","obj_col_off","obj_table_addr","obj_regions","show_objects","room_w","room_h","room_count","stream_flag_colour","room_view","view_y2","erase_char","override_grid","map_mc_bg","map_mc_col1","map_mc_col2",
                            "song_name","sfx_count","instruments","wavetable","source_file",
                            "tile_types",
-                           "line_string","lines","active_type","ref_enabled","ref_asset_name","ref_offset_x","ref_offset_y","wide_x",
+                           "line_string","lines","pick","active_type","ref_enabled","ref_asset_name","ref_offset_x","ref_offset_y","wide_x",
                            "gradient_custom_active","gradient_custom_cols","gradient_custom_count"];
             for (var _fi = 0; _fi < array_length(_fields); _fi++) {
                 var _fk = _fields[_fi];

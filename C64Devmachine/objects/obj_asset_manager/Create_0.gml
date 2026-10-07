@@ -58,6 +58,9 @@ map_view_cache = {
     rv_c2       : []       //                         -> MC colour 2
 };
 map_show_tags   = false;   // map editor [T]: char tag (tile type) badges on every cell
+pickup_room     = 0;       // PICKUP_TABLE editor: room shown
+pickup_scroll   = 0;       // PICKUP_TABLE editor: first entry row shown
+pickup_view     = 0;       // PICKUP_TABLE room preview: 0 ALL, 1 HIGHLIGHT, 2 PICKUPS ONLY
 map_top_mode    = 0;       // map editor top panel: 0 = STAMPS, 1 = ROOM PREVIEW (room maps) [G]
 map_hover_room  = -1;      // room under the mouse last frame (RLE room maps)
 map_prev_room   = 0;       // room shown in ROOM PREVIEW
@@ -85,6 +88,15 @@ var _scale_y = window_get_height() div 300;
 // The base cap is the smaller of the two (so it doesn't clip off screen), minimum 1x
 bmp_ui_zoom_cap_base = 3;
 bmp_ui_zoom_cap      = 3;
+
+// Bitmap editor grids (OPTIONS kept in c64devmachine.ini [bitmap]):
+//   CELL GRID  - every 8x8 cell, at any zoom, black + white lines
+//   ZOOM GRID  - the same lines fading in past 100% zoom, scaled by strength
+ini_open("c64devmachine.ini");
+bmp_cell_grid     = (ini_read_real("bitmap", "cell_grid", 0) == 1);
+bmp_zoom_grid_str = clamp(ini_read_real("bitmap", "zoom_grid_strength", 1), 0, 1);
+ini_close();
+bmp_zoom_grid_drag = false;
 
 // -------------------------------------------------------
 // PANEL LAYOUT
@@ -143,6 +155,7 @@ asset_types = [
     "MAP_DATA",
     "ROOM_MAP",
     "LINE_COLL",
+    "PICKUP_TABLE",
     "--- SOUND ---",
     "MUSIC_MAKER",
     "SFX_MAKER",
@@ -186,6 +199,7 @@ type_colours = {
     META_TILESET  : make_color_rgb(120, 200, 255),
     META_MAP      : make_color_rgb( 80, 140, 255),
     LINE_COLL     : make_color_rgb(255, 100, 100),
+    PICKUP_TABLE  : make_color_rgb(255, 200, 120),
     HUD           : make_color_rgb( 90, 220, 190),
     ANIMATION     : make_color_rgb(100, 210, 190),
     ROOM_MAP      : make_color_rgb(250, 200,  60),
@@ -750,6 +764,13 @@ mts_plan_map      = -1;
 
 // ---- Deferred charset preview rebuild (scr_chr_preview_defer) ----
 chr_preview_pending = noone;
+// CHAR_SET editor: slide a character (middle-drag / SPACE+drag / arrows)
+chr_shift_wrap = true;   // WRAP button: pixels re-enter on the opposite edge
+chr_shift_drag = false;  // a slide drag is in progress
+chr_shift_ax   = 0;      // where the drag started (GUI px)
+chr_shift_ay   = 0;
+chr_shift_ux   = 0;      // pixels / rows already applied in this drag
+chr_shift_uy   = 0;
 chr_preview_next_ms = 0;
 
 // ---- SID relocator (scr_sid_relocate) ----
@@ -809,6 +830,12 @@ manifest_preview_y = 300;
 manifest_preview_rect = [0,0,0,0];
 sid_asset_preview = undefined;
 sid_asset_name = "";
+// Node play buttons (SID SONG / SFX / SID nodes) - see scr_node_preview_toggle
+node_preview_node = noone;      // the node whose preview is sounding
+node_preview_kind = "";         // "SONG", "SFX", "SID" or ""
+node_preview_sim  = undefined;  // the reSID stream it started (SONG)
+node_preview_end  = 0;          // get_timer() when an SFX preview is done
+global.node_preview_meta = undefined;
 sid_asset_song = 0;
 sid_asset_message = "";
 manifest_draw_preview = function(_asset, _viewer_x, _row_y) {
@@ -950,3 +977,6 @@ manifest_draw_preview = function(_asset, _viewer_x, _row_y) {
 // MAP editor: zoom request from the Z-/Z+ buttons (-1 / +1), applied where
 // the canvas geometry is known so it can keep the view centred.
 map_zoom_step = 0;
+// MAP_DATA scrollbars: 0 = none, 1 = dragging the right-hand bar, 2 = the bottom bar
+map_sb_drag = 0;
+map_sb_grab = 0;   // where on the thumb it was grabbed (px)

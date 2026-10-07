@@ -38,15 +38,18 @@ draw_sprite_ext(spr_baseGradient, 0,
 	
 	
 // on left
-if (!expert_mode) {
+if (!scr_shelf_hidden()) {
     draw_sprite_ext(spr_baseGradient, 0,
         shelf_width, 0 , 2000, 1.5, 270, c_white, 1);
 }
 
 //color ref palette:
 var _psc = 0.8
-if (showPaletteHelper) {
-    draw_sprite_ext(spr_palette,0, 1640,980,_psc,_psc,0,c_white,1)
+// Colour reference strip (OPTIONS > PALETTE HELPER, off by default). Kept
+// on but not drawn while the param dock is showing, so the dock can use
+// the right side of the screen; it comes back when the dock goes.
+if (showPaletteHelper && !global.creator_dock.on) {
+    draw_sprite_ext(spr_palette, 0, 1640, 980, _psc, _psc, 0, c_white, 1);
 }
 
 
@@ -202,7 +205,7 @@ if (global.box_drag_active) {
 shelf_width = (86 * 3) - 20;
 var _sw_plus = shelf_width + 30;
 
-if (expert_mode) {
+if (scr_shelf_hidden()) {
     // Keep palette header pixels Y=0..46, except for palette frame 3.
     if (paletteStyle != 3) {
         var _expert_header_h = 47;
@@ -221,12 +224,12 @@ if (expert_mode) {
     draw_sprite(spr_palette_page, paletteStyle, 0, 0);
 }
 
-if (!expert_mode) draw_sprite_ext(spr_baseGradient, 0,
+if (!scr_shelf_hidden()) draw_sprite_ext(spr_baseGradient, 0,
     0, 1080 , _sw_plus, 1, 0, c_white, 0.5);
 
 draw_sprite(spr_logobadge,badgeStyle,6,5)
 
-if (!expert_mode) {
+if (!scr_shelf_hidden()) {
 
 /////////////////////////////////////////////////////////////////
 ///// OPCODE FINDER BOX
@@ -338,7 +341,7 @@ if (uiChromeStyle != 0)
 }
 draw_sprite(spr_menu_bar, _mbar_frame, _sw_plus ,0)
 
-if (!expert_mode) {
+if (!scr_shelf_hidden()) {
 
 // Combine the active page with common assets
 var active_palette = array_concat(palette_page[shelf_page], common_assets);
@@ -597,8 +600,9 @@ if (gui_menu_open == 4) {
         { title: "EFFECTS",         action: "EFFECTS"         },
         { title: "COMMENTS",        action: "COMMENTS"        },
         { title: "SHOW CODE",       action: "SHOW_CODE"       },
-        { title: "FLOW VIEW",       action: "FLOW_OVERLAY"    },
-        { title: "FLOW TYPE",       action: "FLOW_LINE_STYLE" },
+        { title: "FLOW VIEW",    action: "FLOW_OVERLAY"    },
+        { title: "FLOW TYPE",    action: "FLOW_LINE_STYLE" },
+        { title: "PARAMS",       action: "PARAM_CARDS"     },
         { title: "FULLSCREEN",      action: "FULLSCREEN"      },
         { title: "UI PRESET",          action: "CYBER_PRESET"     },
         { title: "PALETTE STYLE",      action: "PALETTE_STYLE"    },
@@ -685,6 +689,14 @@ if (gui_menu_open == 4) {
         }
         if (_op.action == "FULLSCREEN") {
             _shortcut_str = "F10";
+        }
+        if (_op.action == "PARAM_CARDS") {
+            _state_str = scr_creator_card_mode_name(global.creator_card_mode);
+            _state_col = c_lime;
+            _shortcut_str = "P";
+            if (global.creator_card_mode == CREATOR_CARDS_OFF) {
+                _state_col = c_red;
+            }
         }
         if (_op.action == "OPCODE_HEADERS") {
             _state_str = opcode_headers_on ? "ON" : "OFF";
@@ -809,6 +821,9 @@ if (gui_menu_open == 4) {
             }
             else if (_op.action == "GRID") {
                 showGrid = !showGrid;
+            }
+            else if (_op.action == "PARAM_CARDS") {
+                scr_creator_card_mode_cycle(_dir);
             }
             else if (_op.action == "EFFECTS") {
                 global.visual_fx       = !global.visual_fx;
@@ -938,7 +953,7 @@ if (gui_menu_open == 4) {
                 showGrid               = false;
                 expert_mode            = false;
                 opcode_helper_on       = true;
-                showPaletteHelper      = true;
+                showPaletteHelper      = false;   // off by default
                 global.visual_fx       = true;
                 global.node_destroy_fx = true;
                 global.comments_visible = true;
@@ -1207,6 +1222,7 @@ if (gui_menu_open == 7 || gui_menu_open == 8) {
     // All bundled JSONs and catalog IDs remain available for later work.
     var _visible_templates = [
         0 // SHMUP V
+        ,17 // GATE-GAME (logic gate puzzle)
         ,-3 // --- TEST ---
         ,16 // PARAMS TEST (Creator params / cards / panels test bed)
         // ,1 // V.SHMUP (PRO)
@@ -1223,8 +1239,8 @@ if (gui_menu_open == 7 || gui_menu_open == 8) {
     var _port_headers = ["GAMES", "MUSIC+GFX", "TEST"];
     if (gui_menu_open == 8) {
         _visible_templates = [-1, 10, 11, 13 // ZYRONS ESCAPE, SPY HUNTER, SABOTEUR
-            // ,14 // R-TYPE - reserved for a future version
-            // ,15 // BRUCE LEE - reserved for a future version
+             ,14 // R-TYPE - reserved for a future version
+             ,15 // BRUCE LEE - reserved for a future version
             , -2, 12]; // | WIZBALL
     }
     var _th = array_length(_visible_templates) * 24 + 24;
