@@ -1,3 +1,4 @@
+scr_perf_node("step", "(asset mgr)");
 scr_sid_asset_update();
 scr_node_preview_update();
 if (!viewer_open) { manifest_preview_name = ""; manifest_preview_owner = undefined; }
@@ -30,7 +31,7 @@ var _panel_h      = _panel_bottom - panel_y;
 
 panel_w = 244;
 panel_x = _gui_w - panel_w - 30;
-panel_y = 410;
+panel_y = 345;   // just under the shortcuts column (ends at y 340)
 global.mouse_in_asset_panel = false;
 global.mouse_in_asset_panel = point_in_rectangle(_mx, _my, panel_x, panel_y, _panel_right, _panel_bottom);
 
@@ -69,7 +70,7 @@ if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list))
     }
     // LINE_COLL: full screen (left tools / centred canvas / right list) -
     // same bounds as Draw GUI
-    if (asset_list[|viewer_asset].type == "LINE_COLL" || asset_list[|viewer_asset].type == "PICKUP_TABLE" || asset_list[|viewer_asset].type == "CHAR_SET") {
+    if (asset_list[|viewer_asset].type == "LINE_COLL" || asset_list[|viewer_asset].type == "PICKUP_TABLE" || asset_list[|viewer_asset].type == "CHAR_SET" || asset_list[|viewer_asset].type == "BITMAP") {
         _wide_modal = true;
         _vx1 = 30;
         _vx2 = _gui_w - 30;
@@ -81,7 +82,7 @@ if (viewer_open && viewer_asset >= 0 && viewer_asset < ds_list_size(asset_list))
         _vx1 = 12;
         _vx2 = _gui_w - 12;
         _vy1 = 8;
-        _vy2 = _gui_h - 8;
+        _vy2 = _gui_h - 30;   // room for the INFO strip (must match Draw GUI)
     }
 }
 var _mouse_in_viewer = viewer_open && point_in_rectangle(_mx, _my, _vx1, _vy1, _vx2, _vy2);
@@ -2076,7 +2077,20 @@ if (reu_drag_row >= 0) {
 // -------------------------------------------------------
 global.ui_click_block_timer = 0;
 global.ui_click_consumed    = false;
-if (mouse_check_button_pressed(mb_left) && !global.any_picker_open && !(_wide_modal && !_mouse_in_viewer)) {
+// Guided tour DO IT FOR ME: add an asset as if its row in the [ADD ASSET +]
+// list was clicked. The dropdown branch below runs first and exits.
+var _tour_add = false;
+if (global.tour_add_type != "") {
+    for (var _tai = 0; _tai < array_length(asset_types); _tai++) {
+        if (asset_types[_tai] == global.tour_add_type) {
+            add_dropdown_open  = true;
+            add_dropdown_hover = _tai;
+            _tour_add = true;
+        }
+    }
+    global.tour_add_type = "";
+}
+if ((mouse_check_button_pressed(mb_left) || _tour_add) && !global.any_picker_open && !(_wide_modal && !_mouse_in_viewer)) {
 
 // Close dropdown if clicking outside
     if (add_dropdown_open) {

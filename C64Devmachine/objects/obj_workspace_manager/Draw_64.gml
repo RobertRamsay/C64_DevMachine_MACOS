@@ -1,3 +1,4 @@
+scr_perf_mark("gui");
 /// @desc Draw GUI Event - Integrated Workspace UI
 
 // ---- IDLE SNAPSHOT OVERLAY (direct switch instead of node fade) ----
@@ -54,6 +55,7 @@ if (showPaletteHelper && !global.creator_dock.on) {
 
 
 /////////////////////////////////////////////////////////////////
+scr_perf_node("gui", "ws: box select");
 ///// -1. BOX SELECT OVERLAY
 /////////////////////////////////////////////////////////////////
 if (box_select_active) {
@@ -138,6 +140,7 @@ if (array_length(global.selected_nodes) > 0) {
 
 
 /////////////////////////////////////////////////////////////////
+scr_perf_node("gui", "ws: box drag preview");
 ///// 0. MAPPING BOX DRAG CURSOR + LIVE PREVIEW (TOPMOST)
 /////////////////////////////////////////////////////////////////
 if (global.box_drag_active) {
@@ -232,6 +235,7 @@ draw_sprite(spr_logobadge,badgeStyle,6,5)
 if (!scr_shelf_hidden()) {
 
 /////////////////////////////////////////////////////////////////
+scr_perf_node("gui", "ws: opcode finder");
 ///// OPCODE FINDER BOX
 /////////////////////////////////////////////////////////////////
 var _finder_x1 = 53;
@@ -502,6 +506,7 @@ if (opcode_helper_on) {
 }
 
 /////////////////////////////////////////////////////////////////
+scr_perf_node("gui", "ws: opcode shelf");
 ///// 1. OPCODE SHELF (PAGING SYSTEM) ON TOP : PAGE
 /////////////////////////////////////////////////////////////////
 
@@ -574,6 +579,7 @@ if (shelf_page < p_count - 1) {
 /////////////////////////////////////////////////////////////////
 
 /////////////////////////////////////////////////////////////////
+scr_perf_node("gui", "ws: menu bar + dropdowns");
 ///// MENU BAR
 /////////////////////////////////////////////////////////////////
 
@@ -600,6 +606,9 @@ if (gui_menu_open == 4) {
         { title: "EFFECTS",         action: "EFFECTS"         },
         { title: "COMMENTS",        action: "COMMENTS"        },
         { title: "SHOW CODE",       action: "SHOW_CODE"       },
+        { title: "MINIMIZE ALL",    action: "MINIMIZE_ALL"    },
+        { title: "EXPAND ALL",      action: "EXPAND_ALL"      },
+        { title: "NODE CACHE",      action: "NODE_CACHE"      },
         { title: "FLOW VIEW",    action: "FLOW_OVERLAY"    },
         { title: "FLOW TYPE",    action: "FLOW_LINE_STYLE" },
         { title: "PARAMS",       action: "PARAM_CARDS"     },
@@ -615,7 +624,7 @@ if (gui_menu_open == 4) {
         { title: "OPCODE HEADERS",     action: "OPCODE_HEADERS"     },
 		{ title: "OPCODE COMPACT",     action: "OPCODE_EXTRA_H"     },
         { title: "LANGUAGE",           action: "LANGUAGE"           },
-		
+
     ];
     var _item_h_o   = 20;
     var _panel_w_o  = 220;
@@ -668,6 +677,10 @@ if (gui_menu_open == 4) {
         if (_op.action == "GRID") {
             _state_str = showGrid ? "ON" : "OFF";
             _state_col = showGrid ? c_lime : c_red;
+        }
+        if (_op.action == "NODE_CACHE") {
+            _state_str = global.node_cache_enabled ? "ON" : "OFF";
+            _state_col = global.node_cache_enabled ? c_lime : c_red;
         }
         if (_op.action == "EFFECTS") {
             _state_str = global.visual_fx ? "ON" : "OFF";
@@ -821,6 +834,15 @@ if (gui_menu_open == 4) {
             }
             else if (_op.action == "GRID") {
                 showGrid = !showGrid;
+            }
+            else if (_op.action == "MINIMIZE_ALL") {
+                scr_org_set_all_collapsed(true);
+            }
+            else if (_op.action == "EXPAND_ALL") {
+                scr_org_set_all_collapsed(false);
+            }
+            else if (_op.action == "NODE_CACHE") {
+                global.node_cache_enabled = !global.node_cache_enabled;
             }
             else if (_op.action == "PARAM_CARDS") {
                 scr_creator_card_mode_cycle(_dir);
@@ -1521,7 +1543,6 @@ if (gui_menu_open == 5) {
     var _docs_list = [
         { title: "MANUAL",          url: "https://drive.google.com/file/d/1r-8fDv_DVx3g08g__E_lPZacmAgLBtsL/view?usp=sharing" }, // link under here
         { title: "ITCH PAGE",            url: "https://polytricity.itch.io/the-c64-dev-machine" }, // link under here    
-        { title: "TUTORIALS",            url: "https://www.youtube.com/playlist?list=PLDwNUwlf8I7ejOY_kKW8uw60fUdK0YqU7" }, // link under here    
         { title: "CODE ED MANUAL",          url: "https://drive.google.com/file/d/120G8C8hGg0UAC1NIZwYK62_IZSwjHzCU/view?usp=drive_link" }, // link under here
 	    { title: "--- REFS ---",    url: "HEADER" },
         { title: "C64 REGS WHITE",  url: "https://drive.google.com/file/d/1y8oW2eHtnjbsFUZ565K7qgD6iHuuqCUt/view?usp=drive_link" }, // link under here
@@ -1608,6 +1629,8 @@ if (gui_menu_open == 6) {
 
     array_push(_imp_list, { title: "CODE BLOCK (.ASM)", action: "CODE_ASM" });
     array_push(_imp_list, { title: "REU BMP IMPORT", action: "REU_BMP" });
+    array_push(_imp_list, { title: "MUSIC MAKER ASSET", action: "MUSIC_MM" });
+    array_push(_imp_list, { title: "MAPPING BOX", action: "MAP_BOX" });
 
 
     var _item_h_i   = 20;
@@ -1656,6 +1679,12 @@ if (gui_menu_open == 6) {
             else if (_ip.action == "REU_BMP") {
                 scr_import_reu_bmp_batch();
             }
+            else if (_ip.action == "MUSIC_MM") {
+                scr_import_music_maker();
+            }
+            else if (_ip.action == "MAP_BOX") {
+                scr_import_mapping_box();
+            }
         }
     }
 
@@ -1682,6 +1711,7 @@ if (gui_menu_open == 0) {
         { title: "CLR SCRN RAM", type: "MACRO_CLR_SCREEN"    },
         { title: "HUD",          type: "MACRO_HUD"           },
         { title: "CLR BMP RECT", type: "MACRO_CLEAR_BMP_RECT" },
+        { title: "BMP OBJECT",   type: "MACRO_BMP_OBJ"       },
         { title: "VWAIT (ALT+V)",        type: "MACRO_VWAIT"         },
         { title: "WAIT",         type: "MACRO_WAIT"          },
         { title: "NOP REPEAT",   type: "MACRO_NOP_REPEAT"    },
@@ -1928,6 +1958,7 @@ if (opcode_helper_on && opcode_hover_key != "" && opcode_hover_timer >= opcode_h
 // Node info is drawn once in Draw GUI End (Draw_75), above all panels.
 
 /////////////////////////////////////////////////////////////////
+scr_perf_node("gui", "ws: show code panel");
 ///// 1.9 SHOW CODE PANEL (floating, left of the shortcuts column)
 /////////////////////////////////////////////////////////////////
 // Draws before the shortcuts so the shortcuts column always wins any
@@ -1945,12 +1976,13 @@ scr_cbc_draw_button();
 scr_code_import_draw_banner();
 
 /////////////////////////////////////////////////////////////////
+scr_perf_node("gui", "ws: shortcuts column");
 ///// 2. GLOBAL SHORTCUTS (TOP RIGHT)
 /////////////////////////////////////////////////////////////////
 var sc_x_end   = gui_w - 2;
 var sc_y_start = 50;
 var sc_w       = 270;
-var sc_h       = 21;
+var sc_h       = 17;   // was 21: condensed so the asset panel can start higher
 
 var shortcuts = [
     ["CTRL+L",   "LOAD FILE"],
@@ -1970,7 +2002,7 @@ var shortcuts = [
 ];
 
 for (var j = 0; j < array_length(shortcuts); j++) {
-    var row_y  = sc_y_start + (j * (sc_h + 5));
+    var row_y  = sc_y_start + (j * (sc_h + 4));
     var box_x1 = sc_x_end - sc_w;
     var box_x2 = sc_x_end;
     var box_y1 = row_y;
@@ -1996,7 +2028,7 @@ for (var j = 0; j < array_length(shortcuts); j++) {
     var off = btn_click ? 2 : 0;
     draw_set_halign(fa_left);
     draw_set_color(c_white);
-    draw_text_transformed_l(box_x1 + 15, row_y + 2 + off, shortcuts[j][0], 1.0, 1.2, 0);
+    draw_text_transformed_l(box_x1 + 15, row_y + 1 + off, shortcuts[j][0], 1.0, 1.0, 0);
 
     draw_set_halign(fa_right);
 	
@@ -2033,10 +2065,10 @@ for (var j = 0; j < array_length(shortcuts); j++) {
             mode_text = global.use_hex_display ? "HEXADECIMAL" : "DECIMAL";
         }
         draw_set_color(label_col);
-        draw_text_transformed_l(box_x2 - 10, row_y + 3 + off, mode_text, 1.0, 1.2, 0);
+        draw_text_transformed_l(box_x2 - 10, row_y + 1 + off, mode_text, 1.0, 1.0, 0);
     } else {
         draw_set_color(btn_hover ? c_aqua : c_gray);
-        draw_text_transformed_l(box_x2 - 10, row_y + 3 + off, shortcuts[j][1], 1.0, 1.2, 0);
+        draw_text_transformed_l(box_x2 - 10, row_y + 1 + off, shortcuts[j][1], 1.0, 1.0, 0);
     }
     draw_set_halign(fa_left);
 	
@@ -2251,6 +2283,7 @@ case "TOGGLE AUTOSAVE MODE":
 
 
 /////////////////////////////////////////////////////////////////
+scr_perf_node("gui", "ws: footer + logo");
 ///// 3. FOOTER & LOGO
 /////////////////////////////////////////////////////////////////
 draw_set_halign(fa_left);
@@ -2450,6 +2483,7 @@ if (gui_menu_open == -1) {
 }
 
 /////////////////////////////////////////////////////////////////
+scr_perf_node("gui", "ws: memory bar");
 ///// 3B+3C. MEMORY MAP + WRITE ORDER BAR
 /////////////////////////////////////////////////////////////////
 
@@ -2460,6 +2494,7 @@ scr_draw_memory_bar(_bar_x1, _bar_x2, gui_h - 40);
  scr_code_editor_draw();
 
 /////////////////////////////////////////////////////////////////
+scr_perf_node("gui", "ws: modals + code editor");
 ///// 4. DYNAMIC MODALS (EDITING & QUIT)
 /////////////////////////////////////////////////////////////////
 // A COMMENT is typed on the node itself now, so the centre-screen modal is
@@ -2601,6 +2636,7 @@ if (readyToQuit == 1) {
 }
 
 /////////////////////////////////////////////////////////////////
+scr_perf_node("gui", "ws: perf monitor");
 ///// 5. PERFORMANCE MONITOR (BOTTOM LEFT)
 /////////////////////////////////////////////////////////////////
 draw_set_font_l(fnt_c64_tiny);
@@ -2711,6 +2747,7 @@ draw_set_valign(fa_top);
 draw_set_halign(fa_left);
 
 /////////////////////////////////////////////////////////////////
+scr_perf_node("gui", "ws: breakdown overlay");
 ///// 6. MACRO BREAKDOWN OVERLAY
 /////////////////////////////////////////////////////////////////
 if (instance_exists(global.breakdown_node)) {
@@ -2894,6 +2931,7 @@ if (instance_exists(global.breakdown_node)) {
 
 
 /////////////////////////////////////////////////////////////////
+scr_perf_node("gui", "ws: macro info overlay");
 ///// 7. DYNAMIC MACRO INFO OVERLAY (MONITOR STYLE)
 // Scrollable via mousewheel or UP/DOWN arrows when open.
 // Scroll state lives in info_scroll_offset on obj_workspace_manager.
@@ -3407,6 +3445,22 @@ if (global.show_info_window && instance_exists(global.info_node)) {
 	        draw_rectangle(_cn_x, _ok_y, _cn_x + _ok_w, _ok_y + 24, false);
 	        draw_set_color(_cn_hov ? c_black : c_white);
 	        draw_text_l(_cn_x + _ok_w * 0.5, _ok_y + 5, "CANCEL");
+
+	        // EXPORT: the box and the nodes in it, as a .c64box file for
+	        // IMPORT > MAPPING BOX in another project. Existing boxes only.
+	        if (box_popup_is_edit) {
+	            var _ex_w   = 100;
+	            var _ex_x   = _px + (_pw - _ex_w) * 0.5;
+	            var _ex_hov = (gui_mouse_x >= _ex_x && gui_mouse_x <= _ex_x + _ex_w &&
+	                           gui_mouse_y >= _ok_y && gui_mouse_y <= _ok_y + 24);
+	            draw_set_color(_ex_hov ? c_aqua : make_color_rgb(30, 70, 100));
+	            draw_rectangle(_ex_x, _ok_y, _ex_x + _ex_w, _ok_y + 24, false);
+	            draw_set_color(_ex_hov ? c_black : c_white);
+	            draw_text_l(_ex_x + _ex_w * 0.5, _ok_y + 5, "EXPORT");
+	            if (_ex_hov && mouse_check_button_released(mb_left)) {
+	                scr_mapping_box_export(box_popup_target, (box_popup_name == "") ? box_popup_target.box_name : box_popup_name);
+	            }
+	        }
 	        draw_set_halign(fa_left);
 
 	        if (_ok_hov && mouse_check_button_released(mb_left)) {
@@ -3684,6 +3738,7 @@ if (global.show_info_window && instance_exists(global.info_node)) {
 	}
 	
 /////////////////////////////////////////////////////////////////
+scr_perf_node("gui", "ws: helper overlay");
 ///// 8. HELPER OVERLAY
 /////////////////////////////////////////////////////////////////
 if (global.show_helper_window && instance_exists(global.helper_node)) {
@@ -4144,7 +4199,32 @@ if (welcome_open) {
         draw_text_l(_px + 20, _py + 66, "GUIDED TOURS");
         draw_set_font_l(fnt_c64_tiny);
         draw_set_color(make_color_rgb(160, 160, 160));
-        draw_text_l(_px + 180, _py + 72, "Pick one. Each step waits for you to do it.");
+        draw_text_l(_px + 180, _py + 72, "Each step waits for you.");
+
+        // Page arrows and PAGE n / N
+        var _pg_n   = _tg.pages;
+        var _pg_cur = welcome_tour_scroll div _tg.rows;
+        if (_pg_n > 1) {
+            var _pg_btns = [[_tg.prev, "<", _pg_cur > 0], [_tg.next, ">", _pg_cur < _pg_n - 1]];
+            for (var _pb = 0; _pb < 2; _pb++) {
+                var _pr  = _pg_btns[_pb][0];
+                var _pon = _pg_btns[_pb][2];
+                var _phv = _pon && point_in_rectangle(_wmx, _wmy, _pr[0], _pr[1], _pr[2], _pr[3]);
+                draw_set_color(_phv ? make_color_rgb(60, 60, 90) : make_color_rgb(40, 40, 52));
+                draw_rectangle(_pr[0], _pr[1], _pr[2], _pr[3], false);
+                draw_set_color(_pon ? make_color_rgb(200, 160, 40) : make_color_rgb(70, 70, 85));
+                draw_rectangle(_pr[0], _pr[1], _pr[2], _pr[3], true);
+                draw_set_halign(fa_center);
+                draw_set_valign(fa_middle);
+                draw_set_color(_pon ? c_white : make_color_rgb(70, 70, 85));
+                draw_text_l((_pr[0] + _pr[2]) * 0.5, (_pr[1] + _pr[3]) * 0.5, _pg_btns[_pb][1]);
+            }
+            draw_set_color(make_color_rgb(200, 160, 40));
+            draw_text_l((_tg.prev[2] + _tg.next[0]) * 0.5, (_tg.prev[1] + _tg.prev[3]) * 0.5,
+                "PAGE " + string(_pg_cur + 1) + " / " + string(_pg_n));
+            draw_set_halign(fa_left);
+            draw_set_valign(fa_top);
+        }
 
         for (var _tr = 0; _tr < _tg.rows; _tr++) {
             var _ti = welcome_tour_scroll + _tr;
@@ -4184,18 +4264,6 @@ if (welcome_open) {
         draw_set_color(make_color_rgb(200, 160, 40));
         draw_text_l(_px + 20, _py + _ph - 30, "DOCUMENTS > TAKE THE TOUR...");
 
-        // Scrollbar, only when the list is longer than the panel
-        if (array_length(_tours) > _tg.rows) {
-            var _sb_x1 = _tg.list[2] - 6;
-            var _sb_y1 = _tg.list[1];
-            var _sb_h  = _tg.rows * _tg.row_h - 4;
-            var _th_h  = max(20, _sb_h * (_tg.rows / array_length(_tours)));
-            var _th_y  = _sb_y1 + (_sb_h - _th_h) * (welcome_tour_scroll / max(1, array_length(_tours) - _tg.rows));
-            draw_set_color(make_color_rgb(40, 40, 52));
-            draw_rectangle(_sb_x1, _sb_y1, _sb_x1 + 6, _sb_y1 + _sb_h, false);
-            draw_set_color(make_color_rgb(200, 160, 40));
-            draw_rectangle(_sb_x1, _th_y, _sb_x1 + 6, _th_y + _th_h, false);
-        }
     } else {
         // What's New
         var _wy = _py + 70;

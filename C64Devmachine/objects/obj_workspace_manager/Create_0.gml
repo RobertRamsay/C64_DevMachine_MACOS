@@ -205,14 +205,14 @@ welcome_credits_y      = 0;
 welcome_mode           = 0;      // 0 = welcome / what's new, 1 = guided tour list
 welcome_tour_scroll    = 0;      // first visible row in the tour list
 welcome_whats_new = [
-    "NEW PORTS - R-TYPE and BRUCE LEE join SABOTEUR in PORTS (full games, editable).",
-    "NEW TEMPLATE - GATE-GAME: a 20-level logic-gate puzzle game.",
-    "NEW - GUIDED TOURS: step-by-step lessons with highlights (DOCUMENTS menu).",
-    "NEW - CREATOR layer: parameter cards, card modes and GO buttons on panels.",
-    "NEW - PICKUP TABLE asset and MAP TILE TAGS for room-based games.",
-    "REFINED - PLAY buttons on SID nodes, map scrollbars, bitmap CELL GRID.",
-    "REFINED - TXT SCROLL runs on its own raster IRQ when there is no SID.",
-    "REFINED - Assembler: bad branches and labels are now clear build errors.",
+    "NEW - BITMAP OBJECTS and the BMP OBJECT node: masked draw, save, restore and move.",
+    "NEW - BITMAP SPRITES: hardware sprites over the bitmap editor, MUX and SETUP NODES.",
+    "NEW - GUIDED TOURS page 2: ANIMATE A SPRITE and PLATFORM GAME, plus DO IT FOR ME.",
+    "NEW - INFO strip in every asset editor: hover any control to see what it does.",
+    "NEW - MUSIC MAKER: REBUILD button and .c64mm / .c64box export and import.",
+    "NEW - PERF HUD (F11), node image cache, OPTIONS > MINIMIZE ALL / EXPAND ALL.",
+    "REFINED - Sprite editor ALL -> MC / HR and Shift+click range select.",
+    "REFINED - JSR/JMP/branch targets with no label now draw in red.",
     "",
     "SHARE your Custom Code blocks like a PRO in the Discord user-code-blocks channel.",
     "SUPPORT the development by leaving a review on ITCH and buying the PRO version.",
@@ -325,6 +325,7 @@ scan_speed = 10; // Speed of the downward scan
 code_editor_open      = false;
 code_editor_node      = noone;
 code_editor_text      = "";
+code_editor_open_text = "";   // text when the editor opened (scr_code_editor_close)
 code_editor_cursor    = 0;
 code_editor_sel_start = -1;
 code_editor_sel_end   = -1;
@@ -485,6 +486,13 @@ exo_out_path    = "";
 exo_timeout     = 0;
 exo_last_size   = -1;
 exo_to_c64u     = false;
+// MUSIC MAKER > REBUILD runs the project's music_rebuild_command (scr_music_rebuild_start);
+// Step polls for the marker file it writes when it is done.
+global.music_rebuild_cmd = "";
+music_rebuild_pending = false;
+music_rebuild_done    = "";
+music_rebuild_timeout = 0;
+music_rebuild_meta    = undefined;
 global.breakdown_node = noone;
 
 // Normally created by obj_c64_node's Create, but the Begin Step label-highlight
@@ -522,6 +530,8 @@ global.tour_rects       = [];
 global.tour_stamps      = [];
 global.tour_frame       = 0;
 global.tour_build_count = 0;
+global.tour_add_type    = "";   // DO IT FOR ME: asset type to add, as if picked from [ADD ASSET +]
+global.tour_click       = "";   // DO IT FOR ME: captured button to treat as clicked once
 global.tour_waiting     = -1;   // tour id waiting on the clear/save question
 global.tour_default_hash = "";  // workspace hash of the fresh startup state
 tour_baseline_timer     = 30;   // frames before the startup hash is taken
@@ -922,6 +932,8 @@ label_jump_pending = noone;    // LABEL waiting for its folded ORG to reflow
 label_jump_reflow  = 0;        // frames left before the camera moves to it
 label_jump_fx_node = noone;    // LABEL showing the arrival pulse
 label_jump_fx_t    = 1;        // 0..1 progress of the pulse (1 = finished)
+setup_settle_org   = noone;    // ORG made by the bitmap editor's SETUP NODES
+setup_settle_timer = 0;        // frames left before its node heights are re-measured and packed
 
 // MACRO_REU asset drop-down (ASSET mode) — drawn in Draw_64 so it sits on top
 reu_pick_open   = false;
@@ -1394,6 +1406,14 @@ alarm[4] = game_get_speed(gamespeed_fps) * global.autosave_interval;
 autosave_countdown = global.autosave_interval;
 autosave_flash_timer = 0;
 _was_panning = false;
+
+// ---- PERF HUD (F11, scr_perf_hud) ----
+global.perf_on = false;
+global.perf    = undefined;
+global.nodes_quiet = false;   // set each Begin Step; read by the node Step fast exit
+global.node_cache_enabled = true;   // OPTIONS > NODE CACHE (scr_node_cache_begin)
+global.node_cache_live    = false;
+global.node_cache_gsig    = "";
 
 // ---- IDLE SLEEP SYSTEM ----
 global.idle_active   = false;   // true once idle threshold passed

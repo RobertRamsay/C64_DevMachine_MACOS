@@ -581,6 +581,16 @@ function scr_creator_begin_step() {
         exit;
     }
 
+    // The asset panel sits over the canvas: a click there is the panel's, so
+    // the P tabs and param cards under it must not see it (nodes already
+    // check this in their own Step).
+    if (variable_global_exists("mouse_in_asset_panel") && global.mouse_in_asset_panel) {
+        exit;
+    }
+    if (instance_exists(obj_asset_manager)) {
+        if (obj_asset_manager.add_dropdown_open) { exit; }
+    }
+
     // Param cards on the canvas own the pointer while it is over them.
     if (scr_creator_cards_step()) {
         exit;
@@ -2160,6 +2170,12 @@ function scr_macro_slot_names(_type) {
                 scr_slot(6, "DEST ROW",      "RANGE", 0, 24, ""),
                 scr_slot(7, "WIDTH",         "RANGE", 1, 40, ""),
                 scr_slot(8, "HEIGHT",        "RANGE", 1, 25, "")
+            ];
+        case "MACRO_BMP_OBJ":
+            return [
+                scr_slot(3, "OBJECT", "RANGE", 0, 255, ""),
+                scr_slot(4, "COLUMN", "RANGE", 0, 39, ""),
+                scr_slot(5, "ROW",    "RANGE", 0, 24, "")
             ];
         case "MACRO_CLEAR_BMP_RECT":
             return [

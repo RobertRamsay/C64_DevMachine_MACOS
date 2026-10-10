@@ -176,8 +176,14 @@ function scr_tour_list() {
         { title: "SCROLLING TEXT",      blurb: "Clear the screen and run a scrolling message with TXT SCROLL." },
         { title: "SPRITE COLLISION",    blurb: "Flash the border when two ships touch, using COLLIDE." },
         { title: "MAKE SOME MUSIC",     blurb: "Turn a Music Maker tune into nodes and play it on the C64." },
+        // Page 2
+        { title: "ANIMATE A SPRITE",    blurb: "Set up a 4 frame walk in the compositor and CONVERT TO NODES." },
+        { title: "PLATFORM GAME",       blurb: "Walk, jump and fall off platforms, with animation and music." },
     ];
 }
+
+/// @desc Tours shown per page of the welcome panel list.
+#macro TOUR_PAGE_ROWS 10
 
 /// @desc Welcome panel tour list geometry. Shared by Step (clicks) and
 ///       Draw GUI (drawing) so the two can never disagree.
@@ -189,11 +195,19 @@ function scr_tour_welcome_geom(_px, _py, _pw, _ph) {
     var _row_h  = 40;
     var _list_y1 = _py + 96;
     var _list_y2 = _py + _ph - 60;
+    // Page arrows, top right beside the GUIDED TOURS title
+    var _pg_x2 = _px + _pw - 20;
+    var _pg_y1 = _py + 66;
+    var _tours = array_length(scr_tour_list());
+    var _rows  = min(TOUR_PAGE_ROWS, floor((_list_y2 - _list_y1) / _row_h));
     return {
         btn   : [_btn_x2 - _btn_w, _btn_y1, _btn_x2, _btn_y1 + _btn_h],
         list  : [_px + 20, _list_y1, _px + _pw - 20, _list_y2],
         row_h : _row_h,
-        rows  : floor((_list_y2 - _list_y1) / _row_h)
+        rows  : _rows,
+        pages : max(1, ceil(_tours / _rows)),
+        prev  : [_pg_x2 - 128, _pg_y1, _pg_x2 - 100, _pg_y1 + 20],
+        next  : [_pg_x2 - 28, _pg_y1, _pg_x2, _pg_y1 + 20]
     };
 }
 
@@ -568,6 +582,10 @@ function scr_tour_define(_id) {
             [], "NONE"));
     }
 
+    if (_id >= 10) {
+        _s = scr_tour_define_page2(_id);
+    }
+
     return _s;
 }
 
@@ -622,6 +640,9 @@ function scr_tour_enter_step() {
     base_undo_top  = undefined;
     base_undo_name = "";
     base_build     = global.tour_build_count;
+    base_jsr_count = scr_tour_count_op("jsr", false);
+    base_rts_count = scr_tour_count_op("rts", false);
+    base_jmp_count = scr_tour_count_op("jmp_abs", false);
 }
 
 /// @desc Draw loops call this with the rect they just drew for _key.
@@ -644,10 +665,21 @@ function scr_tour_capture_world(_key, _x1, _y1, _x2, _y2) {
     if (!global.tour_active) {
         return;
     }
-    var _wm = obj_workspace_manager;
-    scr_tour_capture(_key,
-        (_x1 - _wm.cam_x) / _wm.cam_zoom, (_y1 - _wm.cam_y) / _wm.cam_zoom,
-        (_x2 - _wm.cam_x) / _wm.cam_zoom, (_y2 - _wm.cam_y) / _wm.cam_zoom);
+    var _r = scr_tour_world_to_gui(_x1, _y1, _x2, _y2);
+    scr_tour_capture(_key, _r[0], _r[1], _r[2], _r[3]);
+}
+
+/// @desc World rect -> GUI rect through the view the canvas is actually drawn
+///       with this frame. cam_x / cam_y are where the camera is heading: the
+///       tour's glide moves them after the workspace has already set the view,
+///       so using them put every box a frame ahead of its node while gliding.
+function scr_tour_world_to_gui(_x1, _y1, _x2, _y2) {
+    var _cam = obj_workspace_manager.cam_view;
+    var _vx  = camera_get_view_x(_cam);
+    var _vy  = camera_get_view_y(_cam);
+    var _sx  = global.gui_w / camera_get_view_width(_cam);
+    var _sy  = display_get_gui_height() / camera_get_view_height(_cam);
+    return [(_x1 - _vx) * _sx, (_y1 - _vy) * _sy, (_x2 - _vx) * _sx, (_y2 - _vy) * _sy];
 }
 
 /// @desc Operand as a number: reals pass through, "$D020" and "53280" parse.
@@ -911,13 +943,8 @@ function scr_tour_check(_code) {
 
 /// @desc GUI rect of a node (world -> GUI via the workspace camera).
 function scr_tour_node_rect(_n) {
-    var _wm = obj_workspace_manager;
     var _nx = _n.x + _n.x_indent;
-    var _x1 = (_nx - _wm.cam_x) / _wm.cam_zoom;
-    var _y1 = (_n.y - _wm.cam_y) / _wm.cam_zoom;
-    var _x2 = (_nx + _n.width - _wm.cam_x) / _wm.cam_zoom;
-    var _y2 = (_n.y + _n.height - _wm.cam_y) / _wm.cam_zoom;
-    return [_x1, _y1, _x2, _y2];
+    return scr_tour_world_to_gui(_nx, _n.y, _nx + _n.width, _n.y + _n.height);
 }
 
 /// @desc Resolve the current step's highlight. Returns [x1,y1,x2,y2] or
@@ -1012,6 +1039,12 @@ function scr_tour_panel_click_self() {
 
     var _last = array_length(steps) - 1;
 
+    if (doit_vis && point_in_rectangle(_mx, _my, btn_doit[0], btn_doit[1], btn_doit[2], btn_doit[3])) {
+        doit_vis = false;
+        scr_tour_do_it();
+        return;
+    }
+
     if (point_in_rectangle(_mx, _my, btn_exit[0], btn_exit[1], btn_exit[2], btn_exit[3])) {
         scr_tour_end();
         return;
@@ -1072,6 +1105,10 @@ function scr_tour_setup(_id) {
         scr_tour_make_music();
         _made = true;
     }
+    if (_id >= 10) {
+        scr_tour_setup_page2(_id);
+        _made = true;
+    }
     if (_made) {
         global.addresses_dirty = true;
         global.undo_dirty      = true;
@@ -1123,13 +1160,13 @@ function scr_tour_make_ship() {
     scr_asset_spr_cache_sprites(_a, true);
 }
 
-/// @desc A MUSIC_MAKER asset called TOUR_TUNE, filled from the bundled
-///       TOURS/tour_music.json through the same path the project loader uses.
-function scr_tour_make_music() {
+/// @desc A MUSIC_MAKER asset called _name (TOUR_TUNE), filled from the bundled
+///       TOURS/_file (tour_music.json) through the same path the project loader uses.
+function scr_tour_make_music(_file = "tour_music.json", _name = "TOUR_TUNE") {
     if (!instance_exists(obj_asset_manager)) {
         return;
     }
-    var _path = working_directory + "C64DMResources/TOURS/tour_music.json";
+    var _path = working_directory + "C64DMResources/TOURS/" + _file;
     if (!file_exists(_path)) {
         scr_show_message("The tour music file is missing.");
         return;
@@ -1153,7 +1190,7 @@ function scr_tour_make_music() {
     }
     var _a = {
         type          : "MUSIC_MAKER",
-        name          : "TOUR_TUNE",
+        name          : _name,
         file          : "",
         address       : scr_asset_default_address("MUSIC_MAKER"),
         buffer        : buffer_create(1, buffer_fixed, 1),
@@ -1221,6 +1258,7 @@ function scr_tour_spine_label(_name, _st) {
 ///       LOOP    : MAIN, VWAIT, JMP MAIN
 ///       SPRITE  : SPRITE (SHIP), then LOOP
 ///       COLLIDE : two SPRITEs, LOOP with JOYSTICK, and LF / RT move routines
+///       PLATFORM: JSR LEVEL_DRAW, then LOOP with JSR PHYS_UPDATE after VWAIT
 function scr_tour_build_starter(_kind) {
     var _init = scr_tour_node_by_type("INIT");
     if (_init == noone) {
@@ -1249,8 +1287,14 @@ function scr_tour_build_starter(_kind) {
         _n.instructions[0][4] = 150;
     }
 
+    if (_kind == "PLATFORM") {
+        scr_tour_spine_op("jsr", "LEVEL_DRAW", _st);
+    }
     scr_tour_spine_label("MAIN", _st);
     scr_tour_spine_macro("MACRO_VWAIT", _st);
+    if (_kind == "PLATFORM") {
+        scr_tour_spine_op("jsr", "PHYS_UPDATE", _st);
+    }
     if (_kind == "COLLIDE") {
         _n = scr_tour_spine_macro("MACRO_JOY", _st);
         _n.instructions[16][2] = 1;
@@ -1397,7 +1441,7 @@ function scr_tour_last_by_type(_type) {
     var _hit = noone;
     var _y   = -1000000;
     with (obj_c64_node) {
-        if (is_connected && node_type == _type && y > _y) {
+        if (is_connected && org_parent == noone && node_type == _type && y > _y) {
             _y   = y;
             _hit = id;
         }
@@ -1692,7 +1736,7 @@ function scr_tour_check_ext(_code) {
             }
             return !scr_node_preview_is(_n);
     }
-    return false;
+    return scr_tour_check_page2(_code);
 }
 
 /// @desc Highlight keys added for tours 3-9. Returns a GUI rect or undefined.
@@ -1813,6 +1857,9 @@ function scr_tour_drop_node(_k) {
     if (string_copy(_k, 1, 7) == "LASTOP:") {
         _n = scr_tour_last_by_op(string_delete(_k, 1, 7));
     }
+    if (string_copy(_k, 1, 6) == "JSRTO:") {
+        _n = scr_tour_jsr_to(string_delete(_k, 1, 6), false);
+    }
     if (_n == noone) {
         return noone;
     }
@@ -1827,7 +1874,7 @@ function scr_tour_last_by_op(_op) {
     var _hit = noone;
     var _y   = -1000000;
     with (obj_c64_node) {
-        if (is_connected && node_type == "NORMAL" && y > _y) {
+        if (is_connected && org_parent == noone && node_type == "NORMAL" && y > _y) {
             if (array_length(instructions) > 0) {
                 if (string_lower(string(instructions[0][0])) == _op) {
                     _y   = y;
@@ -1895,7 +1942,7 @@ function scr_tour_draw_drop(_n, _pulse, _gw, _gh) {
 /// @desc True for highlight keys that live on the canvas (a node or one of
 ///       its fields), as opposed to menus, the palette, assets or pickers.
 function scr_tour_is_world_key(_k) {
-    var _pre = ["FIELD:", "OPERAND0:", "OPERAND:", "NODEOP:", "NODETYPE:", "LABELNAME:", "LASTTYPE:", "FREELABEL"];
+    var _pre = ["FIELD:", "OPERAND0:", "OPERAND:", "NODEOP:", "NODETYPE:", "LABELNAME:", "LASTTYPE:", "FREELABEL", "OPERANDNEW:"];
     for (var _i = 0; _i < array_length(_pre); _i++) {
         if (string_copy(_k, 1, string_length(_pre[_i])) == _pre[_i]) {
             return true;
@@ -1988,8 +2035,11 @@ function scr_tour_glide_step() {
             var _gx = (_r[0] + _r[2]) * 0.5;
             var _gy = (_r[1] + _r[3]) * 0.5;
             if (!point_in_rectangle(_gx, _gy, _u[0] + _mx, _u[1] + _my, _u[2] - _mx, _u[3] - _my)) {
-                var _wx = _wm.cam_x + (_gx * _wm.cam_zoom);
-                var _wy = _wm.cam_y + (_gy * _wm.cam_zoom);
+                // _r is in the drawn view's GUI space (scr_tour_world_to_gui),
+                // so map it back to the world through that same view
+                var _gv = _wm.cam_view;
+                var _wx = camera_get_view_x(_gv) + (_gx * camera_get_view_width(_gv) / global.gui_w);
+                var _wy = camera_get_view_y(_gv) + (_gy * camera_get_view_height(_gv) / display_get_gui_height());
                 glide_tx     = _wx - (((_u[0] + _u[2]) * 0.5) * _wm.cam_zoom);
                 glide_ty     = _wy - (((_u[1] + _u[3]) * 0.5) * _wm.cam_zoom);
                 glide_active = true;
@@ -2063,4 +2113,1413 @@ function scr_tour_glide_step() {
         _wm.cam_y    = glide_ty;
         glide_active = false;
     }
+}
+
+// ---------------------------------------------------------------------------
+// Page 2 of the tour list (tours 11-20). Tour ids 10 and up.
+// ---------------------------------------------------------------------------
+
+/// @desc Steps for the page 2 tours.
+function scr_tour_define_page2(_id) {
+    var _s = [];
+
+    if (_id == 10) {
+        array_push(_s, scr_tour_step_focus("WELCOME",
+            "A sprite set called WALKER is in your asset panel. Its 4 slots hold the frames of a walk, already drawn. A game loop (MAIN, VWAIT, JMP MAIN) is set up too.\n\nIn this tour you will put the frames in order in the compositor, play them, then CONVERT TO NODES and watch the walk on the C64.",
+            [], "NONE", "FIT"));
+        array_push(_s, scr_tour_step("OPEN WALKER",
+            "Click EDIT on the WALKER row to open its viewer.",
+            ["ASSET:EDIT:SPRITE_SET", "ASSET:PANEL"], "SPR_VIEW"));
+        array_push(_s, scr_tour_step("OPEN THE SPRITE EDITOR",
+            "Click EDIT SPRITES to open the sprite editor.",
+            ["ASSET:SPR_EDIT"], "SPR_V2_OPEN"));
+        array_push(_s, scr_tour_step("FRAME 1",
+            "The strip at the top holds the walk drawings. Slots 0 to 3 face right; 4 to 7 are the same walk flipped to face left, for the PLATFORM GAME tour. Slot 0 is selected.\n\nThe compositor at the bottom right builds each frame of the animation. Click the highlighted square to put slot 0 in FRAME 1.",
+            ["SPR:SLOT:0", "SPR:CELL"], "COMP_F:1"));
+        for (var _f = 2; _f <= 4; _f++) {
+            array_push(_s, scr_tour_step("ADD FRAME " + string(_f),
+                "Click + NEW to add FRAME " + string(_f) + ".",
+                ["SPR:FRAME_NEW"], "COMP_N:" + string(_f)));
+            array_push(_s, scr_tour_step("FRAME " + string(_f),
+                "Click slot " + string(_f - 1) + " in the strip, then the same square in the compositor.\n\nEvery frame uses the same square: only the drawing changes.",
+                ["SPR:SLOT:" + string(_f - 1), "SPR:CELL"], "COMP_F:" + string(_f)));
+        }
+        array_push(_s, scr_tour_step("PLAY IT",
+            "Click PLAY to watch the walk. The FPS setting beside it sets the speed, and it is used on the C64 too.",
+            ["SPR:PLAY"], "SPR_PLAYING"));
+        array_push(_s, scr_tour_step("CONVERT TO NODES",
+            "Click CONVERT TO NODES.\n\nIt builds a block with two routines: WALKER_SHOW puts the sprite on screen, and WALKER_ANIM runs an ANIMATE node that steps through your 4 frames. Click OK on the message.",
+            ["SPR:CONVERT"], "ANIM_MADE"));
+        array_push(_s, scr_tour_step_at("SHOW THE WALKER",
+            "JSR calls a routine and comes back to carry on.\n\nDrag JSR from the opcode palette onto the spine under SYSTEM INIT.",
+            ["PAL:JSR", "ARROW:R"], "JSR_MORE", "NODETYPE:INIT"));
+        array_push(_s, scr_tour_step("CALL WALKER_SHOW",
+            "Click the JSR value and choose WALKER_SHOW from the list.\n\nIt runs once, before the loop starts.",
+            ["PICK:WALKER_SHOW", "OPERANDNEW:jsr"], "JSR_TO:WALKER_SHOW"));
+        array_push(_s, scr_tour_step_at("ANIMATE EVERY FRAME",
+            "Drag another JSR onto the spine between VWAIT and JMP MAIN.",
+            ["PAL:JSR", "ARROW:R"], "JSR_MORE", "NODETYPE:MACRO_VWAIT"));
+        array_push(_s, scr_tour_step("CALL WALKER_ANIM",
+            "Click the new JSR value and choose WALKER_ANIM.\n\nThe loop runs 50 times a second, and ANIMATE moves to the next frame every few calls.",
+            ["PICK:WALKER_ANIM", "OPERANDNEW:jsr"], "JSR_LOOP:WALKER_ANIM"));
+        array_push(_s, scr_tour_step("BUILD AND RUN",
+            "Press F5, or click BUILD & RUN on the right, to build and launch.",
+            ["UI:BUILD & RUN"], "BUILT"));
+        array_push(_s, scr_tour_step("DONE!",
+            "Your walker walks on the spot in the middle of the screen.\n\nCall WALKER_ANIM only while the joystick is pushed and it only walks while it moves. The PLATFORM GAME tour does just that.",
+            [], "NONE"));
+    }
+
+    if (_id == 11) {
+        array_push(_s, scr_tour_step_focus("WELCOME",
+            "Everything from the earlier tours comes together here.\n\nAlready set up: WALKER with its walk in the compositor (frames 1-4 face right, 5-8 face left), the PLATFORM_TUNE song, a PLATFORM KIT that draws a level and handles gravity and jumping, and a game loop that calls it.\n\nYou will add the walker, steering, the walk animation, jumping and music.",
+            [], "NONE", "FIT"));
+        array_push(_s, scr_tour_step("THE PLATFORM KIT",
+            "LEVEL_DRAW clears the screen and draws the platforms.\n\nPHYS_UPDATE runs every frame: it pulls sprite 0 down, lands it on solid blocks and lets it fall off edges. PHYS_JUMP starts a jump when the sprite is standing.\n\nOpen the CODE blocks to read the 6502. Click NEXT.",
+            ["LABELNAME:PHYS_UPDATE"], "NONE"));
+        array_push(_s, scr_tour_step("OPEN WALKER",
+            "Click EDIT on the WALKER row to open its viewer.",
+            ["ASSET:EDIT:SPRITE_SET", "ASSET:PANEL"], "SPR_VIEW"));
+        array_push(_s, scr_tour_step("OPEN THE SPRITE EDITOR",
+            "Click EDIT SPRITES to open the sprite editor.",
+            ["ASSET:SPR_EDIT"], "SPR_V2_OPEN"));
+        array_push(_s, scr_tour_step("CONVERT TO NODES",
+            "The walk is already in the compositor, as you built it in the ANIMATE A SPRITE tour. START and END pick the frames that play: 0 to 3 is frames 1-4, the walk to the right. Click PLAY to see it if you like.\n\nThen click CONVERT TO NODES, and OK on the message.",
+            ["SPR:CONVERT"], "ANIM_MADE"));
+        // The left walk: the mirrored frames, converted into the same block
+        array_push(_s, scr_tour_step("THE LEFT WALK",
+            "Frames 5-8 hold the same walk flipped to face left. Converting them adds a second ANIMATE routine to the same block.\n\nClick EDIT on the WALKER row again.",
+            ["ASSET:EDIT:SPRITE_SET", "ASSET:PANEL"], "SPR_VIEW"));
+        array_push(_s, scr_tour_step("OPEN THE SPRITE EDITOR",
+            "Click EDIT SPRITES.",
+            ["ASSET:SPR_EDIT"], "SPR_V2_OPEN"));
+        array_push(_s, scr_tour_step("PICK FRAMES 5-8",
+            "Use the + buttons to set START to 4 and END to 7. They count from 0, so that is frames 5-8.",
+            ["SPR:RANGE"], "RANGE:4:7"));
+        array_push(_s, scr_tour_step("CONVERT AGAIN",
+            "Click CONVERT TO NODES, and OK on the message.\n\nIt adds WALKER_ANIM_F5TO8 to the WALKER - ANIMATION block: the walk facing left. WALKER_ANIM is still the walk facing right.",
+            ["SPR:CONVERT"], "ANIM_COUNT:2"));
+        array_push(_s, scr_tour_step_at("SHOW THE WALKER",
+            "Drag JSR from the opcode palette onto the spine under JSR LEVEL_DRAW.",
+            ["PAL:JSR", "ARROW:R"], "JSR_MORE", "JSRTO:LEVEL_DRAW"));
+        array_push(_s, scr_tour_step("CALL WALKER_SHOW",
+            "Click the JSR value and choose WALKER_SHOW.\n\nThe walker appears over the level and drops onto a platform.",
+            ["PICK:WALKER_SHOW", "OPERANDNEW:jsr"], "JSR_TO:WALKER_SHOW"));
+        array_push(_s, scr_tour_step_at("DRAG IN JOYSTICK",
+            "Open MACROS 1 and drag JOYSTICK onto the spine between JSR PHYS_UPDATE and JMP MAIN.",
+            ["MAC:MACRO_JOY", "MENU:0"], "JOY_IN_LOOP", "JSRTO:PHYS_UPDATE"));
+        array_push(_s, scr_tour_step("TURN ON LEFT",
+            "Click LF on the JOYSTICK node. A label called LF appears beside it.",
+            ["FIELD:MACRO_JOY:LF", "NODETYPE:MACRO_JOY"], "JOY_LF"));
+        array_push(_s, scr_tour_step("TURN ON RIGHT",
+            "Click RT on the JOYSTICK node.",
+            ["FIELD:MACRO_JOY:RT", "NODETYPE:MACRO_JOY"], "JOY_RT"));
+        array_push(_s, scr_tour_step("TURN ON FIRE",
+            "Click FR on the JOYSTICK node. Fire will be the jump button.",
+            ["FIELD:MACRO_JOY:FR", "NODETYPE:MACRO_JOY"], "JOY_FR"));
+        array_push(_s, scr_tour_step_at("ATTACH LF",
+            "Drag the LF label onto the spine below JMP MAIN.",
+            ["LABELNAME:LF"], "LF_BELOW", "NODEOP:jmp_abs"));
+        array_push(_s, scr_tour_step_at("DRAG IN MOVE",
+            "Open MACROS 1 and drag MOVE onto the spine under LF.",
+            ["MAC:MACRO_MOVE", "MENU:0"], "MOVE_AFTER_LF", "LABELNAME:LF"));
+        array_push(_s, scr_tour_step("WALK LEFT",
+            "Set DX on the MOVE node to -2 and press ENTER.",
+            ["FIELD:MACRO_MOVE:dx", "NODETYPE:MACRO_MOVE"], "MOVE_NEG"));
+        array_push(_s, scr_tour_step("THE 9TH BIT",
+            "A sprite's X register only goes up to 255, but the screen is wider than that. The 9th bit ($D010) carries X past 255.\n\nClick 9TH BIT on the MOVE node so the walker can reach the right side of the screen.",
+            ["FIELD:MACRO_MOVE:wide", "LASTTYPE:MACRO_MOVE"], "MOVE_WIDE"));
+        array_push(_s, scr_tour_step_at("MOVE THE LEGS",
+            "Drag JSR from the palette onto the spine under MOVE.",
+            ["PAL:JSR", "ARROW:R"], "JSR_MORE", "LASTTYPE:MACRO_MOVE"));
+        array_push(_s, scr_tour_step("FACE LEFT",
+            "Click the JSR value and choose WALKER_ANIM_F5TO8, the walk facing left.\n\nThe walk only plays while the walker is moving, and he keeps facing the way he last walked.",
+            ["PICK:WALKER_ANIM_F5TO8", "OPERANDNEW:jsr"], "JSRX:WALKER_ANIM_F5TO8:1"));
+        array_push(_s, scr_tour_step_at("RETURN",
+            "Drag RTS from the palette onto the spine under that JSR.",
+            ["PAL:RTS", "ARROW:R"], "RTS_MORE", "LASTOP:jsr"));
+        array_push(_s, scr_tour_step_at("ATTACH RT",
+            "Now the same for right. Drag the RT label onto the spine under that RTS.",
+            ["LABELNAME:RT"], "RT_BELOW", "LASTOP:rts"));
+        array_push(_s, scr_tour_step_at("ANOTHER MOVE",
+            "Drag another MOVE from MACROS 1 onto the spine under RT.",
+            ["MAC:MACRO_MOVE", "MENU:0"], "MOVE_2", "LABELNAME:RT"));
+        array_push(_s, scr_tour_step("WALK RIGHT",
+            "Set DX on the new MOVE node to 2 and press ENTER.",
+            ["FIELD:MACRO_MOVE:dx", "LASTTYPE:MACRO_MOVE"], "MOVE_POS"));
+        array_push(_s, scr_tour_step("THE 9TH BIT",
+            "Click 9TH BIT on this MOVE node too.",
+            ["FIELD:MACRO_MOVE:wide", "LASTTYPE:MACRO_MOVE"], "MOVE_WIDE"));
+        array_push(_s, scr_tour_step_at("MOVE THE LEGS",
+            "Drag another JSR onto the spine under the new MOVE.",
+            ["PAL:JSR", "ARROW:R"], "JSR_MORE", "LASTTYPE:MACRO_MOVE"));
+        array_push(_s, scr_tour_step("FACE RIGHT",
+            "Click the new JSR value and choose WALKER_ANIM, the walk facing right.",
+            ["PICK:WALKER_ANIM", "OPERANDNEW:jsr"], "JSRX:WALKER_ANIM:1"));
+        array_push(_s, scr_tour_step_at("RETURN",
+            "Drag RTS onto the spine under that JSR.",
+            ["PAL:RTS", "ARROW:R"], "RTS_MORE", "LASTOP:jsr"));
+        array_push(_s, scr_tour_step_at("ATTACH FR",
+            "Drag the FR label onto the spine under the last RTS.",
+            ["LABELNAME:FR"], "FR_BELOW", "LASTOP:rts"));
+        array_push(_s, scr_tour_step_at("JUMP",
+            "Drag JSR onto the spine under FR.",
+            ["PAL:JSR", "ARROW:R"], "JSR_MORE", "LABELNAME:FR"));
+        array_push(_s, scr_tour_step("CALL PHYS_JUMP",
+            "Click the JSR value and choose PHYS_JUMP.\n\nIt only jumps while the walker is standing, so holding fire does not fly.",
+            ["PICK:PHYS_JUMP", "OPERANDNEW:jsr"], "JSR_TO:PHYS_JUMP"));
+        array_push(_s, scr_tour_step_at("RETURN",
+            "Drag RTS onto the spine under that JSR.",
+            ["PAL:RTS", "ARROW:R"], "RTS_MORE", "LASTOP:jsr"));
+        // Diagonals: fire plus left or right jumps while walking
+        array_push(_s, scr_tour_step("JUMP WHILE WALKING",
+            "The JOYSTICK runs one direction per frame, so holding fire while walking stops the walk.\n\nThe diagonals fix that. Click LFF (left + fire) on the JOYSTICK node.",
+            ["FIELD:MACRO_JOY:LFF", "NODETYPE:MACRO_JOY"], "JOY_ROW:LFF"));
+        array_push(_s, scr_tour_step("RIGHT + FIRE",
+            "Click RTF (right + fire) too.",
+            ["FIELD:MACRO_JOY:RTF", "NODETYPE:MACRO_JOY"], "JOY_ROW:RTF"));
+        array_push(_s, scr_tour_step_at("ATTACH LFF",
+            "Drag the LFF label onto the spine under the last RTS.",
+            ["LABELNAME:LFF"], "BELOW:LFF", "LASTOP:rts"));
+        array_push(_s, scr_tour_step_at("JUMP...",
+            "Drag JSR onto the spine under LFF.",
+            ["PAL:JSR", "ARROW:R"], "JSR_MORE", "LABELNAME:LFF"));
+        array_push(_s, scr_tour_step("CALL PHYS_JUMP",
+            "Click the JSR value and choose PHYS_JUMP.",
+            ["PICK:PHYS_JUMP", "OPERANDNEW:jsr"], "JSRX:PHYS_JUMP:2"));
+        array_push(_s, scr_tour_step_at("...AND WALK",
+            "Now walk left as well. Your LF routine already does that, so call it too.\n\nDrag another JSR onto the spine under that JSR.",
+            ["PAL:JSR", "ARROW:R"], "JSR_MORE", "LASTOP:jsr"));
+        array_push(_s, scr_tour_step("CALL LF",
+            "Click the new JSR value and choose LF.\n\nA joystick routine is called with JSR and ends with RTS, so any other routine can call it the same way.",
+            ["PICK:LF", "OPERANDNEW:jsr"], "JSRX:LF:1"));
+        array_push(_s, scr_tour_step_at("RETURN",
+            "Drag RTS onto the spine under JSR LF.",
+            ["PAL:RTS", "ARROW:R"], "RTS_MORE", "LASTOP:jsr"));
+        array_push(_s, scr_tour_step_at("ATTACH RTF",
+            "The same for right. Drag the RTF label onto the spine under the last RTS.",
+            ["LABELNAME:RTF"], "BELOW:RTF", "LASTOP:rts"));
+        array_push(_s, scr_tour_step_at("JUMP...",
+            "Drag JSR onto the spine under RTF.",
+            ["PAL:JSR", "ARROW:R"], "JSR_MORE", "LABELNAME:RTF"));
+        array_push(_s, scr_tour_step("CALL PHYS_JUMP",
+            "Click the JSR value and choose PHYS_JUMP.",
+            ["PICK:PHYS_JUMP", "OPERANDNEW:jsr"], "JSRX:PHYS_JUMP:3"));
+        array_push(_s, scr_tour_step_at("...AND WALK",
+            "Drag another JSR onto the spine under that JSR.",
+            ["PAL:JSR", "ARROW:R"], "JSR_MORE", "LASTOP:jsr"));
+        array_push(_s, scr_tour_step("CALL RT",
+            "Click the new JSR value and choose RT.",
+            ["PICK:RT", "OPERANDNEW:jsr"], "JSRX:RT:1"));
+        array_push(_s, scr_tour_step_at("RETURN",
+            "Drag RTS onto the spine under JSR RT.",
+            ["PAL:RTS", "ARROW:R"], "RTS_MORE", "LASTOP:jsr"));
+        array_push(_s, scr_tour_step("OPEN MUSIC MAKER",
+            "Time for music. Click EDIT on the PLATFORM_TUNE row.\n\nPress F1 to hear it first if you like: drums and bass share voice 1, fast chord arpeggios run on voice 2 and the lead sings on voice 3, in the style of the Maniacs of Noise.",
+            ["ASSET:EDIT:MUSIC_MAKER", "ASSET:PANEL"], "MUS_OPEN"));
+        array_push(_s, scr_tour_step("GENERATE NODES",
+            "Click GENERATE NODES.\n\nIt finds your MAIN loop and adds the calls that start the tune and play it every frame.",
+            ["ASSET:MUS_GEN"], "MUS_GENERATED"));
+        array_push(_s, scr_tour_step("CLOSE THE EDITOR",
+            "Click CLOSE at the top right, or press ESC.",
+            ["ASSET:CLOSE"], "MUS_CLOSED"));
+        array_push(_s, scr_tour_step("BUILD AND RUN",
+            "Press F5, or click BUILD & RUN on the right, to build and launch.",
+            ["UI:BUILD & RUN"], "BUILT"));
+        array_push(_s, scr_tour_step("DONE!",
+            "Push left and right to walk and press fire to jump. Walk off a ledge and you fall.\n\nFire with left or right jumps while walking.\n\nIdeas: add FLIP X so the walker faces left, or change the -7 in PHYS_JUMP for a higher jump.",
+            [], "NONE"));
+    }
+
+    return _s;
+}
+
+/// @desc Starting workspace for the page 2 tours.
+function scr_tour_setup_page2(_id) {
+    if (_id == 10) {
+        scr_tour_make_walker(false);
+        scr_tour_build_starter("LOOP");
+    }
+    if (_id == 11) {
+        scr_tour_make_walker(true);
+        scr_tour_make_music("tour_platform_music.json", "PLATFORM_TUNE");
+        scr_tour_make_platform_kit();
+        scr_tour_build_starter("PLATFORM");
+    }
+}
+
+/// @desc An 8 slot multicolour SPRITE_SET called WALKER holding a side-on
+///       walk, made the way [ADD ASSET +] makes one. Slots 0-3 are the 4 key
+///       poses of a walk cycle facing right: contact, passing, contact,
+///       passing. The body is a pixel lower on contact and a pixel higher on
+///       passing (the bob), each arm swings against its leg, and the far arm
+///       and leg are in the darker MC1 colour so you can see which leg is in
+///       front. Slots 4-7 are the same poses mirrored to face left.
+///       _with_anim also puts all 8 in the compositor (frame n uses slot n-1,
+///       in the same square) with the play range on frames 1-4.
+function scr_tour_make_walker(_with_anim) {
+    if (!instance_exists(obj_asset_manager)) {
+        return;
+    }
+    var _frames = [
+        "000000005400017F0001F70000FF0000300000A80003A9000CA84030A81000A80000A8000060000048000108000102000402000400800400801000801400A000",
+        "005400017F0001F70000FF0000300000A80000AC0001AC0001AC0000AC0000A80000200000240000210000210000240000240000250000200000200000280000",
+        "000000005400017F0001F70000FF0000300000A80001AB0004A8C010A83000A80000A80000900000840002040002010008010008004008004020004028005000",
+        "005400017F0001F70000FF0000300000A80000AC0001AC0001AC0000AC0000A800002000001800001200001200001800001800001A0000100000100000140000",
+        // Slots 4-7: the same walk mirrored to face left (MC pixel pairs kept whole)
+        "00000000150000FD4000DF4000FF00000C00002A00006AC0012A30042A0C002A00002A000009000021000020400080400080100200100200100200040A001400",
+        "00150000FD4000DF4000FF00000C00002A00003A00003A40003A40003A00002A0000080000180000480000480000180000180000580000080000080000280000",
+        "00000000150000FD4000DF4000FF00000C00002A0000EA40032A100C2A04002A00002A0000060000120000108000408000402001002001002001000805002800",
+        "00150000FD4000DF4000FF00000C00002A00003A00003A40003A40003A00002A0000080000240000840000840000240000240000A40000040000040000140000"
+    ];
+    var _n   = array_length(_frames);
+    var _buf = buffer_create(64 * _n, buffer_fixed, 1);
+    for (var _f = 0; _f < _n; _f++) {
+        for (var _i = 0; _i < 64; _i++) {
+            buffer_write(_buf, buffer_u8, scr_tour_num("$" + string_copy(_frames[_f], (_i * 2) + 1, 2)));
+        }
+    }
+    var _meta = {
+        format      : "binary",
+        has_colour  : true,
+        bg_col      : 0,
+        mc1_col     : 11,   // hair, and the far arm and leg (in shadow)
+        mc2_col     : 10,   // skin
+        sprite_mcs  : array_create(_n, 1),
+        sprite_ucs  : array_create(_n, 14),  // clothes, and the near arm and leg
+        spr_sprites : array_create(_n, -1),
+        found_count : _n,
+        used_count  : _n,
+        total_size  : 64 * _n
+    };
+    if (_with_anim) {
+        var _cf = [];
+        for (var _f = 0; _f < _n; _f++) {
+            array_push(_cf, { cells : [{ layer : 0, row : 1, col : 1, slot : _f, xo : 0, yo : 0, expand : "none" }] });
+        }
+        _meta.compositor = { frames : _cf, active_layer : 0, active_frame : 0, active_cell : -1 };
+        _meta.anim       = { playing : false, direction : "fwd", speed : 12, start : 0, ender : 3 };
+    } else {
+        // 12 FPS: one stride of about 16 pixels every 4 frames, which matches
+        // walking at 2 pixels a frame, so the feet don't skate
+        _meta.anim = { playing : false, direction : "fwd", speed : 12, start : 0, ender : 0 };
+    }
+    var _a = {
+        type          : "SPRITE_SET",
+        name          : "WALKER",
+        file          : "",
+        address       : scr_asset_default_address("SPRITE_SET"),
+        buffer        : _buf,
+        meta          : _meta,
+        load_later    : false,
+        d64_filename  : "",
+        reu_filename  : "",
+        reu_size      : 0,
+        reu_used      : 0,
+        linked_assets : [],
+        group         : ""
+    };
+    ds_list_add(obj_asset_manager.asset_list, _a);
+    scr_asset_spr_cache_sprites(_a, true);
+}
+
+/// @desc The level for the PLATFORM GAME tour: clear the screen and draw
+///       each platform as a row of solid blocks (screen code 160).
+///       Also zeroes the physics variables.
+function scr_tour_level_code() {
+    var _c = "; Black screen, physics variables zeroed\n"
+           + "    lda #0\n    sta $D020\n    sta $D021\n    sta $0334\n    sta $0335\n    sta $0336\n"
+           + "; Clear the screen to spaces\n"
+           + "    ldx #0\npk_clr:\n    lda #32\n    sta $0400,x\n    sta $0500,x\n    sta $0600,x\n    sta $06E8,x\n"
+           + "    lda #14\n    sta $D800,x\n    sta $D900,x\n    sta $DA00,x\n    sta $DAE8,x\n    inx\n    bne pk_clr\n";
+    // [row, column, length, colour]
+    var _plat = [[24, 0, 40, 5], [20, 4, 10, 8], [19, 28, 8, 4], [16, 16, 10, 10], [12, 26, 10, 13], [8, 12, 10, 3]];
+    for (var _i = 0; _i < array_length(_plat); _i++) {
+        var _p   = _plat[_i];
+        var _off = (_p[0] * 40) + _p[1];
+        _c += "; Platform - row " + string(_p[0]) + ", columns " + string(_p[1]) + "-" + string(_p[1] + _p[2] - 1) + "\n"
+            + "    ldx #" + string(_p[2] - 1) + "\npk_p" + string(_i) + ":\n"
+            + "    lda #160\n    sta " + scr_bmp_spr_hex(0x0400 + _off, 4) + ",x\n"
+            + "    lda #" + string(_p[3]) + "\n    sta " + scr_bmp_spr_hex(0xD800 + _off, 4) + ",x\n"
+            + "    dex\n    bpl pk_p" + string(_i) + "\n";
+    }
+    return _c + "    rts\n";
+}
+
+/// @desc PHYS_UPDATE: gravity, falling and landing for sprite 0, every frame.
+///       Scratch lives in $57/$58 (the screen pointer) and $0337-$0339: the
+///       SID SONG player owns zero page $03-$2E, and the JOYSTICK, COLLIDE
+///       and GET CHAR macros use $F0-$FF.
+function scr_tour_physics_code() {
+    return "; $0334 Y speed (signed), $0335 is 1 when standing, $0336 frame tick\n"
+         + "; Gravity - speed +1 every other frame, up to 4, only while in the air\n"
+         + "    lda $0335\n    bne pk_move\n"
+         + "    inc $0336\n    lda $0336\n    and #1\n    bne pk_move\n"
+         + "    lda $0334\n    bmi pk_grav\n    cmp #4\n    bcs pk_move\npk_grav:\n    inc $0334\n"
+         + "pk_move:\n    lda $D001\n    clc\n    adc $0334\n    sta $D001\n"
+         + "; Going up - pass through platforms\n"
+         + "    lda $0334\n    bmi pk_done\n"
+         + "; Row under the feet - (Y - 29) / 8\n"
+         + "    lda $D001\n    sec\n    sbc #29\n    bcc pk_air\n    lsr\n    lsr\n    lsr\n    cmp #25\n    bcs pk_air\n    sta $0337\n"
+         + "; $57/$58 get $0400 + row * 40\n"
+         + "    lda #0\n    sta $58\n    lda $0337\n    asl\n    asl\n    asl\n    sta $0338\n"
+         + "    asl\n    rol $58\n    asl\n    rol $58\n    clc\n    adc $0338\n    sta $57\n    lda $58\n    adc #$04\n    sta $58\n"
+         + "; Column under the middle of the sprite - (X - 12) / 8, with the 9th X bit\n"
+         + "    lda $D010\n    and #1\n    sta $0338\n    lda $D000\n    sec\n    sbc #12\n    sta $0339\n    lda $0338\n    sbc #0\n    bcc pk_air\n"
+         + "    lsr\n    ror $0339\n    lsr\n    ror $0339\n    lsr\n    ror $0339\n    ldy $0339\n    cpy #40\n    bcs pk_air\n"
+         + "; A solid block (160) under the feet - stand on top of it\n"
+         + "    lda ($57),y\n    cmp #160\n    bne pk_air\n"
+         + "    lda $0337\n    asl\n    asl\n    asl\n    clc\n    adc #29\n    sta $D001\n"
+         + "    lda #0\n    sta $0334\n    lda #1\n    sta $0335\n    rts\n"
+         + "pk_air:\n    lda #0\n    sta $0335\n"
+         + "pk_done:\n    rts\n";
+}
+
+/// @desc PHYS_JUMP: start a jump, only while standing.
+function scr_tour_jump_code() {
+    return "; Only jump while standing on something\n"
+         + "    lda $0335\n    beq pk_nojump\n"
+         + "; Y speed -7 (going up), and off the ground\n"
+         + "    lda #$F9\n    sta $0334\n    lda #0\n    sta $0335\n"
+         + "pk_nojump:\n    rts\n";
+}
+
+/// @desc The PLATFORM KIT block: LEVEL_DRAW, PHYS_UPDATE and PHYS_JUMP, each
+///       a label over a CODE block, in an ORG right of SYSTEM INIT.
+function scr_tour_make_platform_kit() {
+    var _init = scr_tour_node_by_type("INIT");
+    if (_init == noone) {
+        return;
+    }
+    var _x   = _init.x + global.node_display_width + 160;
+    var _org = scr_spawn_org_node(_x, _init.y);
+    _org.node_title = "PLATFORM KIT";
+    var _y = _org.y + _org.height;
+    var _parts = [
+        ["LEVEL_DRAW",  "DRAW THE LEVEL",      scr_tour_level_code()],
+        ["PHYS_UPDATE", "GRAVITY AND LANDING", scr_tour_physics_code()],
+        ["PHYS_JUMP",   "JUMP",                scr_tour_jump_code()]
+    ];
+    for (var _i = 0; _i < array_length(_parts); _i++) {
+        var _lbl = scr_music_sid_label(_parts[_i][0], _x, _y, _org);
+        scr_macro_sync_height(_lbl);
+        _y += _lbl.height;
+        var _cd = scr_node_spawn("MACRO_CODE", _x, _y);
+        _cd.code_descriptor    = _parts[_i][1];
+        _cd.instructions[0][1] = _parts[_i][2];
+        _cd.code_cache_dirty   = true;
+        _cd.height_dirty       = true;
+        _cd.is_connected       = true;
+        _cd.org_parent         = _org;
+        with (_cd) {
+            event_user(0);
+        }
+        scr_macro_sync_height(_cd);
+        _y += _cd.height;
+    }
+}
+
+/// @desc Connected main-spine JSR whose target starts with _name, or noone.
+///       _loop_only: only one inside the MAIN loop.
+function scr_tour_jsr_to(_name, _loop_only) {
+    var _want = string_upper(_name);
+    var _hit  = noone;
+    with (obj_c64_node) {
+        if (_hit == noone && is_connected && org_parent == noone && node_type == "NORMAL" && array_length(instructions) > 0) {
+            if (string_lower(string(instructions[0][0])) == "jsr"
+            &&  string_pos(_want, string_upper(string(instructions[0][1]))) == 1) {
+                if (!_loop_only || scr_tour_in_loop(id)) {
+                    _hit = id;
+                }
+            }
+        }
+    }
+    return _hit;
+}
+
+/// @desc How many connected main-spine JSRs target a label starting with _name.
+function scr_tour_jsr_count(_name) {
+    var _want = string_upper(_name);
+    var _c    = 0;
+    with (obj_c64_node) {
+        if (is_connected && org_parent == noone && node_type == "NORMAL" && array_length(instructions) > 0) {
+            if (string_lower(string(instructions[0][0])) == "jsr"
+            &&  string_pos(_want, string_upper(string(instructions[0][1]))) == 1) {
+                _c++;
+            }
+        }
+    }
+    return _c;
+}
+
+/// @desc Compositor frames being edited, or [] when the sprite editor is closed.
+function scr_tour_comp_frames() {
+    if (!instance_exists(obj_asset_manager)) {
+        return [];
+    }
+    var _v = obj_asset_manager.spred64_v2;
+    if (!_v.active) {
+        return [];
+    }
+    return _v.compositor.frames;
+}
+
+/// @desc Checks for the page 2 tours. Called from scr_tour_check_ext for codes
+///       it does not handle itself; returns false for unknown codes.
+function scr_tour_check_page2(_code) {
+    var _n = noone;
+    switch (_code) {
+        case "JSR_MORE":
+            return (scr_tour_count_op("jsr", false) > base_jsr_count);
+        case "RTS_MORE":
+            return (scr_tour_count_op("rts", false) > base_rts_count);
+        case "JMP_MORE":
+            return (scr_tour_count_op("jmp_abs", false) > base_jmp_count);
+        case "SPR_PLAYING":
+            return (obj_asset_manager.spred64_v2.active && obj_asset_manager.spred64_v2.anim_playing);
+        case "ANIM_MADE":
+            return (scr_tour_count_type("MACRO_ANIM", true) > 0);
+        case "JOY_FR":
+            _n = scr_tour_node_by_type("MACRO_JOY");
+            if (_n == noone) {
+                return false;
+            }
+            return (real(_n.instructions[13][2]) == 1);
+        case "FR_BELOW":
+            return scr_tour_below_loop(scr_tour_label("FR"));
+        case "MOVE_WIDE":
+            _n = scr_tour_last_by_type("MACRO_MOVE");
+            if (_n == noone) {
+                return false;
+            }
+            return (real(_n.instructions[0][4]) == 1);
+    }
+    var _colon = string_pos(":", _code);
+    if (_colon == 0) {
+        return false;
+    }
+    var _head = string_copy(_code, 1, _colon - 1);
+    var _arg  = string_delete(_code, 1, _colon);
+    var _fr   = [];
+    switch (_head) {
+        case "COMP_N":
+            return (array_length(scr_tour_comp_frames()) >= real(_arg));
+        case "COMP_F":
+            _fr = scr_tour_comp_frames();
+            if (array_length(_fr) < real(_arg)) {
+                return false;
+            }
+            return (array_length(_fr[real(_arg) - 1].cells) > 0);
+        case "JSR_TO":
+            return (scr_tour_jsr_to(_arg, false) != noone);
+        case "JSR_TO2":
+            return (scr_tour_jsr_count(_arg) >= 2);
+        case "JSR_LOOP":
+            return (scr_tour_jsr_to(_arg, true) != noone);
+        case "JOY_ROW":
+            _n = scr_tour_node_by_type("MACRO_JOY");
+            if (_n == noone) {
+                return false;
+            }
+            for (var _jr = 1; _jr < array_length(_n.instructions); _jr++) {
+                if (string(_n.instructions[_jr][1]) == _arg) {
+                    return (real(_n.instructions[_jr][2]) == 1);
+                }
+            }
+            return false;
+        case "BELOW":
+            return scr_tour_below_loop(scr_tour_label(_arg));
+        case "ANIM_COUNT":
+            return (scr_tour_count_type("MACRO_ANIM", true) >= real(_arg));
+        case "RANGE":
+            // RANGE:<start>:<end>, as the START / END steppers show them
+            var _rv = obj_asset_manager.spred64_v2;
+            var _rc = string_pos(":", _arg);
+            if (!_rv.active || _rc == 0) {
+                return false;
+            }
+            return (_rv.anim_start == real(string_copy(_arg, 1, _rc - 1)) && _rv.anim_end == real(string_delete(_arg, 1, _rc)));
+        case "JSRX":
+        case "JMPX":
+            // JSRX:<label>:<n> - at least n JSRs (JMPs) to exactly that label
+            var _jc = string_pos(":", _arg);
+            if (_jc == 0) {
+                return false;
+            }
+            return (scr_tour_jump_count((_head == "JSRX") ? "jsr" : "jmp_abs", string_copy(_arg, 1, _jc - 1))
+                    >= real(string_delete(_arg, 1, _jc)));
+    }
+    return false;
+}
+
+// ---------------------------------------------------------------------------
+// DO IT FOR ME. Every step that waits for the user can be done by the tour:
+// it carries the step out the same way the user would and says what it did.
+// Drag steps are worked out from the step's first target (what to drag) and
+// its DROP HERE node (where); the rest are done by their check code.
+// ---------------------------------------------------------------------------
+
+/// @desc True when the tour can do this step for the user.
+function scr_tour_can_do(_st) {
+    if (_st.check == "NONE") {
+        return false;
+    }
+    return (scr_tour_do_action(_st, true) != "");
+}
+
+/// @desc DO IT FOR ME clicked. Runs on the tour object.
+function scr_tour_do_it() {
+    if (step_idx < 0 || step_idx >= array_length(steps)) {
+        return;
+    }
+    var _msg = scr_tour_do_action(steps[step_idx], false);
+    if (_msg == "") {
+        return;
+    }
+    did_text = _msg;
+    did_step = step_idx;
+    hold_auto = false;
+    global.undo_dirty     = true;
+    global.autosave_dirty = true;
+    obj_workspace_manager.alarm[3] = 6;
+    obj_workspace_manager.flow_overlay_dirty = true;
+}
+
+/// @desc Do step _st, or with _dry only say whether it can be done.
+///       Returns what was done as a sentence ("1" for a dry run), or "".
+function scr_tour_do_action(_st, _dry) {
+    var _code = _st.check;
+    var _tg   = (array_length(_st.targets) > 0) ? _st.targets[0] : "";
+    var _am   = instance_exists(obj_asset_manager) ? obj_asset_manager : noone;
+    var _n    = noone;
+    var _a    = undefined;
+
+    // ---- Drag steps: something onto the spine under the DROP HERE node ----
+    if (_st.drop != "") {
+        var _under = scr_tour_drop_node(_st.drop);
+        if (_under == noone) {
+            return "";
+        }
+        var _what = "";
+        if (string_copy(_tg, 1, 4) == "PAL:") {
+            var _item = scr_tour_palette_item(string_delete(_tg, 1, 4));
+            if (is_undefined(_item)) {
+                return "";
+            }
+            if (_dry) {
+                return "1";
+            }
+            _n = scr_node_spawn("NORMAL", _under.x, _under.y + _under.height);
+            _n.node_title   = _item.title;
+            _n.node_type    = _item.type;
+            _n.instructions = variable_clone(_item.instructions);
+            _n.pc_address   = global.start_pc;
+            with (_n) {
+                event_user(0);
+            }
+            _what = "dragged " + _item.title + " from the opcode palette";
+        } else if (string_copy(_tg, 1, 4) == "MAC:") {
+            if (_dry) {
+                return "1";
+            }
+            _n = scr_node_spawn(string_delete(_tg, 1, 4), _under.x, _under.y + _under.height);
+            _n.pc_address = global.start_pc;
+            with (_n) {
+                event_user(0);
+            }
+            _what = "dragged " + _n.node_title + " from the macros menu";
+        } else if (string_copy(_tg, 1, 10) == "LABELNAME:" || _tg == "FREELABEL") {
+            _n = (_tg == "FREELABEL") ? scr_tour_free_label() : scr_tour_label(string_delete(_tg, 1, 10));
+            if (_n == noone) {
+                return "";
+            }
+            if (_dry) {
+                return "1";
+            }
+            _what = "dragged the " + string(_n.instructions[0][1]) + " label";
+        } else {
+            return "";
+        }
+        scr_tour_insert_below(_n, _under);
+        return "I " + _what + " and dropped it on the spine under " + scr_tour_node_desc(_under) + ".";
+    }
+
+    // ---- Parameterised checks ----
+    var _colon = string_pos(":", _code);
+    if (_colon > 0) {
+        var _head = string_copy(_code, 1, _colon - 1);
+        var _arg  = string_delete(_code, 1, _colon);
+        var _v2   = (_am != noone) ? _am.spred64_v2 : undefined;
+        switch (_head) {
+            case "COMP_N":
+                if (is_undefined(_v2) || !_v2.active) {
+                    return "";
+                }
+                if (_dry) {
+                    return "1";
+                }
+                scr_spred64_v2_anim_frame_new();
+                return "I clicked + NEW, which added FRAME " + _arg + " to the compositor.";
+            case "COMP_F":
+                if (is_undefined(_v2) || !_v2.active) {
+                    return "";
+                }
+                var _k = real(_arg) - 1;
+                if (_k >= array_length(_v2.compositor.frames) || _k >= _v2.used_count) {
+                    return "";
+                }
+                if (_dry) {
+                    return "1";
+                }
+                _v2.selected_slot = _k;
+                _v2.compositor.active_frame = _k;
+                _v2.compositor.active_cell  = scr_spred64_v2_compositor_set_cell(_v2.compositor.frames[_k], 0, 1, 1, _k);
+                _v2.dirty = true;
+                return "I picked slot " + string(_k) + " in the strip and placed it in the compositor square for FRAME " + _arg + ".";
+            case "JSR_TO":
+            case "JSR_TO2":
+            case "JSR_LOOP":
+                var _lbl = scr_tour_label_like(_arg);
+                _n = scr_tour_fresh_jsr();
+                if (_lbl == noone || _n == noone) {
+                    return "";
+                }
+                if (_dry) {
+                    return "1";
+                }
+                var _lname = string(_lbl.instructions[0][1]);
+                scr_tour_commit(_n, 0, _lname);
+                return "I clicked the JSR value and picked " + _lname + " from the list, so the JSR now calls it.";
+            case "JSRX":
+            case "JMPX":
+                var _jop  = (_head == "JSRX") ? "jsr" : "jmp_abs";
+                var _jarg = string_copy(_arg, 1, string_pos(":", _arg + ":") - 1);
+                var _jl   = scr_tour_label(_jarg);
+                _n = scr_tour_fresh_jump(_jop);
+                if (_jl == noone || _n == noone) {
+                    return "";
+                }
+                if (_dry) {
+                    return "1";
+                }
+                scr_tour_commit(_n, 0, string(_jl.instructions[0][1]));
+                if (_head == "JMPX") {
+                    return "I clicked the JMP value and picked " + _jarg + ". The program carries on in " + _jarg + ", and its RTS returns to whoever called this routine.";
+                }
+                return "I clicked the JSR value and picked " + _jarg + " from the list, so the JSR now calls it.";
+            case "RANGE":
+                if (is_undefined(_v2) || !_v2.active) {
+                    return "";
+                }
+                var _r1 = real(string_copy(_arg, 1, string_pos(":", _arg) - 1));
+                var _r2 = real(string_delete(_arg, 1, string_pos(":", _arg)));
+                if (_r2 >= array_length(_v2.compositor.frames)) {
+                    return "";
+                }
+                if (_dry) {
+                    return "1";
+                }
+                _v2.anim_start = _r1;
+                _v2.anim_end   = _r2;
+                _v2.compositor.active_frame = _r1;
+                _v2.dirty = true;
+                return "I set START to " + string(_r1) + " and END to " + string(_r2) + ", so only frames "
+                     + string(_r1 + 1) + "-" + string(_r2 + 1) + " play (and get converted).";
+            case "ANIM_COUNT":
+                if (is_undefined(_v2) || !_v2.active) {
+                    return "";
+                }
+                if (_dry) {
+                    return "1";
+                }
+                var _cv = ds_list_find_value(_am.asset_list, _v2.asset_index);
+                if (!scr_spred64_v2_composition_nodes(_cv)) {
+                    return "I clicked CONVERT TO NODES, but it could not convert these frames. Read its message and try again.";
+                }
+                return "I clicked CONVERT TO NODES. It added another ANIMATE routine, for these frames, to the same block.";
+            case "JOY_ROW":
+                _n = scr_tour_node_by_type("MACRO_JOY");
+                if (_n == noone) {
+                    return "";
+                }
+                if (_dry) {
+                    return "1";
+                }
+                scr_tour_enable_row(_n, _arg, false);
+                return "I clicked " + _arg + " on the JOYSTICK node. A label called " + _arg + " appeared beside it; the joystick calls it while that combination is held.";
+        }
+        return "";
+    }
+
+    switch (_code) {
+        // ---- Values typed into nodes ----
+        case "LDA_NONZERO":
+        case "LDA_NONZERO_2":
+            _n = scr_tour_zero_op("lda_imm");
+            if (_n == noone) {
+                return "";
+            }
+            if (_dry) {
+                return "1";
+            }
+            var _col = (_code == "LDA_NONZERO") ? "2" : "7";
+            scr_tour_commit(_n, 0, _col);
+            return "I typed " + _col + " (" + ((_col == "2") ? "red" : "yellow") + ") into the LDA value, so A is loaded with that colour.";
+        case "STA_D020":
+        case "STA_D021":
+        case "INC_D020":
+            var _op  = (_code == "INC_D020") ? "inc_abs" : "sta_abs";
+            var _reg = (_code == "STA_D021") ? "$D021" : "$D020";
+            _n = scr_tour_zero_op(_op);
+            if (_n == noone) {
+                return "";
+            }
+            if (_dry) {
+                return "1";
+            }
+            scr_tour_commit(_n, 0, _reg);
+            return "I typed " + _reg + " into the " + string_upper(string_copy(_op, 1, 3)) + " value. " + _reg + " is the VIC-II "
+                 + ((_reg == "$D021") ? "background" : "border") + " colour register.";
+        case "PRINT_TEXT":
+        case "PRINT_Y":
+        case "PRINT_COL":
+            _n = scr_tour_node_by_type("MACRO_PRINT");
+            if (_n == noone) {
+                return "";
+            }
+            if (_dry) {
+                return "1";
+            }
+            if (_code == "PRINT_TEXT") {
+                scr_tour_commit(_n, 5, "HELLO C64");
+                return "I typed HELLO C64 into the PRINT node's text field.";
+            }
+            if (_code == "PRINT_Y") {
+                scr_tour_commit(_n, 2, "10");
+                return "I set Y on the PRINT node to 10, so the message sits halfway down the screen.";
+            }
+            _n.instructions[0][3] = 7;
+            scr_tour_touch(_n);
+            return "I opened the PRINT node's colour swatch and chose yellow (7).";
+        case "MOVE_NEG":
+        case "MOVE_POS":
+            _n = (_code == "MOVE_NEG") ? scr_tour_node_by_type("MACRO_MOVE") : scr_tour_last_by_type("MACRO_MOVE");
+            if (_n == noone) {
+                return "";
+            }
+            if (_dry) {
+                return "1";
+            }
+            var _dx = (_code == "MOVE_NEG") ? "-2" : "2";
+            scr_tour_commit(_n, 2, _dx);
+            return "I set DX on the MOVE node to " + _dx + ", so the sprite moves " + ((_dx == "2") ? "right" : "left") + " 2 pixels each time it runs.";
+        case "MOVE_WIDE":
+            _n = scr_tour_last_by_type("MACRO_MOVE");
+            if (_n == noone) {
+                return "";
+            }
+            if (_dry) {
+                return "1";
+            }
+            _n.instructions[0][4] = 1;
+            if (real(_n.instructions[0][12]) <= 255) {
+                _n.instructions[0][12] = 320;
+            }
+            scr_tour_touch(_n);
+            return "I ticked 9TH BIT on the MOVE node. MOVE now carries X past 255 in $D010, so the walker can cross the whole screen.";
+        case "TXT_CHANGED":
+        case "TXT_COL":
+            _n = scr_tour_node_by_type("MACRO_TEXT_SCROLL");
+            if (_n == noone) {
+                return "";
+            }
+            if (_dry) {
+                return "1";
+            }
+            if (_code == "TXT_CHANGED") {
+                scr_tour_commit(_n, 6, "C64 DEV MACHINE MADE THIS SCROLLER ");
+                return "I typed a new message into the TXT SCROLL text, ending with a space so it wraps neatly.";
+            }
+            _n.instructions[0][2] = 13;
+            scr_tour_touch(_n);
+            return "I opened the TXT SCROLL colour and chose light green (13).";
+
+        // ---- Labels ----
+        case "LABEL_EXISTS":
+            if (_dry) {
+                return "1";
+            }
+            var _init = scr_tour_node_by_type("INIT");
+            var _lx = (_init != noone) ? _init.x + global.node_display_width + 80 : 400;
+            var _ly = (_init != noone) ? _init.y + 120 : 200;
+            _n = scr_node_spawn("LABEL", round(_lx / 20) * 20, round(_ly / 20) * 20);
+            return "I pressed A over an empty part of the canvas, which made a new ADDRESS LABEL.";
+        case "LABEL_MAIN":
+        case "LBL_HIT":
+            _n = (_code == "LBL_HIT") ? scr_tour_free_label() : scr_tour_connected_label_not("MAIN");
+            if (_n == noone) {
+                return "";
+            }
+            if (_dry) {
+                return "1";
+            }
+            var _nm = (_code == "LBL_HIT") ? "HIT" : "MAIN";
+            scr_tour_commit(_n, 0, _nm);
+            return "I clicked the label's name and typed " + _nm + ". JMP and JSR can now use that name.";
+        case "JMP_MAIN":
+            _n = scr_tour_node_by_op("jmp_abs");
+            if (_n == noone || scr_tour_label("MAIN") == noone) {
+                return "";
+            }
+            if (_dry) {
+                return "1";
+            }
+            scr_tour_commit(_n, 0, "MAIN");
+            return "I clicked the JMP value and picked MAIN, which closes the loop.";
+        case "COLL_HIT":
+            _n = scr_tour_node_by_type("MACRO_COLLISION");
+            if (_n == noone || scr_tour_label("HIT") == noone) {
+                return "";
+            }
+            if (_dry) {
+                return "1";
+            }
+            _n.instructions[0][3] = "HIT";
+            scr_tour_touch(_n);
+            return "I clicked COLLIDE's CALL field and picked HIT, so HIT runs while the sprites touch.";
+
+        // ---- Joystick / keys ----
+        case "JOY_LF":
+        case "JOY_RT":
+        case "JOY_FR":
+            _n = scr_tour_node_by_type("MACRO_JOY");
+            if (_n == noone) {
+                return "";
+            }
+            if (_dry) {
+                return "1";
+            }
+            var _dir = string_delete(_code, 1, 4);
+            scr_tour_enable_row(_n, _dir, false);
+            return "I clicked " + _dir + " on the JOYSTICK node. A label called " + _dir + " appeared beside it; the joystick calls it while that direction is held.";
+        case "KEY_B_ON":
+            _n = scr_tour_node_by_type("MACRO_LETTERS");
+            if (_n == noone) {
+                return "";
+            }
+            if (_dry) {
+                return "1";
+            }
+            scr_tour_enable_row(_n, "B", true);
+            return "I clicked B on the KEYS A-Z node. A KEY_B label appeared beside it; it is called every frame B is held.";
+
+        // ---- Menus and assets ----
+        case "MENU_MACROS":
+            if (_dry) {
+                return "1";
+            }
+            obj_workspace_manager.gui_menu_open = 0;
+            return "I opened the MACROS 1 menu.";
+        case "ADD_OPEN":
+        case "ADD_OPEN_SPR":
+            if (_am == noone) {
+                return "";
+            }
+            if (_dry) {
+                return "1";
+            }
+            _am.add_dropdown_open = true;
+            return "I clicked [ADD ASSET +], which opened the list of asset types.";
+        case "BMP_ADDED":
+        case "SPR_ADDED":
+            if (_am == noone) {
+                return "";
+            }
+            if (_dry) {
+                return "1";
+            }
+            var _ty = (_code == "BMP_ADDED") ? "BITMAP" : "SPRITE_SET";
+            global.tour_add_type = _ty;
+            return "I picked " + _ty + " from the list, which added a new " + _ty + " asset to the panel.";
+        case "BMP_OPEN":
+        case "SPR_VIEW":
+        case "MUS_OPEN":
+            var _vt = (_code == "BMP_OPEN") ? "BITMAP" : ((_code == "SPR_VIEW") ? "SPRITE_SET" : "MUSIC_MAKER");
+            var _vi = scr_tour_last_asset_index(_vt);
+            if (_vi < 0) {
+                return "";
+            }
+            if (_dry) {
+                return "1";
+            }
+            scr_tour_open_viewer(_vi);
+            return "I clicked EDIT on the " + ds_list_find_value(_am.asset_list, _vi).name + " row to open it.";
+        case "BMP_EDITING":
+            if (is_undefined(scr_tour_viewer_bitmap())) {
+                return "";
+            }
+            if (_dry) {
+                return "1";
+            }
+            global.tour_click = "ASSET:BMP_EDIT";
+            return "I clicked CREATE, which made a blank canvas and switched painting on.";
+        case "BMP_PAINTED":
+        case "BMP_FILLED":
+            _a = scr_tour_viewer_bitmap();
+            if (is_undefined(_a) || step_timer < 25) {
+                return "";
+            }
+            if (!surface_exists(_a.meta[$ "preview_surf"] ?? -1)) {
+                return "";
+            }
+            if (_dry) {
+                return "1";
+            }
+            scr_tour_bmp_paint(_a, _code == "BMP_FILLED");
+            if (_code == "BMP_FILLED") {
+                return "I chose the FILL tool and yellow, then clicked inside the circle to flood fill it.";
+            }
+            return "I picked red and drew a circle in the middle of the canvas.";
+        case "SPR_V2_OPEN":
+            if (_am == noone || scr_tour_viewer_type() != "SPRITE_SET") {
+                return "";
+            }
+            if (_dry) {
+                return "1";
+            }
+            with (_am) {
+                scr_spred64_v2_open(viewer_asset);
+            }
+            return "I clicked EDIT SPRITES, which opened the sprite editor.";
+        case "SPR_DRAWN":
+            if (_am == noone || !_am.spred64_v2.active) {
+                return "";
+            }
+            if (_dry) {
+                return "1";
+            }
+            scr_tour_sprite_draw_ship();
+            return "I drew a little ship in the big grid with the left mouse button.";
+        case "SPR_PLAYING":
+            if (_am == noone || !_am.spred64_v2.active) {
+                return "";
+            }
+            if (_dry) {
+                return "1";
+            }
+            var _pv = _am.spred64_v2;
+            _pv.anim_playing      = true;
+            _pv.anim_last_step_ms = current_time;
+            _pv.compositor.active_frame = clamp(_pv.anim_start, 0, array_length(_pv.compositor.frames) - 1);
+            return "I clicked PLAY, so the compositor steps through the frames.";
+        case "ANIM_MADE":
+            if (_am == noone || !_am.spred64_v2.active) {
+                return "";
+            }
+            if (_dry) {
+                return "1";
+            }
+            var _ca = ds_list_find_value(_am.asset_list, _am.spred64_v2.asset_index);
+            if (!scr_spred64_v2_composition_nodes(_ca)) {
+                return "I clicked CONVERT TO NODES, but it could not convert this compositor. Read its message, fix the frames and try again.";
+            }
+            return "I clicked CONVERT TO NODES. It made the SHOW and ANIM routines in a new block on the right.";
+        case "BMP_CLOSED":
+        case "SPR_CLOSED":
+        case "MUS_CLOSED":
+            if (_am == noone || !_am.viewer_open) {
+                return "";
+            }
+            if (_dry) {
+                return "1";
+            }
+            scr_tour_close_viewer();
+            return "I clicked CLOSE at the top right of the viewer. Your work is kept.";
+        case "BMP_LINKED":
+        case "SPR_LINKED":
+            var _lt = (_code == "BMP_LINKED") ? "BITMAP" : "SPRITE_SET";
+            _n = scr_tour_node_by_type((_code == "BMP_LINKED") ? "MACRO_BMP" : "MACRO_SPR");
+            var _li = scr_tour_last_asset_index(_lt);
+            if (_n == noone || _li < 0) {
+                return "";
+            }
+            if (_dry) {
+                return "1";
+            }
+            var _an = ds_list_find_value(_am.asset_list, _li).name;
+            _n.instructions[0][1] = _an;
+            if (_n.node_type == "MACRO_SPR") {
+                scr_macro_spr_sync(_n);
+            }
+            scr_tour_touch(_n);
+            return "I clicked the asset field on the " + _n.node_title + " node and picked " + _an + ".";
+        case "MUS_GENERATED":
+            _a = scr_tour_asset_by_type("MUSIC_MAKER");
+            if (is_undefined(_a) || scr_tour_viewer_type() != "MUSIC_MAKER") {
+                return "";
+            }
+            if (_dry) {
+                return "1";
+            }
+            scr_music_sid_generate(_a);
+            return "I clicked GENERATE NODES. It built the player and wired the play call into your loop.";
+        case "SONG_PLAYING":
+        case "SONG_STOPPED":
+            _n = scr_tour_node_by_type("MACRO_SID_SONG");
+            if (_n == noone) {
+                return "";
+            }
+            if (_dry) {
+                return "1";
+            }
+            if (scr_node_preview_is(_n) == (_code == "SONG_STOPPED")) {
+                scr_node_preview_toggle(_n);
+            }
+            return (_code == "SONG_PLAYING") ? "I clicked the play button on the SID SONG node to hear the tune." : "I clicked the stop square to stop the tune.";
+
+        case "BUILT":
+            if (_dry) {
+                return "1";
+            }
+            obj_workspace_manager.trigger_build = true;
+            return "I pressed F5 (BUILD & RUN). It builds your program and starts it in VICE.";
+    }
+    return "";
+}
+
+/// @desc Palette entry titled _title, or undefined.
+function scr_tour_palette_item(_title) {
+    var _wm = obj_workspace_manager;
+    for (var _p = 0; _p < 3; _p++) {
+        var _page = _wm.palette_page[_p];
+        for (var _i = 0; _i < array_length(_page); _i++) {
+            if (is_struct(_page[_i]) && _page[_i][$ "title"] == _title && variable_struct_exists(_page[_i], "instructions")) {
+                return _page[_i];
+            }
+        }
+    }
+    return undefined;
+}
+
+/// @desc Put node _n on the chain directly under _after (main spine or ORG),
+///       moving everything below it down, as a drop there does.
+function scr_tour_insert_below(_n, _after) {
+    var _owner = _after.org_parent;
+    if (_after.node_type == "ORG") {
+        _owner = _after.id;
+    }
+    if (_after.node_type == "INIT") {
+        _owner = noone;
+    }
+    _n.is_dragging  = false;
+    _n.height_dirty = true;
+    scr_macro_sync_height(_n);
+    var _h  = max(20, ceil(_n.height / 20) * 20);
+    var _ay = _after.y;
+    var _me = _n.id;
+    // Indent like a real drop: the deeper of the nodes above and below, so
+    // the new node lines up with its neighbours
+    var _below = noone;
+    var _by    = 1000000000;
+    with (obj_c64_node) {
+        if (id != _me && is_connected && org_parent == _owner && node_type != "ORG" && node_type != "INIT" && y > _ay && y < _by) {
+            _by    = y;
+            _below = id;
+        }
+    }
+    var _indent = (_after.node_type == "INIT" || _after.node_type == "ORG") ? 0 : _after.x_indent;
+    if (_below != noone) {
+        _indent = max(_indent, _below.x_indent);
+    }
+    with (obj_c64_node) {
+        if (id != _me && is_connected && org_parent == _owner && node_type != "ORG" && node_type != "INIT" && y > _ay) {
+            y += _h;
+        }
+    }
+    _n.x = _after.x;
+    _n.y = _after.y + max(20, ceil(_after.height / 20) * 20);
+    _n.x_indent           = _indent;
+    _n.is_connected       = true;
+    _n.org_parent         = _owner;
+    _n.is_free_node       = false;
+    _n.has_ever_connected = true;
+    _n.prev_height        = _n.height;
+    global.addresses_dirty = true;
+    global.relayout_frames = 2;
+    scr_c64_do_update_addresses();
+}
+
+/// @desc A short name for node _n, as the tour text would say it.
+function scr_tour_node_desc(_n) {
+    if (_n.node_type == "INIT") {
+        return "SYSTEM INIT";
+    }
+    if (_n.node_type == "LABEL") {
+        return string(_n.instructions[0][1]);
+    }
+    if (_n.node_type == "NORMAL" && array_length(_n.instructions) > 0) {
+        var _op = string_upper(string_copy(string(_n.instructions[0][0]), 1, 3));
+        var _v  = _n.instructions[0][1];
+        if (is_string(_v)) {
+            return (_op == "RTS") ? "RTS" : (_op + " " + _v);
+        }
+        if (_op == "RTS") {
+            return "RTS";
+        }
+        return _op + " $" + string_upper(decimal_to_hex(_v));
+    }
+    return _n.node_title;
+}
+
+/// @desc Commit a typed value to field _idx, with the follow-up a typed
+///       ENTER does in the workspace.
+function scr_tour_commit(_n, _idx, _text) {
+    scr_node_commit(_n, _idx, _text);
+    scr_tour_touch(_n);
+}
+
+/// @desc Mark node _n edited and refresh addresses.
+function scr_tour_touch(_n) {
+    if (instance_exists(_n)) {
+        _n.height_dirty = true;
+    }
+    global.node_change_dirty = true;
+    global.addresses_dirty   = true;
+    scr_c64_do_update_addresses();
+    with (obj_c64_node) {
+        last_overlap_check  = false;
+        overlap_check_dirty = true;
+        stats_cache_dirty   = true;
+    }
+}
+
+/// @desc Connected NORMAL node running _op whose operand is still 0, or noone.
+function scr_tour_zero_op(_op) {
+    var _hit = noone;
+    with (obj_c64_node) {
+        if (_hit == noone && is_connected && node_type == "NORMAL" && array_length(instructions) > 0) {
+            if (string_lower(string(instructions[0][0])) == _op && scr_tour_num(instructions[0][1]) == 0 && !is_string(instructions[0][1])) {
+                _hit = id;
+            }
+        }
+    }
+    return _hit;
+}
+
+/// @desc Connected JSR still showing its placeholder target, or noone.
+function scr_tour_fresh_jsr() {
+    return scr_tour_fresh_jump("jsr");
+}
+
+/// @desc Connected JSR / JMP_ABS (_op) still showing the placeholder the
+///       palette gives it ("target" / "label"), or noone.
+function scr_tour_fresh_jump(_op) {
+    var _hit = noone;
+    with (obj_c64_node) {
+        if (_hit == noone && is_connected && node_type == "NORMAL" && array_length(instructions) > 0) {
+            var _v = string_lower(string(instructions[0][1]));
+            if (string_lower(string(instructions[0][0])) == _op && (_v == "target" || _v == "label")) {
+                _hit = id;
+            }
+        }
+    }
+    return _hit;
+}
+
+/// @desc LABEL called _name, else the first whose name starts with it
+///       (WALKER_SHOW_2...). An exact match wins, so LF never finds LFF.
+function scr_tour_label_like(_name) {
+    var _exact = scr_tour_label(_name);
+    if (_exact != noone) {
+        return _exact;
+    }
+    var _want = string_upper(_name);
+    var _hit  = noone;
+    with (obj_c64_node) {
+        if (_hit == noone && node_type == "LABEL" && string_pos(_want, string_upper(string(instructions[0][1]))) == 1) {
+            _hit = id;
+        }
+    }
+    return _hit;
+}
+
+/// @desc How many connected main-spine _op nodes (jsr / jmp_abs) target
+///       exactly the label _name.
+function scr_tour_jump_count(_op, _name) {
+    var _want = string_upper(_name);
+    var _c    = 0;
+    with (obj_c64_node) {
+        if (is_connected && org_parent == noone && node_type == "NORMAL" && array_length(instructions) > 0) {
+            if (string_lower(string(instructions[0][0])) == _op && string_upper(string(instructions[0][1])) == _want) {
+                _c++;
+            }
+        }
+    }
+    return _c;
+}
+
+/// @desc Attached LABEL not called _name, or noone.
+function scr_tour_connected_label_not(_name) {
+    var _hit = noone;
+    with (obj_c64_node) {
+        if (_hit == noone && node_type == "LABEL" && is_connected && string_upper(string(instructions[0][1])) != _name) {
+            _hit = id;
+        }
+    }
+    return _hit;
+}
+
+/// @desc Switch on a JOYSTICK direction or KEYS key on node _n, and add its
+///       label beside the node when there is none yet, as clicking it does.
+///       _by_key: match the row's key (KEYS) rather than its name (JOYSTICK).
+function scr_tour_enable_row(_n, _key, _by_key) {
+    var _row = -1;
+    for (var _i = 1; _i < array_length(_n.instructions); _i++) {
+        var _r = _n.instructions[_i];
+        if (array_length(_r) >= 3 && string(_by_key ? _r[0] : _r[1]) == _key) {
+            _row = _i;
+            break;
+        }
+    }
+    if (_row < 0) {
+        return;
+    }
+    _n.instructions[_row][2] = 1;
+    var _name = string(_n.instructions[_row][1]);
+    if (scr_tour_label(_name) == noone) {
+        var _count = 0;
+        for (var _i = 1; _i < array_length(_n.instructions); _i++) {
+            if (scr_tour_label(string(_n.instructions[_i][1])) != noone) {
+                _count++;
+            }
+        }
+        var _sx = round((_n.x + 220) / 20) * 20;
+        var _sy = round((_n.y + (_count * 40)) / 20) * 20;
+        var _clear = false;
+        var _tries = 0;
+        while (!_clear && _tries < 64) {
+            _clear = true;
+            with (obj_c64_node) {
+                if (!is_connected && org_parent == noone && x == _sx && y == _sy) {
+                    _clear = false;
+                    _sy += ceil(height / 20) * 20;
+                    break;
+                }
+            }
+            _tries++;
+        }
+        var _lbl = scr_node_spawn("LABEL", _sx, _sy);
+        _lbl.instructions[0][1] = _name;
+    }
+    _n.height_dirty = true;
+    scr_tour_touch(_n);
+}
+
+/// @desc Index of the newest asset of _type in the asset list, or -1.
+function scr_tour_last_asset_index(_type) {
+    if (!instance_exists(obj_asset_manager)) {
+        return -1;
+    }
+    var _list = obj_asset_manager.asset_list;
+    for (var _i = ds_list_size(_list) - 1; _i >= 0; _i--) {
+        if (ds_list_find_value(_list, _i).type == _type) {
+            return _i;
+        }
+    }
+    return -1;
+}
+
+/// @desc Open asset _idx in the viewer, as its EDIT button does.
+function scr_tour_open_viewer(_idx) {
+    with (obj_asset_manager) {
+        scr_asset_inline_editor_close_all();
+        add_dropdown_open = false;
+        viewer_open       = true;
+        keyboard_string   = "";
+        viewer_asset      = _idx;
+        bb_return_asset   = -1;
+        var _opened = ds_list_find_value(asset_list, _idx);
+        if (_opened.type == "SPRITE_SET" && buffer_exists(_opened.buffer) && variable_struct_exists(_opened.meta, "spr_sprites")) {
+            scr_spred64_v2_rebuild_thumbs_from_buffer(_opened);
+        }
+    }
+}
+
+/// @desc Close the asset viewer, as its CLOSE button does.
+function scr_tour_close_viewer() {
+    with (obj_asset_manager) {
+        if (spred64_v2.active) {
+            scr_spred64_v2_close(true);
+        }
+        scr_asset_inline_editor_close_all();
+        viewer_open            = false;
+        viewer_asset           = -1;
+        spred64_open           = false;
+        spr_edit_path          = "";
+        spr_edit_md5           = "";
+        editorClosed           = 1;
+        alarm[0]               = 65;
+        global.was_editor_open = true;
+        alarm[2]               = 60;
+    }
+}
+
+/// @desc Paint on bitmap _a as the user would: a red circle, or with _fill
+///       the FILL tool pouring yellow into it. Each is one undo step.
+function scr_tour_bmp_paint(_a, _fill) {
+    var _m = _a.meta;
+    if (!variable_struct_exists(_m, "undo_stack")) {
+        _m.undo_stack = [];
+    }
+    if (!variable_struct_exists(_m, "bg_mask")) {
+        _m.bg_mask = array_create(64000, 0);
+    }
+    var _ub = buffer_create(320 * 200 * 4, buffer_fixed, 1);
+    buffer_get_surface(_ub, _m.preview_surf, 0);
+    var _um = array_create(64000, 0);
+    array_copy(_um, 0, _m.bg_mask, 0, 64000);
+    array_push(_m.undo_stack, { buf: _ub, mask: _um, bg_col: _m[$ "bg_col"] ?? 0 });
+    _m.redo_stack = [];
+    if (_fill) {
+        _m.active_tool = "FILL";
+        scr_asset_bmp_flood_fill(_a, 160, 100, 7, 1, true);
+    } else {
+        scr_asset_bmp_draw_ellipse(_a, 100, 60, 220, 140, 2, 1, false, undefined, true);
+    }
+    _m.bmp_unsaved = true;
+}
+
+/// @desc Draw the tour ship into the sprite editor's selected slot.
+function scr_tour_sprite_draw_ship() {
+    var _hex = "000000000000000000000000003800003800003800007C00007C00007C0000EE0000EE0000EE0001EF0017FFE81FFFF81FFFF81FFFF8007C0000540000100000";
+    with (obj_asset_manager) {
+        var _v2   = spred64_v2;
+        var _slot = _v2.selected_slot;
+        var _base = _slot * 504;
+        for (var _b = 0; _b < 63; _b++) {
+            var _byte = scr_tour_num("$" + string_copy(_hex, (_b * 2) + 1, 2));
+            for (var _bit = 0; _bit < 8; _bit++) {
+                _v2.bits[_base + (_b * 8) + _bit] = (_byte >> (7 - _bit)) & 1;
+            }
+        }
+        _v2.dirty = true;
+        scr_spred64_v2_invalidate_sot(_slot);
+        if (surface_exists(_v2.edit_surface)) {
+            surface_free(_v2.edit_surface);
+        }
+        _v2.edit_surface = -1;
+        if (_v2.asset_index >= 0 && _v2.asset_index < ds_list_size(asset_list)) {
+            scr_spred64_v2_refresh_slot_sprite(ds_list_find_value(asset_list, _v2.asset_index), _slot);
+        }
+    }
+}
+
+/// @desc A tour button asked for a click on _key (DO IT FOR ME). True once,
+///       for the button drawn with that key, which then acts as if clicked.
+function scr_tour_take_click(_key) {
+    if (global.tour_click == _key) {
+        global.tour_click = "";
+        return true;
+    }
+    return false;
 }

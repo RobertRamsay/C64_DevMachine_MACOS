@@ -245,6 +245,7 @@ var _base = "unsaved";
                 // tagged sheet to save 1000 zero bytes.
                 _mo.coll_types = _me.coll_types;
             }
+            if (_a.type == "BITMAP" && is_struct(_me[$ "spr_overlay"])) _mo.spr_overlay = _me.spr_overlay;
             if (_a.type == "BITMAP_BUILDER") {
                 _mo.src_asset  = variable_struct_exists(_me, "src_asset")  ? _me.src_asset  : "";
                 _mo.dst_asset  = variable_struct_exists(_me, "dst_asset")  ? _me.dst_asset  : "";
@@ -287,6 +288,7 @@ var _base = "unsaved";
                 reu_filename  : variable_struct_exists(_a, "reu_filename")  ? _a.reu_filename  : "",
                 reu_size      : variable_struct_exists(_a, "reu_size")      ? _a.reu_size      : 0,
                 reu_used      : variable_struct_exists(_a, "reu_used")      ? _a.reu_used      : 0,
+                reu_base_file : variable_struct_exists(_a, "reu_base_file") ? _a.reu_base_file : "",
                 linked_assets : variable_struct_exists(_a, "linked_assets") ? _a.linked_assets : [],
                 group         : variable_struct_exists(_a, "group")         ? _a.group         : "",
             });
@@ -313,7 +315,8 @@ var _root = { nodes:node_data, boxes:box_data, assets:asset_data,
                   map_tile_bank_sel: variable_global_exists("map_tile_bank_sel") ? global.map_tile_bank_sel : -1,
                   next_stable_uid:   variable_global_exists("next_stable_uid")   ? global.next_stable_uid   : 100000,
                   ignored_conflicts: variable_global_exists("ignored_conflicts") ? global.ignored_conflicts : [],
-                  asset_sort_mode:   obj_asset_manager.asset_sort_mode };
+                  asset_sort_mode:   obj_asset_manager.asset_sort_mode,
+                  music_rebuild_command: variable_global_exists("music_rebuild_cmd") ? global.music_rebuild_cmd : "" };
     var _json = json_stringify(_root);
     var _f = file_text_open_write(_path);
     file_text_write_string(_f, _json);

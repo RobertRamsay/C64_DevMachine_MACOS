@@ -1,3 +1,5 @@
+scr_perf_node("draw", node_type);
+scr_perf_node("nd", "(before cull)");
 /// @desc Render Node (Unified Gutter, Stats, Out-dent, ORG & Comment Nodes)
 if obj_workspace_manager.code_editor_open or obj_asset_manager.viewer_open exit;
 if (scr_node_is_hidden(id)) exit;
@@ -7,6 +9,7 @@ if (node_type == "MACRO_PRINT") scr_print_sync_height(id);
 // Draw must not repeat the HUD asset scan or cached-height writes.
 
 global.ui_click_consumed = (global.ui_click_block_timer > 0);
+scr_perf_node("nd", "A cull");
 // =============================================================
 // A. VIEW CULL — early exit before any setup cost
 // =============================================================
@@ -33,7 +36,11 @@ if (node_type == "COMMENT" && !global.comments_visible) exit;
 var _screen_h = height / _cam_zoom;
 var _screen_w = width / _cam_zoom;
 if (_screen_h < 3 || _screen_w < 4) exit;
+// NODE IMAGE CACHE (scr_org_collapse): blit the cached image and stop, or
+// capture this draw into it (scr_node_cache_end at every exit below).
+if (scr_node_cache_begin(_cam_x, _cam_y, _cam_zoom)) exit;
 
+scr_perf_node("nd", "B latch fx");
 // =============================================================
 // B. LATCH BURST FX
 // =============================================================
@@ -55,6 +62,7 @@ if (latch_glow_alpha > 0) {
     latch_glow_alpha -= 0.05;
 }
 
+scr_perf_node("nd", "C layout");
 // =============================================================
 // C. LAYOUT CONSTANTS
 // =============================================================
@@ -77,6 +85,7 @@ var _dy          = y - _screen_cy;
 var _near_centre = ((_dx * _dx + _dy * _dy) < 640000); // 800^2, no zoom gate0^2
 // above 4.0 — header colour box only, no text at all
 
+scr_perf_node("nd", "C2 init rts");
 // =============================================================
 // C2. SYSTEM INIT AUTO-RTS ROW
 // =============================================================
@@ -128,6 +137,7 @@ if (node_type == "INIT") {
     }
 }
 
+scr_perf_node("nd", "D height");
 // =============================================================
 // D. DYNAMIC HEIGHT  (cached, only recalculates when dirty)
 // =============================================================
@@ -166,6 +176,7 @@ if (height_dirty) {
     case "MACRO_TRACK": height = _G * 3;  break;         // 100
     case "MACRO_PRINT": height = ceil((scr_print_controls_offset(id) + 58) / _G) * _G;  break;
 	case "MACRO_CLEAR_BMP_RECT": height = _G * 6;  break;   // 3 value rows + 4 var rows + footer
+	case "MACRO_BMP_OBJ": height = _G * 9;  break;          // 10 value rows + footer
     case "MACRO_PRINT_EXT": height = _G * 11;  break;
     case "MACRO_PLACE_CHAR": height = _G * 9;  break;
 	case "MACRO_RANDOM":     height = _G * 8;  break;
@@ -302,6 +313,7 @@ var _raw_h = header_h + (array_length(instructions) * _line_gap) + _bottom_pad +
     height = cached_height;
 }
 
+scr_perf_node("nd", "E width");
 // =============================================================
 // E. DYNAMIC WIDTH
 // =============================================================
@@ -324,6 +336,7 @@ switch (node_type) {
         break;
 }
 
+scr_perf_node("nd", "F label picker");
 // =============================================================
 // F. LABEL PICKER
 // =============================================================
@@ -785,6 +798,7 @@ var _active_list = [];
         }
     }
 }
+scr_perf_node("nd", "G address gutter");
 // =============================================================
 // G. ADDRESS GUTTER
 // =============================================================
@@ -895,6 +909,7 @@ var _addr_str = "";
 }
 draw_set_halign(fa_left);
 
+scr_perf_node("nd", "H box + header colour");
 // =============================================================
 // H. MAIN BOX & HEADER COLOUR
 // =============================================================
@@ -919,7 +934,7 @@ var _label_edge_col = make_color_rgb(90,86,60)
 
 var _box_alpha = clamp(1.0 - (_cam_zoom - 2.5) / 0.75, 0, 1);
 _box_alpha *= global.idle_fade;
-if (_box_alpha < 0.1) { x -= x_indent; draw_set_alpha(1.0); exit; }
+if (_box_alpha < 0.1) { x -= x_indent; draw_set_alpha(1.0); scr_node_cache_end(); exit; }
 
 var _node_style = obj_workspace_manager.nodeStyle;
 // Node styles (6): 0 flat gradient, 1..n-2 tinted 9-slices, n-1 the handcrafted
@@ -1010,6 +1025,7 @@ switch (node_type) {
     case "MACRO_CLR_SCREEN": _head_col = is_connected ? make_color_rgb(90, 150, 200) : make_color_rgb(45, 75, 100); break;
     case "MACRO_MATH":       _head_col = is_connected ? make_color_rgb(60, 170, 140) : make_color_rgb(30, 85, 70); break;
     case "MACRO_CLEAR_BMP_RECT": _head_col = is_connected ? make_color_rgb(200, 70, 90) : make_color_rgb(100, 35, 45); break;
+    case "MACRO_BMP_OBJ":    _head_col = is_connected ? make_color_rgb(220, 120, 60) : make_color_rgb(110, 60, 30); break;
     case "MACRO_RANDOM":     _head_col = is_connected ? make_color_rgb(150, 90, 200) : make_color_rgb(70, 45, 95); break;
     case "MACRO_SID_PAUSE":    _head_col = is_connected ? make_color_rgb(190, 70, 150) : make_color_rgb(90, 34, 72); break;
     case "MACRO_VOI64_MASTER": _head_col = is_connected ? make_color_rgb(200, 120, 60) : make_color_rgb(95, 58, 30); break;
@@ -1104,6 +1120,7 @@ else {
                               draw_x, y, width, header_h, _head_col, _box_alpha);
 }
 
+scr_perf_node("nd", "H2 wire dots");
 // =============================================================
 // H2. WIRE DOTS (ORG nodes only)
 // =============================================================
@@ -1292,6 +1309,7 @@ if (node_type == "ORG" && node_title != "VARIABLES" && node_title != "HW REGISTE
         draw_set_alpha(1.0);
     }
 }
+scr_perf_node("nd", "I header title + stats");
 // =============================================================
 // I. HEADER TITLE & STATS
 // =============================================================
@@ -1563,6 +1581,7 @@ if (_lod_full && (is_connected || string_pos("DATA", node_type) > 0 || node_type
     draw_set_font_l(fnt_c64_code);
 }
 
+scr_perf_node("nd", "J body");
 // =============================================================
 // J. BODY CONTENT — dispatched to per-type scripts
 // =============================================================
@@ -1586,6 +1605,7 @@ if (_lod_body) switch (node_type) {
 	case "MACRO_VECTOR_PAGE": scr_node_draw_macro_vector_page(draw_x, y);               break;
     case "MACRO_PRINT": scr_node_draw_macro_print(draw_x, y);                           break;
 	case "MACRO_CLEAR_BMP_RECT": scr_node_draw_macro_clear_bmp_rect(draw_x, y);         break;
+	case "MACRO_BMP_OBJ": scr_node_draw_macro_bmp_obj(draw_x, y);                       break;
     case "MACRO_PRINT_EXT": scr_node_draw_macro_print_ext(draw_x, y);                   break;
     case "MACRO_PLACE_CHAR": scr_node_draw_macro_place_char(draw_x, y); break;
     case "MACRO_CLR_SCREEN": scr_node_draw_macro_clr_screen(draw_x, y); break;
@@ -2076,8 +2096,13 @@ if (node_type == "LABEL") {
     if (!_is_implied) {
         var _cursor_x = draw_x + 10 + string_width_l(_prefix);
 
-        // 2. Draw Editable Value immediately after prefix (Yellow)
-        draw_set_color(c_yellow);
+        // 2. Draw Editable Value immediately after prefix (Yellow; red when
+        // it names a jump/branch target nothing defines any more)
+        var _ln_target = (_inst_lower == "jsr" || _inst_lower == "jmp" || _inst_lower == "jmp_abs" || _inst_lower == "jmp_ind"
+                       || (string_length(_inst_lower) == 3 && string_char_at(_inst_lower, 1) == "b"
+                           && _inst_lower != "bit" && _inst_lower != "brk"));
+        var _val_missing = _ln_target && scr_label_is_missing(_raw_val);
+        draw_set_color(_val_missing ? c_red : c_yellow);
         draw_text_l(_cursor_x, _yy, _display_val);
 
         // Guided tour: report an operand that is still 0 so the tour can
@@ -2090,6 +2115,11 @@ if (node_type == "LABEL") {
         if (global.tour_active && is_connected && node_type == "NORMAL") {
             scr_tour_capture_world("OPERAND:" + _inst_lower,
                 _cursor_x - 2, _yy - 1, _cursor_x + max(24, string_width_l(_display_val)) + 2, _yy + 13);
+            // ...and one still showing its placeholder (a JSR just dragged in)
+            if (string_lower(string(_raw_val)) == "target" || string_lower(string(_raw_val)) == "label") {
+                scr_tour_capture_world("OPERANDNEW:" + _inst_lower,
+                    _cursor_x - 2, _yy - 1, _cursor_x + max(24, string_width_l(_display_val)) + 2, _yy + 13);
+            }
         }
         
         // 3. Draw Suffix immediately after value (e.g., ",X")
@@ -2123,6 +2153,7 @@ if (macro_measure_active && macro_content_bottom > 24) {
 }
 macro_measure_active = false;
 
+scr_perf_node("nd", "K address badge");
 // =============================================================
 // K. BOTTOM-LEFT ADDRESS BADGE
 // =============================================================
@@ -2169,6 +2200,7 @@ draw_set_font_l(fnt_c64_code);
     }
 }
 
+scr_perf_node("nd", "K2 comment handles");
 // =============================================================
 // K2. COMMENT WIDTH HANDLES  < >
 // One standard node width per step, 1x to 3x. Drawn last so nothing
@@ -2196,6 +2228,7 @@ if (node_type == "COMMENT" && global.comments_visible && !_cw_editing && !collap
     draw_set_alpha(1.0);
 }
 
+scr_perf_node("nd", "L outline + overlap");
 // =============================================================
 // L. OUTLINE + MEMORY OVERLAP WARNING
 // Simply use the conflict status determined by the global scanner
@@ -2228,6 +2261,7 @@ draw_rectangle(draw_x, y, draw_x + width, y + height, true);
 draw_set_alpha(1.0);
 */
 
+scr_perf_node("nd", "L2 group handle");
 // =============================================================
 // L2. GROUP DRAG HANDLE HIGHLIGHT
 // =============================================================
@@ -2282,6 +2316,7 @@ if (array_length(global.selected_nodes) > 1 && instance_exists(global.group_drag
     }
 }
 
+scr_perf_node("nd", "M drop zones");
 // =============================================================
 // M. DROP ZONE VISUALISATION
 // =============================================================
@@ -2359,7 +2394,10 @@ var _step     = _dash + _gap;
 var _any_dragging = false;
 var _ref_x        = 0;
 var _ref_y        = 0;
-with (obj_c64_node) {
+// Only look for the dragged node while something is being dragged
+// (global.any_node_dragging is set once a frame in the manager's Begin Step):
+// this scan ran for every visible node every frame, O(visible x nodes).
+if (global.any_node_dragging) with (obj_c64_node) {
     if (is_dragging && node_type != "ORG"  && node_type != "INIT" &&
         node_type != "SPR64" && string_pos("DATA", node_type) == 0 &&
         node_type != "NAMED_LOC" && node_type != "NEW_STR") {
@@ -2513,6 +2551,7 @@ if (is_dragging && node_type == "ORG" && node_title != "VARIABLES" && node_title
     draw_set_alpha(1.0);
 }
 
+scr_perf_node("nd", "N flash");
 // =============================================================
 // N. FLASH OVERLAY (RMB or Editor Clash)
 // =============================================================
@@ -2542,6 +2581,7 @@ if (is_conflicted) {
 x -= x_indent;
 draw_set_alpha(1.0);
 
+scr_perf_node("nd", "Z debug monitor");
 // =============================================================
 // Z. ON-NODE DEBUG STATE MONITOR ('@' Toggle)
 // =============================================================
@@ -2811,3 +2851,6 @@ if ((node_type == "ORG" || node_type == "INIT") && scr_org_has_children(id)) {
 // CREATOR PARAMS TAB (right side of macro / code block nodes, Pro only)
 // =============================================================
 scr_creator_draw_node_tab();
+
+// Finish a NODE IMAGE CACHE capture started near the top
+scr_node_cache_end();

@@ -172,6 +172,9 @@
 	            }
 	            if (_ct_any) _meta_out.coll_types = _a.meta.coll_types;
 	        }
+	        // Bitmap editor sprite overlay (scr_bmp_spr_*), only when it holds sprites
+	        if (_a.type == "BITMAP" && is_struct(_a.meta[$ "spr_overlay"]) && scr_bmp_spr_count(scr_bmp_spr_get(_a)) > 0)
+	            _meta_out.spr_overlay = _a.meta.spr_overlay;
 			if (variable_struct_exists(_a.meta, "sprite_mcs"))   _meta_out.sprite_mcs   = _a.meta.sprite_mcs;
 			if (variable_struct_exists(_a.meta, "sprite_json"))  _meta_out.sprite_json  = _a.meta.sprite_json; 
 			if (variable_struct_exists(_a.meta, "compositor"))   _meta_out.compositor   = _a.meta.compositor;
@@ -463,7 +466,8 @@
 		        map_tile_bank_sel:  variable_global_exists("map_tile_bank_sel") ? global.map_tile_bank_sel : -1,
 		        next_stable_uid:    variable_global_exists("next_stable_uid")   ? global.next_stable_uid   : 100000,
 		        ignored_conflicts:  variable_global_exists("ignored_conflicts") ? global.ignored_conflicts : [],
-	        asset_sort_mode:    obj_asset_manager.asset_sort_mode
+	        asset_sort_mode:    obj_asset_manager.asset_sort_mode,
+	        music_rebuild_command: variable_global_exists("music_rebuild_cmd") ? global.music_rebuild_cmd : ""
 	    };
 	    var _raw = json_stringify(save_root);
 	    var f = file_text_open_write(path);

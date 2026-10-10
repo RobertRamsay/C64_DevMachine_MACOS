@@ -1,8 +1,13 @@
+scr_perf_node("step", "(workspace mgr)");
 // ── EXOMIZER POLL (BUILD TARGET = PRG EXO) ──
 // Exomizer runs as its own process; wait until its output exists and has
 // stopped growing, then run it like any PRG.
 if (exo_pending) {
     scr_exo_crunch_poll();
+}
+// ── MUSIC REBUILD POLL (MUSIC MAKER > REBUILD) ──
+if (music_rebuild_pending) {
+    scr_music_rebuild_poll();
 }
 
 scr_template_step();
@@ -22,6 +27,37 @@ if (label_jump_reflow > 0) {
             label_jump_fx_t    = 0;
         }
         label_jump_pending = noone;
+    }
+}
+
+// Bitmap editor SETUP NODES: the new nodes were stacked before Draw had
+// measured their real heights, and node Draw (where heights are measured)
+// exits while the asset viewer or code editor is open. So hold until both are
+// closed, then mark every node's height dirty, give Draw a few frames to
+// re-measure, and pack so they snap together.
+if (setup_settle_timer > 0) {
+    var _settle_busy = code_editor_open;
+    if (instance_exists(obj_asset_manager)) {
+        if (obj_asset_manager.viewer_open) {
+            _settle_busy = true;
+        }
+    }
+    if (!_settle_busy) {
+        setup_settle_timer -= 1;
+    }
+    var _settle_org = setup_settle_org;
+    if (!_settle_busy && setup_settle_timer == 3) {
+        with (obj_c64_node) {
+            height_dirty = true;
+        }
+    }
+    if (setup_settle_timer == 0) {
+        if (instance_exists(_settle_org)) {
+            global.addresses_dirty = true;
+            scr_c64_do_update_addresses();
+            flow_overlay_dirty = true;
+        }
+        setup_settle_org = noone;
     }
 }
 
@@ -177,16 +213,24 @@ if (welcome_open) {
         }
     } else if (welcome_open && welcome_mode == 1) {
         var _tours     = scr_tour_list();
-        var _max_scrl  = max(0, array_length(_tours) - _tg.rows);
+        // One page of tours at a time: the arrows (or the wheel) turn the page
+        var _page      = welcome_tour_scroll div _tg.rows;
+        var _clicked   = scr_workspace_mouse_check_button_pressed(mb_left);
+        if (_clicked && point_in_rectangle(_wmx, _wmy, _tg.prev[0], _tg.prev[1], _tg.prev[2], _tg.prev[3])) {
+            _page--;
+        }
+        if (_clicked && point_in_rectangle(_wmx, _wmy, _tg.next[0], _tg.next[1], _tg.next[2], _tg.next[3])) {
+            _page++;
+        }
         if (point_in_rectangle(_wmx, _wmy, _tg.list[0], _tg.list[1], _tg.list[2], _tg.list[3])) {
             if (scr_workspace_mouse_wheel_up()) {
-                welcome_tour_scroll--;
+                _page--;
             }
             if (scr_workspace_mouse_wheel_down()) {
-                welcome_tour_scroll++;
+                _page++;
             }
         }
-        welcome_tour_scroll = clamp(welcome_tour_scroll, 0, _max_scrl);
+        welcome_tour_scroll = clamp(_page, 0, _tg.pages - 1) * _tg.rows;
         if (scr_workspace_mouse_check_button_pressed(mb_left)) {
             for (var _tr = 0; _tr < _tg.rows; _tr++) {
                 var _ti = welcome_tour_scroll + _tr;
@@ -1105,6 +1149,7 @@ if (is_entering_text) {
         else if (_ntype == "MACRO_PRINT"        && (_nidx == 6 || _nidx == 13)) { _is_address_field = true; }
 		// Slot 1 is the target bitmap base — typed as hex, like every other bmp addr.
 		else if (_ntype == "MACRO_CLEAR_BMP_RECT" && _nidx == 1)                { _is_address_field = true; }
+		else if (_ntype == "MACRO_BMP_OBJ" && (_nidx == 1 || _nidx == 11))      { _is_address_field = true; }
 		else if (_ntype == "MACRO_PLACE_CHAR"   && (_nidx == 16 || _nidx == 17)) { _is_address_field = true; }
 		else if (_ntype == "MACRO_CLR_SCREEN"   && _nidx == 1)                   { _is_address_field = true; }
 		else if (_ntype == "MACRO_GET_CHAR"     && (_nidx == 10 || _nidx == 11)) { _is_address_field = true; }
