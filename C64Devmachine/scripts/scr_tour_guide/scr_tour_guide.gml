@@ -2494,7 +2494,9 @@ function scr_tour_make_night_sky(_with_sprites) {
     if (!instance_exists(obj_asset_manager)) {
         return;
     }
-    var _dir = working_directory + "cache/tour/";
+    // The app's own save folder: always writable. (working_directory is
+    // inside the app bundle on macOS, where nothing can be written.)
+    var _dir = game_save_id + "tour/";
     if (!directory_exists(_dir)) {
         directory_create(_dir);
     }
@@ -2535,15 +2537,16 @@ function scr_tour_make_night_sky(_with_sprites) {
         }
     }
     buffer_poke(_buf, 10002, buffer_u8, 0);
+    // The file is only where later edits are saved; the picture itself goes
+    // straight into the asset, so it shows even if the file can't be written
     buffer_save(_buf, _path);
-    buffer_delete(_buf);
 
     var _a = {
         type          : "BITMAP",
         name          : "NIGHT_SKY",
         file          : _path,
         address       : scr_asset_default_address("BITMAP"),
-        buffer        : buffer_create(1, buffer_fixed, 1),
+        buffer        : _buf,
         meta          : {
             format        : "koala",
             preview_surf  : -1,
@@ -2580,7 +2583,12 @@ function scr_tour_make_night_sky(_with_sprites) {
         group         : ""
     };
     ds_list_add(obj_asset_manager.asset_list, _a);
-    scr_asset_kla_reload(_a);
+    // What scr_asset_kla_reload does after loading the file
+    scr_asset_bmp_build_preview(_a);
+    if (surface_exists(_a.meta.preview_surf)) {
+        _a.meta.pixel_backup = buffer_create(320 * 200 * 4, buffer_fixed, 1);
+        buffer_get_surface(_a.meta.pixel_backup, _a.meta.preview_surf, 0);
+    }
 
     if (!_with_sprites) {
         return;
