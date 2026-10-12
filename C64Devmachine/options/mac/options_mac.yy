@@ -11,7 +11,7 @@
   "option_mac_arm64":true,
   "option_mac_build_app_store":false,
   "option_mac_build_number":1,
-  "option_mac_copyright":"",
+  "option_mac_copyright":"POLYTRICITY (C) 2026",
   "option_mac_disable_sandbox":true,
   "option_mac_display_cursor":true,
   "option_mac_display_name":"C64Devmachine_V1_31",
