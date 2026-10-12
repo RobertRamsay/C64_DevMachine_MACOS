@@ -179,8 +179,8 @@ function scr_tour_list() {
         // Page 2
         { title: "ANIMATE A SPRITE",    blurb: "Set up a 4 frame walk in the compositor and CONVERT TO NODES." },
         { title: "PLATFORM GAME",       blurb: "Walk, jump and fall off platforms, with animation and music." },
-        { title: "BITMAP SPRITES",      blurb: "11 ready-made sprites over a bitmap: the 8 per line rule and SETUP NODES." },
-        { title: "BITMAP OBJECTS",      blurb: "Fly a ready-made software sprite over a bitmap with the joystick." },
+        { title: "BITMAP SPRITES",      blurb: "11 sprites over a bitmap: the 8 a line rule and SETUP NODES." },
+        { title: "BITMAP OBJECTS",      blurb: "Fly a software sprite over a bitmap with the joystick." },
     ];
 }
 
@@ -2639,7 +2639,8 @@ function scr_tour_make_night_sky(_with_sprites) {
     var _o = { version: 3, show: true, mc1: 11, mc2: 7, mux_nodes: true, sprites: [], gen_org: -1, gen_nodes: [] };
     var _ucol = [13, 3, 10, 14, 15];
     for (var _i = 0; _i < 5; _i++) {
-        var _sp = scr_bmp_spr_new(24 + _i * 50, 30, _ucol[_i], 1, 0, 0, 0);
+        // spaced so the last one stays clear of the moon
+        var _sp = scr_bmp_spr_new(16 + _i * 44, 30, _ucol[_i], 1, 0, 0, 0);
         _sp.px = scr_tour_sprite_px(_ufo);
         array_push(_o.sprites, _sp);
     }
