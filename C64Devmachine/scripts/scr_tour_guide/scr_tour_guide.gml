@@ -2470,18 +2470,30 @@ function scr_tour_sky_colour(_x, _y) {
     if (_y >= 184) return 9;            // earth (cell rows 23-24)
     if (_y >= _hill + 2) return 5;      // hills
     if (_y >= _hill) return 13;         // grass along the top
-    var _dx = (_x - 128) * 2;           // moon: pixels are twice as wide
-    var _dy = _y - 30;
-    if (_dx * _dx + _dy * _dy <= 144) return 7;
-    if (_y < 120 && ((_x * 73 + _y * 151 + ((_x * _y) mod 97)) mod 211) == 0) return 1;   // stars
-    return scr_tour_sky_band(_y div 8);
+    // Moon: an ellipse in HiRes pixels (a fat pixel's centre is 2x + 1),
+    // a little wider than tall, with a pink ring to soften its edge
+    var _dx = ((_x - 128) * 2 + 1) / 19;
+    var _dy = (_y - 34) / 16;
+    var _d  = _dx * _dx + _dy * _dy;
+    if (_d <= 1) return 7;
+    if (_d <= 1.35) return 10;
+    // Stars, high in the sky and clear of the moon
+    var _near_moon = (abs((_x - 128) * 2) < 52 && abs(_y - 34) < 30);
+    if (_y < 120 && !_near_moon && ((_x * 73 + _y * 151 + ((_x * _y) mod 97)) mod 211) == 0) return 1;
+    return scr_tour_sky_grad(_x, _y);
 }
 
-/// @desc Sky colour of cell row _cy: black (the background) at the top,
-///       then blue, then purple down to the hills.
-function scr_tour_sky_band(_cy) {
-    if (_cy < 6) return 0;
-    if (_cy < 11) return 6;
+/// @desc The sky: black at the top, a dithered fade to blue, blue, a
+///       dithered fade to purple, purple down to the hills. A 4x4 ordered
+///       (Bayer) dither on the fat pixels; every fade is between two colours
+///       only, so a cell never needs more than the C64 allows.
+function scr_tour_sky_grad(_x, _y) {
+    static _bayer = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+    var _th = _bayer[(_y & 3) * 4 + (_x & 3)] + 0.5;
+    if (_y < 32) return 0;
+    if (_y < 64) return (((_y - 32) / 32) * 16 > _th) ? 6 : 0;
+    if (_y < 88) return 6;
+    if (_y < 112) return (((_y - 88) / 24) * 16 > _th) ? 4 : 6;
     return 4;
 }
 
@@ -2507,25 +2519,40 @@ function scr_tour_make_night_sky(_with_sprites) {
     buffer_poke(_buf, 1, buffer_u8, 0x60);
     for (var _cy = 0; _cy < 25; _cy++) {
         for (var _cx = 0; _cx < 40; _cx++) {
-            // colours for pairs 01, 10, 11 (-1 = free)
+            // The cell's colours, then its slots for pairs 01, 10, 11 (-1 =
+            // free). The sky prefers the same slots everywhere - 01 the sky
+            // (blue, else purple), 10 white, 11 yellow - so the ROCKET (body
+            // in 10, flame in 11, window in 01) looks the same over most of
+            // it. Anything else goes in 11 first, so the body stays white.
+            var _px = array_create(32, 0);
+            var _has = array_create(16, false);
+            for (var _r = 0; _r < 8; _r++) {
+                for (var _p = 0; _p < 4; _p++) {
+                    var _pc = scr_tour_sky_colour(_cx * 4 + _p, _cy * 8 + _r);
+                    _px[_r * 4 + _p] = _pc;
+                    _has[_pc] = true;
+                }
+            }
             var _slots = [-1, -1, -1];
-            if (_cy < 16) {
-                var _band = scr_tour_sky_band(_cy);
-                _slots = [(_band == 0) ? -1 : _band, 1, 7];
+            if (_has[6]) { _slots[0] = 6; } else if (_has[4]) { _slots[0] = 4; }
+            if (_has[1]) { _slots[1] = 1; }
+            if (_has[7]) { _slots[2] = 7; }
+            for (var _c = 1; _c < 16; _c++) {
+                if (!_has[_c] || _slots[0] == _c || _slots[1] == _c || _slots[2] == _c) continue;
+                if (_slots[2] == -1) { _slots[2] = _c; }
+                else if (_slots[1] == -1) { _slots[1] = _c; }
+                else if (_slots[0] == -1) { _slots[0] = _c; }
             }
             for (var _r = 0; _r < 8; _r++) {
                 var _byte = 0;
                 for (var _p = 0; _p < 4; _p++) {
-                    var _c = scr_tour_sky_colour(_cx * 4 + _p, _cy * 8 + _r);
+                    var _c2 = _px[_r * 4 + _p];
                     var _v = 0;
-                    if (_c != 0) {
+                    if (_c2 != 0) {
                         for (var _s = 0; _s < 3 && _v == 0; _s++) {
-                            if (_slots[_s] == _c) _v = _s + 1;
+                            if (_slots[_s] == _c2) _v = _s + 1;
                         }
-                        for (var _s = 0; _s < 3 && _v == 0; _s++) {
-                            if (_slots[_s] == -1) { _slots[_s] = _c; _v = _s + 1; }
-                        }
-                        if (_v == 0) _v = 3;
+                        if (_v == 0) _v = 3;   // a fourth colour (never planned)
                     }
                     _byte |= _v << (6 - _p * 2);
                 }
@@ -2616,7 +2643,9 @@ function scr_tour_make_night_sky(_with_sprites) {
         _sp.px = scr_tour_sprite_px(_ufo);
         array_push(_o.sprites, _sp);
     }
-    var _bcol = [2, 8, 10, 4, 5, 14];
+    // red, orange, pink, light green, green, light blue: none of them the
+    // sky's blue or purple
+    var _bcol = [2, 8, 10, 13, 5, 14];
     for (var _i = 0; _i < 6; _i++) {
         var _sp2 = scr_bmp_spr_new(16 + _i * 50, 96, _bcol[_i], 1, 0, 0, 0);
         _sp2.px = scr_tour_sprite_px(_bal);
