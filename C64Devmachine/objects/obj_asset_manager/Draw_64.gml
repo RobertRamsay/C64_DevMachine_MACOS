@@ -2709,8 +2709,8 @@ var _ov_val = (_ov_grid_len > _idx) ? _ov_grid[_idx] : 0;
 				// Per-tile colours (bitmap-built rooms, e.g. Saboteur): the tile
 				// itself fixes ink (high nibble); paper is set with _cell_bg_col above.
 				if (_char < array_length(_m.tile_colours) && _m.tile_colours[_char] >= 0) {
-				    var _tcol = _m.tile_colours[_char];
-				    _render_col   = (_tcol >> 4) & 0x0F;
+				    var _tile_col = _m.tile_colours[_char];
+				    _render_col   = (_tile_col >> 4) & 0x0F;
 				}
 	                if (_cell_is_mc &&
 	                    _chr_asset_ref != noone &&
@@ -10078,10 +10078,16 @@ case "META_TILESET": {
     if (_m.raw_rows == 2) {
         _rr_lbl = "RAW ROWS: UP";
     }
+    if (_m.raw_rows == 3) {
+        _rr_lbl = "STAMP IDS";
+    }
+    if (_m.raw_rows == 4) {
+        _rr_lbl = "IDS + COLS";
+    }
     var _rr_x2  = _rv_x1 + string_width_l("RAW ROWS: OFF") + 10;
     var _rr_y2  = _cy + 14;
     var _rr_hov = point_in_rectangle(_mx, _my, _rv_x1, _cy, _rr_x2, _rr_y2);
-    scr_ui_info(_rr_hov, "RAW ROWS: EMIT MAPS AS PLAIN CHAR ROWS. CYCLES OFF / ON (TOP FIRST) / UP (BOTTOM FIRST)");
+    scr_ui_info(_rr_hov, "RAW ROWS: EMIT MAPS AS PLAIN CHAR ROWS. CYCLES OFF / ON (TOP FIRST) / UP (BOTTOM FIRST) / STAMP IDS (STAMP TABLE + ONE BYTE PER CELL) / IDS + COLS (STAMP CHARS COLUMN BY COLUMN)");
     if (_rr_on) {
         draw_set_color(make_color_rgb(20, 70, 50));
     } else {
@@ -10107,11 +10113,15 @@ case "META_TILESET": {
         draw_text_l(_rr_x2 + 6, _cy + 1, "$" + string_upper(decimal_to_hex(_asset.address)) + " " + string(_rr_sz) + "B");
     }
     if (_rr_hov && mouse_check_button_pressed(mb_left)) {
-        // OFF -> ON (top row first) -> UP (bottom row first) -> OFF
+        // OFF -> ON (top row first) -> UP (bottom row first) -> STAMP IDS -> IDS + COLS -> OFF
         if (_m.raw_rows == 0) {
             _m.raw_rows = 1;
         } else if (_m.raw_rows == 1) {
             _m.raw_rows = 2;
+        } else if (_m.raw_rows == 2) {
+            _m.raw_rows = 3;
+        } else if (_m.raw_rows == 3) {
+            _m.raw_rows = 4;
         } else {
             _m.raw_rows = 0;
         }
