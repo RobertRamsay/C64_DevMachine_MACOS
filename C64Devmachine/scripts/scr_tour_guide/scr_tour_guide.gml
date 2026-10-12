@@ -3572,6 +3572,15 @@ function scr_tour_do_action(_st, _dry) {
             if (_dry) {
                 return "1";
             }
+            // A bitmap still being edited leaves edit mode first (the EDIT
+            // button: it saves the picture and ends the full-screen editor),
+            // then the tour Step closes the viewer once that has happened
+            var _cb = scr_tour_viewer_bitmap();
+            if (!is_undefined(_cb) && (_cb.meta[$ "is_editing"] ?? false)) {
+                global.tour_click = "ASSET:BMP_EDIT";
+                close_pending = 30;
+                return "I clicked EDIT to finish editing, which saves the picture, then CLOSE at the top right.";
+            }
             scr_tour_close_viewer();
             return "I clicked CLOSE at the top right of the viewer. Your work is kept.";
         case "BMP_LINKED":
