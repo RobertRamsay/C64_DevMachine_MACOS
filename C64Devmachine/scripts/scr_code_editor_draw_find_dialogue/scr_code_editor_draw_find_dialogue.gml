@@ -4,12 +4,8 @@ function scr_code_editor_draw_find_dialogue(_px, _py, _pw, _ph, _mx, _my) {
     var _dx = _px + _pw - _dw - 20;
     var _dy = _py + 40;
 
-    // Background fill
-    draw_set_color(make_color_rgb(22, 26, 35));
-    draw_rectangle(_dx, _dy, _dx + _dw, _dy + _dh, false);
-    // Border
-    draw_set_color(make_color_rgb(70, 180, 120));
-    draw_rectangle(_dx, _dy, _dx + _dw, _dy + _dh, true);
+    // Background: shared editor panel (same rounded skin as its fields/buttons)
+    scr_editor_panel(_dx, _dy, _dx + _dw, _dy + _dh, false);
 
     draw_set_font_l(fnt_c64_tiny);
 
@@ -21,14 +17,11 @@ function scr_code_editor_draw_find_dialogue(_px, _py, _pw, _ph, _mx, _my) {
 
     // --- FIND FIELD ---
     var _ty = _dy + 14;
-    draw_set_color(make_color_rgb(120, 120, 180));
+    draw_set_color(make_color_rgb(124, 124, 183));
     draw_text_l(_label_x, _ty, "FIND:");
 
     var _f1_active = (code_editor_find_active_field == 1);
-    draw_set_color(make_color_rgb(15, 18, 28));
-    draw_rectangle(_field_x, _ty - 2, _field_x + _field_w, _ty + _field_h, false);
-    draw_set_color(_f1_active ? make_color_rgb(80, 180, 120) : make_color_rgb(50, 55, 70));
-    draw_rectangle(_field_x, _ty - 2, _field_x + _field_w, _ty + _field_h, true);
+    scr_editor_panel(_field_x, _ty - 2, _field_x + _field_w, _ty + _field_h, true);
     draw_set_color(_f1_active ? c_white : make_color_rgb(150, 150, 150));
     var _f1_text = code_editor_find_text + ((_f1_active && _blink_on) ? "|" : "");
     draw_text_l(_field_x + 5, _ty, _f1_text);
@@ -38,14 +31,11 @@ function scr_code_editor_draw_find_dialogue(_px, _py, _pw, _ph, _mx, _my) {
 
     // --- REPLACE FIELD ---
     _ty += 28;
-    draw_set_color(make_color_rgb(120, 120, 180));
+    draw_set_color(make_color_rgb(124, 124, 183));
     draw_text_l(_label_x, _ty, "REPLACE:");
 
     var _f2_active = (code_editor_find_active_field == 2);
-    draw_set_color(make_color_rgb(15, 18, 28));
-    draw_rectangle(_field_x, _ty - 2, _field_x + _field_w, _ty + _field_h, false);
-    draw_set_color(_f2_active ? make_color_rgb(80, 180, 120) : make_color_rgb(50, 55, 70));
-    draw_rectangle(_field_x, _ty - 2, _field_x + _field_w, _ty + _field_h, true);
+    scr_editor_panel(_field_x, _ty - 2, _field_x + _field_w, _ty + _field_h, true);
     draw_set_color(_f2_active ? c_white : make_color_rgb(150, 150, 150));
     var _f2_text = code_editor_replace_text + ((_f2_active && _blink_on) ? "|" : "");
     draw_text_l(_field_x + 5, _ty, _f2_text);
@@ -62,13 +52,11 @@ function scr_code_editor_draw_find_dialogue(_px, _py, _pw, _ph, _mx, _my) {
 
     var draw_btn = function(_x, _y, _w, _label, _enabled, _msx, _msy, _bth) {
         var _hov = (_enabled && _msx >= _x && _msx <= _x + _w && _msy >= _y && _msy <= _y + _bth);
-        draw_set_color(_hov ? make_color_rgb(60, 160, 100) : (_enabled ? make_color_rgb(30, 50, 40) : make_color_rgb(25, 25, 30)));
-        draw_rectangle(_x, _y, _x + _w, _y + _bth, false);
-        draw_set_color(_hov ? c_white : (_enabled ? make_color_rgb(100, 200, 140) : make_color_rgb(60, 60, 70)));
-        draw_rectangle(_x, _y, _x + _w, _y + _bth, true);
+        scr_editor_control(_x, _y, _x + _w, _y + _bth, _hov, false, _enabled);
+        draw_set_color(_hov ? c_white : (_enabled ? make_color_rgb(100, 200, 140) : make_color_rgb(120, 132, 147)));
         draw_set_font_l(fnt_c64_tiny);
         draw_set_halign(fa_center);
-        draw_text_l(_x + _w / 2, _y + 4, _label);
+        scr_editor_label(_x, _y, _x + _w, _y + _bth, _label);
         draw_set_halign(fa_left);
         return (_hov && mouse_check_button_pressed(mb_left));
     };
@@ -140,7 +128,7 @@ function scr_code_editor_draw_find_dialogue(_px, _py, _pw, _ph, _mx, _my) {
 
     // Hint
     draw_set_font_l(fnt_c64_tiny);
-    draw_set_color(make_color_rgb(70, 90, 80));
+    draw_set_color(make_color_rgb(112, 133, 122));
     draw_text_l(_dx + 8, _bt_y - 25, "TAB: switch field  |  ESC: close  |  ENTER: next");
 
     // ─── CLICK AWAY ───────────────────────────────────────────────

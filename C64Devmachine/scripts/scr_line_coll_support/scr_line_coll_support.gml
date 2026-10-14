@@ -188,22 +188,13 @@ function scr_line_coll_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
         _ui_my = -10000;
     }
 
-    var _btn = function(_x1, _y1, _w, _h, _label, _fill, _hov_fill, _mx2, _my2) {
+    var _btn = function(_x1, _y1, _w, _h, _label, _selected, _mx2, _my2) {
         var _hov = point_in_rectangle(_mx2, _my2, _x1, _y1, _x1 + _w, _y1 + _h);
-        draw_set_color(_fill);
-        if (_hov) { draw_set_color(_hov_fill); }
-        draw_rectangle(_x1, _y1, _x1 + _w, _y1 + _h, false);
-        draw_set_color(make_color_rgb(72, 83, 103));
-        draw_rectangle(_x1, _y1, _x1 + _w, _y1 + _h, true);
+        scr_editor_control(_x1, _y1, _x1 + _w, _y1 + _h, _hov, _selected);
         draw_set_color(c_white);
-        draw_set_halign(fa_center);
-        draw_text_l(_x1 + _w * 0.5, _y1 + floor(_h * 0.5) - 6, _label);
-        draw_set_halign(fa_left);
+        scr_editor_label(_x1, _y1, _x1 + _w, _y1 + _h, _label);
         return (_hov && mouse_check_button_pressed(mb_left));
     };
-    var _c_off  = make_color_rgb(31, 38, 54);
-    var _c_hov  = make_color_rgb(53, 61, 82);
-    var _c_on   = make_color_rgb(38, 94, 111);
     var _c_head = make_color_rgb(154, 175, 198);
 
     // ════════════════════════════════════════════════════════════════
@@ -217,13 +208,11 @@ function scr_line_coll_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
     draw_set_color(_c_head);
     draw_text_l(_lx, _sy, "REFERENCE BITMAP"); _sy += 20;
     var _ref_lbl = "SHOW REFERENCE: OFF";
-    var _ref_col = _c_off;
     if (_m.ref_enabled) {
         _ref_lbl = "SHOW REFERENCE: ON";
-        _ref_col = _c_on;
     }
     scr_ui_info(point_in_rectangle(_mx, _ui_my, _lx, _sy, _lx + _lw, _sy + 24), "SHOW OR HIDE THE REFERENCE BITMAP BEHIND THE LINES");
-    if (_btn(_lx, _sy, _lw, 24, _ref_lbl, _ref_col, _c_hov, _mx, _ui_my)) {
+    if (_btn(_lx, _sy, _lw, 24, _ref_lbl, _m.ref_enabled, _mx, _ui_my)) {
         _m.ref_enabled = !_m.ref_enabled;
     }
     _sy += 30;
@@ -233,7 +222,7 @@ function scr_line_coll_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
         _pick_lbl = scr_bbuild_fit_name(_m.ref_asset_name, _lw - 20);
     }
     scr_ui_info(point_in_rectangle(_mx, _my, _lx, _sy, _lx + _lw, _sy + 24), "OPEN A LIST OF BITMAP ASSETS TO TRACE OVER");
-    if (_btn(_lx, _sy, _lw, 24, _pick_lbl, _c_off, _c_hov, _mx, _my)) {
+    if (_btn(_lx, _sy, _lw, 24, _pick_lbl, false, _mx, _my)) {
         _m.ref_picker_open = !_m.ref_picker_open;
         _press = false;
     }
@@ -242,16 +231,15 @@ function scr_line_coll_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
     var _offs = [["REF X", "ref_offset_x"], ["REF Y", "ref_offset_y"]];
     for (var _oi = 0; _oi < 2; _oi++) {
         var _fld = _offs[_oi][1];
-        draw_set_color(make_color_rgb(16, 19, 29));
-        draw_rectangle(_lx, _sy, _lx + _lw - 64, _sy + 22, false);
+        scr_editor_panel(_lx, _sy, _lx + _lw - 64, _sy + 22, true);
         draw_set_color(c_white);
-        draw_text_l(_lx + 8, _sy + 5, _offs[_oi][0] + ": " + string(_m[$ _fld]));
+        scr_editor_label(_lx, _sy, _lx + _lw - 64, _sy + 22, _offs[_oi][0] + ": " + string(_m[$ _fld]), fa_left, 8);
         scr_ui_info(point_in_rectangle(_mx, _ui_my, _lx + _lw - 58, _sy, _lx + _lw - 32, _sy + 22), "NUDGE THE REFERENCE BITMAP 1 PIXEL " + ((_oi == 0) ? "LEFT" : "UP"));
         scr_ui_info(point_in_rectangle(_mx, _ui_my, _lx + _lw - 26, _sy, _lx + _lw, _sy + 22), "NUDGE THE REFERENCE BITMAP 1 PIXEL " + ((_oi == 0) ? "RIGHT" : "DOWN"));
-        if (_btn(_lx + _lw - 58, _sy, 26, 22, "-", make_color_rgb(60, 25, 25), make_color_rgb(110, 45, 45), _mx, _ui_my)) {
+        if (_btn(_lx + _lw - 58, _sy, 26, 22, "-", false, _mx, _ui_my)) {
             _m[$ _fld] = clamp(_m[$ _fld] - 1, -255, 255);
         }
-        if (_btn(_lx + _lw - 26, _sy, 26, 22, "+", make_color_rgb(25, 60, 25), make_color_rgb(45, 110, 45), _mx, _ui_my)) {
+        if (_btn(_lx + _lw - 26, _sy, 26, 22, "+", false, _mx, _ui_my)) {
             _m[$ _fld] = clamp(_m[$ _fld] + 1, -255, 255);
         }
         _sy += 28;
@@ -262,13 +250,11 @@ function scr_line_coll_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
     draw_set_color(_c_head);
     draw_text_l(_lx, _sy, "X COORDINATES"); _sy += 20;
     var _wx_lbl = "X: 0-255 (1 = 1 PIXEL)";
-    var _wx_col = _c_off;
     if (_m.wide_x) {
         _wx_lbl = "X: 320 WIDE (1 = 2 PIXELS)";
-        _wx_col = _c_on;
     }
     scr_ui_info(point_in_rectangle(_mx, _ui_my, _lx, _sy, _lx + _lw, _sy + 24), "SWITCH X UNITS: 0-255 PIXELS OR 0-159 DOUBLE PIXELS FOR THE FULL 320 WIDTH (LINES ARE RESCALED)");
-    if (_btn(_lx, _sy, _lw, 24, _wx_lbl, _wx_col, _c_hov, _mx, _ui_my)) {
+    if (_btn(_lx, _sy, _lw, 24, _wx_lbl, _m.wide_x, _mx, _ui_my)) {
         // Rescale existing lines so they stay where they are.
         scr_line_coll_push_undo(_m);
         _m.wide_x = !_m.wide_x;
@@ -298,20 +284,14 @@ function scr_line_coll_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
         var _tby2 = _tby1 + 26;
         var _tb_hov = point_in_rectangle(_mx, _ui_my, _tbx1, _tby1, _tbx2, _tby2);
         scr_ui_info(_tb_hov, "DRAW NEW LINES AS TYPE " + string(_ti) + " - THE VALUE A HIT WRITES TO THE RESULT VARIABLE");
-        draw_set_color(_type_colours[_ti]);
-        draw_rectangle(_tbx1, _tby1, _tbx2, _tby2, false);
-        draw_set_color(make_color_rgb(60, 60, 60));
-        if (_tb_hov) { draw_set_color(make_color_rgb(200, 200, 200)); }
-        if (_m.active_type == _ti) { draw_set_color(c_white); }
-        draw_rectangle(_tbx1, _tby1, _tbx2, _tby2, true);
-        if (_m.active_type == _ti) {
-            draw_rectangle(_tbx1 + 1, _tby1 + 1, _tbx2 - 1, _tby2 - 1, true);
-        }
+        // Type chip: hover / active come from the swatch's own frame.
+        scr_editor_swatch(_tbx1, _tby1, _tbx2, _tby2, _type_colours[_ti], _tb_hov, _m.active_type == _ti);
         // Number in a contrasting box so it reads on every swatch colour
+        // (inside the swatch's 2px colour inset).
         draw_set_color(c_black);
         draw_rectangle(_tbx1 + 2, _tby1 + 2, _tbx1 + 14, _tby1 + 14, false);
         draw_set_color(c_white);
-        draw_text_l(_tbx1 + 5, _tby1 + 2, string(_ti));
+        scr_editor_label(_tbx1 + 2, _tby1 + 2, _tbx1 + 14, _tby1 + 14, string(_ti));
         if (_tb_hov && _press) {
             _m.active_type = _ti;
         }
@@ -323,13 +303,10 @@ function scr_line_coll_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
     draw_text_l(_lx, _sy, "TOOLS"); _sy += 20;
     // EDIT POINTS: on only by clicking. ALT lights it (hot edit) without
     // switching it on.
-    var _ed_col = _c_off;
-    if (_alt_hot) { _ed_col = make_color_rgb(120, 100, 30); }
-    if (_m.edit_mode) { _ed_col = make_color_rgb(200, 160, 40); }
     var _ed_lbl = "EDIT POINTS: OFF  (HOLD ALT)";
     if (_m.edit_mode) { _ed_lbl = "EDIT POINTS: ON"; }
     scr_ui_info(point_in_rectangle(_mx, _ui_my, _lx, _sy, _lx + _lw, _sy + 24), "TOGGLE EDIT POINTS: DRAG LINE ENDS INSTEAD OF DRAWING (HOLD ALT FOR THE SAME)");
-    if (_btn(_lx, _sy, _lw, 24, _ed_lbl, _ed_col, _c_hov, _mx, _ui_my)) {
+    if (_btn(_lx, _sy, _lw, 24, _ed_lbl, _m.edit_mode || _alt_hot, _mx, _ui_my)) {
         _m.edit_mode = !_m.edit_mode;
         _m.draw_x1   = -1;
         _m.draw_y1   = -1;
@@ -343,17 +320,14 @@ function scr_line_coll_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
         var _hb_x = _lx + _hb * (_hw + 8);
         scr_ui_info(point_in_rectangle(_mx, _ui_my, _hb_x, _sy, _hb_x + _hw, _sy + 24), (_hb == 0) ? "UNDO THE LAST LINE CHANGE (CTRL+Z)" : "REDO THE LAST UNDONE CHANGE (CTRL+Y)");
         if (_hb_has) {
-            if (_btn(_hb_x, _sy, _hw, 24, _hist_lbl[_hb], make_color_rgb(40, 60, 90), make_color_rgb(70, 100, 150), _mx, _ui_my)) {
+            if (_btn(_hb_x, _sy, _hw, 24, _hist_lbl[_hb], false, _mx, _ui_my)) {
                 scr_line_coll_history_step(_asset, _hb == 1);
                 exit;
             }
         } else {
-            draw_set_color(make_color_rgb(24, 26, 34));
-            draw_rectangle(_hb_x, _sy, _hb_x + _hw, _sy + 24, false);
-            draw_set_color(make_color_rgb(90, 90, 90));
-            draw_set_halign(fa_center);
-            draw_text_l(_hb_x + _hw * 0.5, _sy + 6, _hist_lbl[_hb]);
-            draw_set_halign(fa_left);
+            scr_editor_control(_hb_x, _sy, _hb_x + _hw, _sy + 24, false, false, false);
+            draw_set_color(make_color_rgb(120, 132, 147));
+            scr_editor_label(_hb_x, _sy, _hb_x + _hw, _sy + 24, _hist_lbl[_hb]);
         }
     }
     _sy += 40;
@@ -530,11 +504,12 @@ function scr_line_coll_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
     draw_set_color(make_color_rgb(23, 29, 42));
     draw_rectangle(_rx - 10, _top - 6, _rx + _rw + 10, _bottom, false);
     draw_set_color(_c_head);
-    draw_text_l(_rx, _top + 4, "LINES (" + string(array_length(_m.lines)) + ")");
+    // Centred on the CLEAR button row beside it.
+    scr_editor_label(_rx, _top, _rx + _rw - 60, _top + 20, "LINES (" + string(array_length(_m.lines)) + ")", fa_left, 0);
     var _has_lines = array_length(_m.lines) > 0;
     if (_has_lines) {
         scr_ui_info(point_in_rectangle(_mx, _ui_my, _rx + _rw - 60, _top, _rx + _rw, _top + 20), "DELETE EVERY LINE (CTRL+Z TO UNDO)");
-        if (_btn(_rx + _rw - 60, _top, 60, 20, "CLEAR", make_color_rgb(110, 30, 30), make_color_rgb(200, 60, 60), _mx, _ui_my)) {
+        if (_btn(_rx + _rw - 60, _top, 60, 20, "CLEAR", false, _mx, _ui_my)) {
             scr_line_coll_push_undo(_m);
             _m.lines = [];
             _m.line_scroll = 0;
@@ -565,15 +540,16 @@ function scr_line_coll_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
         draw_set_color(_type_colours[clamp(_row_ln.type, 0, 7)]);
         draw_rectangle(_rx, _ry1, _rx + 6, _ry2, false);
         draw_set_color(c_white);
-        draw_text_l(_rx + 12, _ry1 + 4, string(_idx + 1) + ":  " + string(_row_ln.x1) + "," + string(_row_ln.y1)
-            + " -> " + string(_row_ln.x2) + "," + string(_row_ln.y2) + "   T" + string(_row_ln.type));
         var _dx1 = _rx + _rw - 22;
+        scr_editor_label(_rx, _ry1, _dx1, _ry2, string(_idx + 1) + ":  " + string(_row_ln.x1) + "," + string(_row_ln.y1)
+            + " -> " + string(_row_ln.x2) + "," + string(_row_ln.y2) + "   T" + string(_row_ln.type), fa_left, 12);
         var _del_hov = point_in_rectangle(_mx, _ui_my, _dx1, _ry1, _rx + _rw, _ry2);
         scr_ui_info(_row_hov, "LINE " + string(_idx + 1) + ": X1,Y1 -> X2,Y2 AND TYPE. MOUSE WHEEL SCROLLS THE LIST");
         scr_ui_info(_del_hov, "DELETE THIS LINE (CTRL+Z TO UNDO)");
-        draw_set_color(make_color_rgb(120, 60, 60));
+        scr_editor_control(_dx1, _ry1, _rx + _rw, _ry2, _del_hov);
+        draw_set_color(make_color_rgb(174, 115, 115));
         if (_del_hov) { draw_set_color(c_red); }
-        draw_text_l(_dx1 + 6, _ry1 + 4, "X");
+        scr_editor_label(_dx1, _ry1, _rx + _rw, _ry2, "X");
         if (_del_hov && _press) {
             _delete_idx = _idx;
         }

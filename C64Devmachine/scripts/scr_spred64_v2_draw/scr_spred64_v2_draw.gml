@@ -94,7 +94,7 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
         // Reserve a compact band between the editor and compositor for the
         // animation controls panel. With tight button heights the panel
         // fits comfortably in ~52px.
-        var _anim_band_h = 54;
+        var _anim_band_h = 62;
         var _rsv_x1 = _right_x1;
         var _rsv_y1 = _split_y + 4 + _anim_band_h;
         var _rsv_x2 = _right_x2;
@@ -102,20 +102,11 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
         // -------------------------------------------------------
         // BACKDROP PANELS
         // -------------------------------------------------------
-        draw_set_color(make_color_rgb(12, 12, 20));
-        draw_rectangle(_pick_x1, _pick_y1, _pick_x2, _pick_y2, false);
-        draw_set_color(make_color_rgb(60, 40, 20));
-        draw_rectangle(_pick_x1, _pick_y1, _pick_x2, _pick_y2, true);
+        scr_editor_panel(_pick_x1, _pick_y1, _pick_x2, _pick_y2, true);
 
-        draw_set_color(make_color_rgb(12, 12, 20));
-        draw_rectangle(_ed_x1, _ed_y1, _ed_x2, _ed_y2, false);
-        draw_set_color(make_color_rgb(60, 40, 20));
-        draw_rectangle(_ed_x1, _ed_y1, _ed_x2, _ed_y2, true);
+        scr_editor_panel(_ed_x1, _ed_y1, _ed_x2, _ed_y2, true);
 
-        draw_set_color(make_color_rgb(10, 10, 16));
-        draw_rectangle(_rsv_x1, _rsv_y1, _rsv_x2, _rsv_y2, false);
-        draw_set_color(make_color_rgb(40, 30, 15));
-        draw_rectangle(_rsv_x1, _rsv_y1, _rsv_x2, _rsv_y2, true);
+        scr_editor_panel(_rsv_x1, _rsv_y1, _rsv_x2, _rsv_y2, true);
 
         // -------------------------------------------------------
         // SPRITE PICKER GRID (LEFT)
@@ -153,7 +144,7 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
                 _pa_x + _pick_cell_w, _pa_y + _pick_cell_h);
         }
         scr_ui_info(_pick_hover >= 0, (_pick_hover == _pick_used - 1 && _pick_used > 1)
-            ? "LAST SLOT: CLICK SELECTS, SHIFT/CTRL+CLICK MULTI-SELECT, ALT+CLICK DELETES IT IF BLANK"
+            ? "LAST SLOT: CLICK SELECTS, SHIFT/CTRL+CLICK MULTI-SELECT, RIGHT-CLICK REMOVES IT"
             : "SPRITE SLOT: CLICK SELECTS, SHIFT+CLICK RANGE, CTRL+CLICK TOGGLES IN SET, CTRL+C/V COPY/PASTE");
         scr_ui_info(_pick_add_hover, "ADD A NEW BLANK SPRITE SLOT AT THE END OF THE BANK (UP TO 64)");
 
@@ -173,10 +164,7 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
             }
 
             // Cell background
-            draw_set_color(_is_sel
-                ? make_color_rgb(80, 60, 20)
-                : (_is_hov ? make_color_rgb(40, 40, 60) : make_color_rgb(20, 20, 30)));
-            draw_rectangle(_cx, _cy_p, _cx + _pick_cell_w, _cy_p + _pick_cell_h, false);
+            scr_editor_control(_cx, _cy_p, _cx + _pick_cell_w, _cy_p + _pick_cell_h, _is_hov, _is_sel);
 
             // Paint the C64 BG colour behind the sprite. The sprite itself
             // has transparent BG pixels (so it composites correctly in the
@@ -188,10 +176,10 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
             &&  _asset.meta.spr_sprites[_slot] != -1
             &&  sprite_exists(_asset.meta.spr_sprites[_slot])) {
                 draw_set_color(scr_c64_pepto_colour(_v2.bg_col));
-                draw_rectangle(_cx + 1, _cy_p + 1, _cx + 1 + 96, _cy_p + 1 + 84, false);
+                draw_rectangle(_cx + 6, _cy_p + 5, _cx + 90, _cy_p + 79, false);
                 gpu_set_tex_filter(false);
                 draw_sprite_ext(_asset.meta.spr_sprites[_slot], 0,
-                                _cx + 1, _cy_p + 1, 2, 2, 0, c_white, 1);
+                                _cx + 6, _cy_p + 5, 1.75, 1.75, 0, c_white, 1);
 								gpu_set_tex_filter(true);
             }
 
@@ -205,21 +193,26 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
                 }
             }
             if (_slot_empty) {
+                // Keep the control's hover / selected frame visible on a
+                // blank slot; only idle blank slots use the empty-slot well.
+                if (!_is_sel && !_is_hov) {
+                    scr_editor_empty_slot(_cx, _cy_p, _cx + _pick_cell_w, _cy_p + _pick_cell_h);
+                }
                 draw_set_font_l(fnt_c64_tiny);
                 draw_set_color(make_color_rgb(160, 160, 80));
                 draw_text_l(_cx + 2, _cy_p + _pick_cell_h - 14, string(_slot));
             }
 
-            // ALT-click-to-remove hint — only on the LAST slot, only when
+            // Right-click-to-remove hint — only on the LAST slot, only when
             // it's blank and there's more than one slot. Peels back from
-            // the end; clear a sprite first, then ALT-click to drop it.
+            // the end; a slot with pixels asks before it goes.
             if (_slot == _pick_used - 1 && _pick_used > 1 && _slot_empty && _is_hov) {
                 draw_set_font_l(fnt_c64_tiny);
                 draw_set_color(make_color_rgb(255, 120, 120));
                 draw_set_halign(fa_center);
                 draw_set_valign(fa_middle);
                 draw_text_l(_cx + _pick_cell_w * 0.5, _cy_p + 14, "EMPTY");
-                draw_text_l(_cx + _pick_cell_w * 0.5, _cy_p + _pick_cell_h * 0.5, "ALT-CLICK");
+                draw_text_l(_cx + _pick_cell_w * 0.5, _cy_p + _pick_cell_h * 0.5, "RIGHT-CLICK");
                 draw_text_l(_cx + _pick_cell_w * 0.5, _cy_p + _pick_cell_h * 0.5 + 12, "TO REMOVE");
                 draw_set_halign(fa_left);
                 draw_set_valign(fa_top);
@@ -227,19 +220,11 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
 
             
 
-            // Selection / hover outline
-            if (_is_sel) {
-                draw_set_color(make_color_rgb(255, 220, 120));
-                draw_rectangle(_cx, _cy_p,
-                               _cx + _pick_cell_w +4, _cy_p + _pick_cell_h +4, true);
-            } else if (_is_hov) {
-                draw_set_color(c_white);
-                draw_rectangle(_cx, _cy_p,
-                               _cx + _pick_cell_w +4, _cy_p + _pick_cell_h +4, true);
-            }
+            // Selection / hover state comes from the cell's control frame
+            // (drawn above) — no extra outline box.
 
             // Batch-select bracket — cyan, doubled so it reads clearly over
-            // the yellow (primary) and white (hover) outlines. Drawn last so
+            // the selected / hover control frames. Drawn last so
             // a slot that's both primary AND multi-selected still shows the
             // cyan membership marker on top.
             if (_v2.multi_select[_slot]) {
@@ -251,6 +236,13 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
             }
         }
 
+        // Empty positions reserve the same footprint as populated sprites.
+        for (var _empty_slot = _pick_used + 1; _empty_slot < 64; _empty_slot++) {
+            var _ex = _pick_x1 + 2 + (_empty_slot mod _pick_cols) * (_pick_cell_w + _pick_gap);
+            var _ey = _pick_y1 + 2 + (_empty_slot div _pick_cols) * (_pick_cell_h + _pick_gap);
+            scr_editor_empty_slot(_ex, _ey, _ex + _pick_cell_w, _ey + _pick_cell_h);
+        }
+
         // ----- "+" ADD-SLOT CELL -----
         // Sits immediately after the last used slot. Click adds one blank
         // sprite (up to the 64 cap) via scr_spred64_v2_add_slot.
@@ -260,24 +252,18 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
             var _add_cx  = _pick_x1 + 2 + _add_col * (_pick_cell_w + _pick_gap);
             var _add_cy  = _pick_y1 + 2 + _add_row * (_pick_cell_h + _pick_gap);
 
-            draw_set_color(_pick_add_hover
-                ? make_color_rgb(40, 90, 50)
-                : make_color_rgb(24, 40, 28));
-            draw_rectangle(_add_cx, _add_cy,
-                           _add_cx + _pick_cell_w, _add_cy + _pick_cell_h, false);
+            scr_editor_control(_add_cx, _add_cy,
+                           _add_cx + _pick_cell_w, _add_cy + _pick_cell_h, _pick_add_hover, false);
 
             draw_set_color(_pick_add_hover
                 ? make_color_rgb(120, 255, 120)
                 : make_color_rgb(80, 160, 90));
-            draw_rectangle(_add_cx, _add_cy,
-                           _add_cx + _pick_cell_w, _add_cy + _pick_cell_h, true);
 
             draw_set_font_l(fnt_c64_code);
             draw_set_color(_pick_add_hover ? c_white : make_color_rgb(120, 200, 130));
             draw_set_halign(fa_center);
             draw_set_valign(fa_middle);
-            draw_text_l(_add_cx + _pick_cell_w * 0.5,
-                      _add_cy + _pick_cell_h * 0.5, "+");
+            scr_editor_label(_add_cx, _add_cy, _add_cx + _pick_cell_w, _add_cy + _pick_cell_h, "+");
             draw_set_halign(fa_left);
             draw_set_valign(fa_top);
 
@@ -288,19 +274,29 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
             }
         }
 
-        // Click on picker = select slot, OR ALT/OPT-click the LAST slot to
-        // remove it (trailing-only, blank-only — the remove script enforces
-        // both guards). ALT-click is checked first so it doesn't fall through
-        // to a normal select.
+        // Right-click the LAST slot to remove it. Only the last one: the
+        // compositor and the workspace nodes refer to sprites by slot
+        // number, so removing one mid-bank would renumber everything after
+        // it. A slot with pixels asks first.
         if (_pick_hover >= 0
-        && mouse_check_button_pressed(mb_left)
-        && (keyboard_check(vk_alt) || keyboard_check(vk_lalt) || keyboard_check(vk_ralt))
-        && _pick_hover == _pick_used - 1
+        && _pick_hover == _pick_used - 1 && _pick_used > 1
+        && mouse_check_button_pressed(mb_right)
         && !global.ui_click_consumed
         && !global.any_picker_open) {
-            scr_spred64_v2_remove_last_slot();
+            var _rm_has_px = false;
+            var _rm_base   = _pick_hover * 504;
+            for (var _rm_b = 0; _rm_b < 504; _rm_b++) {
+                if (_v2.bits[_rm_base + _rm_b] == 1) { _rm_has_px = true; break; }
+            }
+            if (!_rm_has_px
+            || scr_show_question_bool("Sprite " + string(_pick_hover) + " has pixels drawn in it.\n\nRemove it anyway?\n(It can't be undone.)")) {
+                scr_spred64_v2_remove_last_slot(true);
+            }
             global.ui_click_consumed = true;
+            mouse_clear(mb_right);
         }
+
+        // Click on picker = select slot.
         // SHIFT+click — select the range from the current slot to this one
         // (both ends included) into the batch-edit set. The current slot stays
         // primary, so HR/MC and the colour buttons apply to the whole range.
@@ -364,32 +360,30 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
 // Header text
         draw_set_font_l(fnt_c64_code);
         draw_set_color(make_color_rgb(255, 200, 120));
-        draw_text_l(_ed_x1 + 8, _ed_y1 + 6,
-            L("SLOT ") + string(_v2.selected_slot)
-            + L("   MODE: ") + ((_v2.sprite_modes[_v2.selected_slot] == 1) ? L("MULTICOLOUR") : L("HIRES")));
-
         // ----- HR/MC TOGGLE ROW (on the same line as the title, to the right) -----
         // Sits on the title row to save vertical space — the canvas moves up.
         var _toolrow_y = _ed_y1 + 4;
+        // Title is centred on the same 24px row as the toggles beside it.
+        scr_editor_label(_ed_x1, _toolrow_y, _ed_x1 + 360, _toolrow_y + 24,
+            L("SLOT ") + string(_v2.selected_slot)
+            + L("   MODE: ") + ((_v2.sprite_modes[_v2.selected_slot] == 1) ? L("MULTICOLOUR") : L("HIRES")),
+            fa_left, 8);
 
         // ----- HR/MC TOGGLE -----
         // X-shifted past the SLOT/MODE title text since it shares the title row.
         var _hmx1 = _ed_x1 + 374;
         var _hmx2 = _hmx1 + 100;
         var _hmy1 = _toolrow_y;
-        var _hmy2 = _hmy1 + 20;
+        var _hmy2 = _hmy1 + 24;
         var _hm_is_mc = (_v2.sprite_modes[_v2.selected_slot] == 1);
         var _hm_hov   = point_in_rectangle(_mx, _my, _hmx1, _hmy1, _hmx2, _hmy2);
         scr_ui_info(_hm_hov, _hm_is_mc
             ? "SWITCH THIS SPRITE (AND ANY MULTI-SELECTED SLOTS) TO HIRES"
             : "SWITCH THIS SPRITE (AND ANY MULTI-SELECTED SLOTS) TO MULTICOLOUR");
-        draw_set_color(_hm_is_mc
-            ? (_hm_hov ? make_color_rgb(220, 120, 40) : make_color_rgb(160, 80, 20))
-            : (_hm_hov ? make_color_rgb(80, 140, 200) : make_color_rgb(40, 80, 130)));
-        draw_rectangle(_hmx1, _hmy1, _hmx2, _hmy2, false);
+        scr_editor_control(_hmx1, _hmy1, _hmx2, _hmy2, _hm_hov, false);
         draw_set_color(c_white);
         draw_set_halign(fa_center);
-        draw_text_l(_hmx1 + 50, _hmy1 + 2, _hm_is_mc ? L("MC MODE") : L("HR MODE"));
+        scr_editor_label(_hmx1, _hmy1, _hmx2, _hmy2, _hm_is_mc ? L("MC MODE") : L("HR MODE"));
         draw_set_halign(fa_left);
         if (_hm_hov && mouse_check_button_pressed(mb_left)
         && !global.ui_click_consumed && !global.any_picker_open) {
@@ -428,34 +422,13 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
         var _cp_on  = _v2.comp_preview;
         var _cp_hov = point_in_rectangle(_mx, _my, _cpx1, _cpy1, _cpx2, _cpy2);
         scr_ui_info(_cp_hov, "TOGGLE COMP VIEW: CANVAS SHOWS ALL LAYERS AT THE SELECTED GRID SQUARE, TO PAINT IN CONTEXT");
-        if (_cp_on) {
-            if (_cp_hov) {
-                draw_set_color(make_color_rgb(60, 140, 60));
-            } else {
-                draw_set_color(make_color_rgb(40, 100, 40));
-            }
-        } else {
-            if (_cp_hov) {
-                draw_set_color(make_color_rgb(70, 50, 25));
-            } else {
-                draw_set_color(make_color_rgb(40, 30, 15));
-            }
-        }
-        draw_rectangle(_cpx1, _cpy1, _cpx2, _cpy2, false);
-        if (_cp_on) {
-            draw_set_color(make_color_rgb(120, 255, 120));
-            draw_rectangle(_cpx1,     _cpy1,     _cpx2,     _cpy2,     true);
-            draw_rectangle(_cpx1 + 1, _cpy1 + 1, _cpx2 - 1, _cpy2 - 1, true);
-        } else {
-            draw_set_color(make_color_rgb(200, 140, 60));
-            draw_rectangle(_cpx1, _cpy1, _cpx2, _cpy2, true);
-        }
+        scr_editor_control(_cpx1, _cpy1, _cpx2, _cpy2, _cp_hov, _cp_on);
         draw_set_color(c_white);
         draw_set_halign(fa_center);
         if (_cp_on) {
-            draw_text_l(_cpx1 + 50, _cpy1 + 2, "COMP ON");
+            scr_editor_label(_cpx1, _cpy1, _cpx2, _cpy2, "COMP ON");
         } else {
-            draw_text_l(_cpx1 + 50, _cpy1 + 2, "COMP OFF");
+            scr_editor_label(_cpx1, _cpy1, _cpx2, _cpy2, "COMP OFF");
         }
         draw_set_halign(fa_left);
         if (_cp_hov && mouse_check_button_pressed(mb_left)
@@ -758,7 +731,7 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
                       "PANNING — RELEASE TO COMMIT");
             draw_set_halign(fa_left);
         } else {
-            draw_set_color(make_color_rgb(100, 100, 120));
+            draw_set_color(make_color_rgb(127, 127, 147));
             draw_set_halign(fa_center);
             draw_text_l(_canvas_x + _canvas_w * 0.5,
                       _canvas_y + _canvas_h + 4,
@@ -1125,52 +1098,12 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
                 case 4: scr_ui_info(_fb_hov, "ARM/DISARM FLOOD FILL: THE NEXT CANVAS CLICK FILLS AN AREA WITH THE ACTIVE COLOUR"); break;
                 case 5: scr_ui_info(_fb_hov, "ARM/DISARM LINE TOOL: CLICK START THEN END ON THE CANVAS; STAYS ARMED FOR MORE LINES"); break;
             }
-            // Fill colour and border vary by button type and state:
-            //   CLEAR (index 3) — red, destructive
-            //   FILL  (index 4) — bright green when armed, orange otherwise
-            //   Others — orange
-            var _is_destructive = (_fxi == 3);
+            // FILL / LINE show selected while armed.
             var _is_fill_armed  = (_fxi == 4 && _v2.fill_armed);
             var _is_line_armed  = (_fxi == 5 && _v2.line_armed);
-            if (_is_fill_armed || _is_line_armed) {
-                if (_fb_hov) {
-                    draw_set_color(make_color_rgb(60, 140, 60));
-                } else {
-                    draw_set_color(make_color_rgb(40, 100, 40));
-                }
-            } else if (_is_destructive) {
-                if (_fb_hov) {
-                    draw_set_color(make_color_rgb(160, 40, 40));
-                } else {
-                    draw_set_color(make_color_rgb(80, 20, 20));
-                }
-            } else {
-                if (_fb_hov) {
-                    draw_set_color(make_color_rgb(70, 50, 25));
-                } else {
-                    draw_set_color(make_color_rgb(40, 30, 15));
-                }
-            }
-            draw_rectangle(_fbx1, _fby1, _fbx2, _fby2, false);
-            // Border — armed FILL/LINE = bright green (doubled), destructive = bright red, else orange
-            if (_is_fill_armed || _is_line_armed) {
-                draw_set_color(make_color_rgb(120, 255, 120));
-                draw_rectangle(_fbx1,     _fby1,     _fbx2,     _fby2,     true);
-                draw_rectangle(_fbx1 + 1, _fby1 + 1, _fbx2 - 1, _fby2 - 1, true);
-            } else if (_is_destructive) {
-                draw_set_color(make_color_rgb(255, 80, 80));
-                draw_rectangle(_fbx1, _fby1, _fbx2, _fby2, true);
-            } else {
-                draw_set_color(make_color_rgb(200, 140, 60));
-                draw_rectangle(_fbx1, _fby1, _fbx2, _fby2, true);
-            }
-            // Label
+            scr_editor_control(_fbx1, _fby1, _fbx2, _fby2, _fb_hov, _is_fill_armed || _is_line_armed);
             draw_set_color(c_white);
-            draw_set_halign(fa_center);
-            draw_set_valign(fa_middle);
-            draw_text_l((_fbx1 + _fbx2) * 0.5, (_fby1 + _fby2) * 0.5, _fx_lbls[_fxi]);
-            draw_set_halign(fa_left);
-            draw_set_valign(fa_top);
+            scr_editor_label(_fbx1, _fby1, _fbx2, _fby2, _fx_lbls[_fxi]);
             // Click handling — fires the relevant FX script on the active slot
             if (_fb_hov && mouse_check_button_pressed(mb_left)
             && !global.ui_click_consumed && !global.any_picker_open) {
@@ -1282,8 +1215,6 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
                 case 2: scr_ui_info(_cur_hov, "PAINT WITH MC2, MULTICOLOUR 2 SHARED BY ALL SPRITES (MC MODE ONLY)"); break;
                 case 3: scr_ui_info(_cur_hov, "BACKGROUND COLOUR: PICK BELOW. RIGHT CLICK ON THE CANVAS ERASES TO BACKGROUND"); break;
             }
-            draw_set_color(scr_c64_pepto_colour(_cur_val));
-            draw_rectangle(_pcol_x, _cur_y1, _pcol_x2, _cur_y2, false);
             // Column order is now [UC, MC1, MC2, BG]. Paint roles map:
             //   col 0 = UC  (active_colour 3)
             //   col 1 = MC1 (active_colour 1)
@@ -1292,19 +1223,10 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
             var _is_paint_active = (_pci == 0 && _v2.active_colour == 3)
                                 || (_pci == 1 && _v2.active_colour == 1)
                                 || (_pci == 2 && _v2.active_colour == 2);
-            if (_is_paint_active) {
-                draw_set_color(make_color_rgb(120, 255, 120));
-                draw_rectangle(_pcol_x,     _cur_y1,     _pcol_x2,     _cur_y2,     true);
-                draw_rectangle(_pcol_x + 1, _cur_y1 + 1, _pcol_x2 - 1, _cur_y2 - 1, true);
-            } else if (_cur_hov && _pci < 3) {
-                // Hover hint for selectable columns (UC/MC1/MC2) — white border.
-                // Column 3 is now BG, which isn't a paint target.
-                draw_set_color(c_white);
-                draw_rectangle(_pcol_x, _cur_y1, _pcol_x2, _cur_y2, true);
-            } else {
-                draw_set_color(make_color_rgb(120, 120, 140));
-                draw_rectangle(_pcol_x, _cur_y1, _pcol_x2, _cur_y2, true);
-            }
+            // Active paint role = selected frame; UC/MC1/MC2 hover = hover
+            // frame. BG (col 3) isn't a paint target so never hovers.
+            scr_editor_swatch(_pcol_x, _cur_y1, _pcol_x2, _cur_y2, scr_c64_pepto_colour(_cur_val),
+                _cur_hov && _pci < 3, _is_paint_active);
             // Click: set active paint role to this column's role. BG (col 3)
             // can't be a paint target so its click is a no-op. Other columns
             // map: UC=0 -> active 3, MC1=1 -> active 1, MC2=2 -> active 2.
@@ -1317,16 +1239,18 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
                     _v2.active_colour = _pci;
                 }
             }
-            // Index label — small, on a contrasting strip for legibility
+            // Index label — small, on a contrasting strip for legibility.
+            // Kept inside the swatch's 2px colour inset so the well frame
+            // stays visible.
             var _idx_txt = string(_cur_val);
             var _idx_tw  = string_width_l(_idx_txt) + 4;
             draw_set_color(make_color_rgb(0, 0, 0));
             draw_set_alpha(0.6);
-            draw_rectangle(_pcol_x2 - _idx_tw, _cur_y2 - 10,
-                           _pcol_x2,             _cur_y2,        false);
+            draw_rectangle(_pcol_x2 - 2 - _idx_tw, _cur_y2 - 12,
+                           _pcol_x2 - 2,             _cur_y2 - 2,    false);
             draw_set_alpha(1.0);
             draw_set_color(c_white);
-            draw_text_l(_pcol_x2 - _idx_tw + 2, _cur_y2 - 11, _idx_txt);
+            draw_text_l(_pcol_x2 - 2 - _idx_tw + 2, _cur_y2 - 13, _idx_txt);
 
             // 16 picker swatches stacked vertically
             for (var _pi = 0; _pi < 16; _pi++) {
@@ -1341,17 +1265,15 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
                         case 3: scr_ui_info(true, "SET THE BACKGROUND COLOUR BEHIND ALL SPRITES TO COLOUR " + string(_pi)); break;
                     }
                 }
-                draw_set_color(scr_c64_pepto_colour(_pi));
-                draw_rectangle(_pcol_x, _psy1, _pcol_x2, _psy2, false);
-
-                // Selection / hover border
-                if (_cur_val == _pi) {
-                    draw_set_color(make_color_rgb(255, 220, 120));
-                    draw_rectangle(_pcol_x,     _psy1,     _pcol_x2,     _psy2,     true);
-                    draw_rectangle(_pcol_x + 1, _psy1 + 1, _pcol_x2 - 1, _psy2 - 1, true);
-                } else if (_ps_hov) {
-                    draw_set_color(c_white);
-                    draw_rectangle(_pcol_x, _psy1, _pcol_x2, _psy2, true);
+                // Bars >= 8px tall are full swatches; thinner bars stay flat
+                // and only switch to the swatch frame when hovered / chosen,
+                // so the highlight is the same rounded frame as the UI.
+                var _ps_sel = (_cur_val == _pi);
+                if (_pal_sw_h >= 8 || _ps_sel || _ps_hov) {
+                    scr_editor_swatch(_pcol_x, _psy1, _pcol_x2, _psy2,
+                        scr_c64_pepto_colour(_pi), _ps_hov, _ps_sel);
+                } else {
+                    scr_editor_colour_tile(_pcol_x, _psy1, _pcol_x2 + 1, _psy2 + 1, scr_c64_pepto_colour(_pi));
                 }
 
                 if (_ps_hov && mouse_check_button_pressed(mb_left)
@@ -1424,10 +1346,7 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
         var _anim_y2 = _rsv_y1 - 4;
 
         // Panel backdrop
-        draw_set_color(make_color_rgb(10, 10, 16));
-        draw_rectangle(_anim_x1, _anim_y1, _anim_x2, _anim_y2, false);
-        draw_set_color(make_color_rgb(40, 30, 15));
-        draw_rectangle(_anim_x1, _anim_y1, _anim_x2, _anim_y2, true);
+        scr_editor_panel(_anim_x1, _anim_y1, _anim_x2, _anim_y2, true);
 
         // Convenience: total frame count for clamping steppers
         var _frame_count_total = array_length(_v2.compositor.frames);
@@ -1445,7 +1364,7 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
 
         // ===== LEFT COLUMN : transport =====
         // Row 1: PLAY + direction tabs — compact heights, smaller padding.
-        var _row_h = 16;
+        var _row_h = 20;
         var _r1_y1 = _anim_y1 + 4;
         var _r1_y2 = _r1_y1 + _row_h;
 
@@ -1456,29 +1375,12 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
         scr_ui_info(_play_hov, _v2.anim_playing
             ? "STOP THE ANIMATION ON THE CURRENT FRAME"
             : "PLAY FRAMES START TO END AT FPS SPEED, IN THE CHOSEN DIRECTION");
-        if (_v2.anim_playing) {
-            draw_set_color(_play_hov ? make_color_rgb(60, 140, 200) : make_color_rgb(40, 90, 160));
-        } else {
-            draw_set_color(_play_hov ? make_color_rgb(70, 50, 25) : make_color_rgb(40, 30, 15));
-        }
-        draw_rectangle(_play_x1, _r1_y1, _play_x2, _r1_y2, false);
-        if (_v2.anim_playing) {
-            draw_set_color(make_color_rgb(120, 255, 120));
-            draw_rectangle(_play_x1,     _r1_y1,     _play_x2,     _r1_y2,     true);
-            draw_rectangle(_play_x1 + 1, _r1_y1 + 1, _play_x2 - 1, _r1_y2 - 1, true);
-        } else {
-            draw_set_color(make_color_rgb(200, 140, 60));
-            draw_rectangle(_play_x1, _r1_y1, _play_x2, _r1_y2, true);
-        }
+        scr_editor_control(_play_x1, _r1_y1, _play_x2, _r1_y2, _play_hov, _v2.anim_playing);
         draw_set_color(c_white);
         draw_set_font_l(fnt_c64_tiny);
-        draw_set_halign(fa_center);
-        draw_set_valign(fa_middle);
         var _play_lbl = _v2.anim_playing ? "STOP" : "PLAY";
         if (!_v2.anim_playing) scr_tour_capture("SPR:PLAY", _play_x1, _r1_y1, _play_x2, _r1_y2);
-        draw_text_l((_play_x1 + _play_x2) * 0.5, (_r1_y1 + _r1_y2) * 0.5, _play_lbl);
-        draw_set_halign(fa_left);
-        draw_set_valign(fa_top);
+        scr_editor_label(_play_x1, _r1_y1, _play_x2, _r1_y2, _play_lbl);
         if (_play_hov && mouse_check_button_pressed(mb_left)
         && !global.ui_click_consumed && !global.any_picker_open) {
             _v2.anim_playing       = !_v2.anim_playing;
@@ -1542,26 +1444,9 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
                 case 2: scr_ui_info(_d_hov, "PLAY DIRECTION: PING-PONG BETWEEN START AND END"); break;
                 case 3: scr_ui_info(_d_hov, "PLAY DIRECTION: PLAY START TO END ONCE, THEN STOP"); break;
             }
-            if (_d_active) {
-                draw_set_color(_d_hov ? make_color_rgb(60, 140, 200) : make_color_rgb(40, 90, 160));
-            } else {
-                draw_set_color(_d_hov ? make_color_rgb(30, 50, 80) : make_color_rgb(20, 25, 40));
-            }
-            draw_rectangle(_dx1, _r1_y1, _dx2, _r1_y2, false);
-            if (_d_active) {
-                draw_set_color(make_color_rgb(120, 255, 120));
-                draw_rectangle(_dx1,     _r1_y1,     _dx2,     _r1_y2,     true);
-                draw_rectangle(_dx1 + 1, _r1_y1 + 1, _dx2 - 1, _r1_y2 - 1, true);
-            } else {
-                draw_set_color(make_color_rgb(40, 40, 60));
-                draw_rectangle(_dx1, _r1_y1, _dx2, _r1_y2, true);
-            }
+            scr_editor_control(_dx1, _r1_y1, _dx2, _r1_y2, _d_hov, _d_active);
             draw_set_color(c_white);
-            draw_set_halign(fa_center);
-            draw_set_valign(fa_middle);
-            draw_text_l((_dx1 + _dx2) * 0.5, (_r1_y1 + _r1_y2) * 0.5, _dir_lbls[_di]);
-            draw_set_halign(fa_left);
-            draw_set_valign(fa_top);
+            scr_editor_label(_dx1, _r1_y1, _dx2, _r1_y2, _dir_lbls[_di]);
             if (_d_hov && mouse_check_button_pressed(mb_left)
             && !global.ui_click_consumed && !global.any_picker_open) {
                 _v2.anim_direction = _dir_opts[_di];
@@ -1574,7 +1459,7 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
 // Row 2: START / END / SPEED — all on one row, three steppers.
         // Each stepper: LABEL - [num] +   spaced equally across the left column.
         var _r2_y1 = _r1_y2 + 12;
-        var _r2_y2 = _r2_y1 + 14;
+        var _r2_y2 = _r2_y1 + 18;
         var _sp_btn_w = 14;
         var _sp_num_w = 22;
 
@@ -1599,9 +1484,7 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
 
             // Label
             draw_set_color(make_color_rgb(160, 160, 200));
-            draw_set_valign(fa_middle);
-            draw_text_l(_gx, (_r2_y1 + _r2_y2) * 0.5, _sd.lbl);
-            draw_set_valign(fa_top);
+            scr_editor_label(_gx, _r2_y1, _gx + _label_w, _r2_y2, _sd.lbl, fa_left, 0);
 
 			
             // - button
@@ -1615,16 +1498,9 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
             } else {
                 scr_ui_info(_sm_hov, "SLOWER: ONE FEWER FRAME PER SECOND (MIN 1). ALSO SETS THE CONVERTED ANIMATE DELAY");
             }
-            draw_set_color(_sm_hov ? make_color_rgb(60, 40, 20) : make_color_rgb(30, 25, 15));
-            draw_rectangle(_sm_x1, _r2_y1, _sm_x2, _r2_y2, false);
+            scr_editor_control(_sm_x1, _r2_y1, _sm_x2, _r2_y2, _sm_hov, false);
             draw_set_color(_c_butBorder);
-            draw_rectangle(_sm_x1, _r2_y1, _sm_x2, _r2_y2, true);
-            draw_set_halign(fa_center);
-            draw_set_valign(fa_middle);
-            //draw_text_l( (_sm_x1 + _sm_x2) * 0.5, (_r2_y1 + _r2_y2) * 0.5, "-");
-			draw_text_l(((_sm_x1 + _sm_x2) * 0.5) -1, ((_r2_y1 + _r2_y2) * 0.5)-1 , "-");
-            draw_set_halign(fa_left);
-            draw_set_valign(fa_top);
+            scr_editor_label(_sm_x1, _r2_y1, _sm_x2, _r2_y2, "-");
             if (_sm_hov && mouse_check_button_pressed(mb_left)
             && !global.ui_click_consumed && !global.any_picker_open) {
                 if (_sd.kind == "start") {
@@ -1639,16 +1515,9 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
             // Number
             var _sn_x1 = _sm_x2 + 2;
             var _sn_x2 = _sn_x1 + _sp_num_w;
-            draw_set_color(make_color_rgb(20, 20, 30));
-            draw_rectangle(_sn_x1, _r2_y1, _sn_x2, _r2_y2, false);
-            draw_set_color(make_color_rgb(40, 40, 60));
-            draw_rectangle(_sn_x1, _r2_y1, _sn_x2, _r2_y2, true);
+            scr_editor_panel(_sn_x1, _r2_y1, _sn_x2, _r2_y2, true);
             draw_set_color(c_white);
-            draw_set_halign(fa_center);
-            draw_set_valign(fa_middle);
-            draw_text_l((_sn_x1 + _sn_x2) * 0.5, (_r2_y1 + _r2_y2) * 0.5, string(_sd.value));
-            draw_set_halign(fa_left);
-            draw_set_valign(fa_top);
+            scr_editor_label(_sn_x1, _r2_y1, _sn_x2, _r2_y2, string(_sd.value));
 
             // + button
             var _sp_x1 = _sn_x2 + 2;
@@ -1661,15 +1530,9 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
             } else {
                 scr_ui_info(_sp_hov, "FASTER: ONE MORE FRAME PER SECOND (MAX 30). ALSO SETS THE CONVERTED ANIMATE DELAY");
             }
-            draw_set_color(_sp_hov ? make_color_rgb(60, 40, 20) : make_color_rgb(30, 25, 15));
-            draw_rectangle(_sp_x1, _r2_y1, _sp_x2, _r2_y2, false);
+            scr_editor_control(_sp_x1, _r2_y1, _sp_x2, _r2_y2, _sp_hov, false);
             draw_set_color(_c_butBorder);
-            draw_rectangle(_sp_x1, _r2_y1, _sp_x2, _r2_y2, true);
-            draw_set_halign(fa_center);
-            draw_set_valign(fa_middle);
-            draw_text_l(((_sp_x1 + _sp_x2) * 0.5) -1, ((_r2_y1 + _r2_y2) * 0.5)-1 , "+");
-            draw_set_halign(fa_left);
-            draw_set_valign(fa_top);
+            scr_editor_label(_sp_x1, _r2_y1, _sp_x2, _r2_y2, "+");
             if (_sp_hov && mouse_check_button_pressed(mb_left)
             && !global.ui_click_consumed && !global.any_picker_open) {
                 if (_sd.kind == "start") {
@@ -1699,32 +1562,21 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
         if (_v2.anim_playing) {
             _state_col = make_color_rgb(120, 255, 120);
             switch (_v2.anim_direction) {
-                case "fwd":  _state_lbl = "PLAYING - FWD LOOP";   break;
-                case "rev":  _state_lbl = "PLAYING - REV LOOP";   break;
-                case "png":  _state_lbl = "PLAYING - PING-PONG";  break;
-                case "once": _state_lbl = "PLAYING - ONCE";       break;
+                case "fwd":  _state_lbl = "PLAY FWD";   break;
+                case "rev":  _state_lbl = "PLAY REV";   break;
+                case "png":  _state_lbl = "PING-PONG";  break;
+                case "once": _state_lbl = "PLAY ONCE";  break;
             }
         } else {
             _state_col = make_color_rgb(140, 140, 160);
             _state_lbl = "STOPPED";
         }
-		var _reposx = 100;
-		var _reposy = 55;
-        draw_set_color(make_color_rgb(20, 20, 30));
-        draw_rectangle(_pill_x1+_reposx, _pill_y1+_reposy, _pill_x2+_reposx, _pill_y2+_reposy, false);
-        draw_set_color(_state_col);
-        draw_rectangle(_pill_x1+_reposx, _pill_y1+_reposy, _pill_x2+_reposx, _pill_y2+_reposy, true);
-        draw_set_halign(fa_center);
-        draw_set_valign(fa_middle);
-        draw_text_l(_mid_cx+_reposx, ((_pill_y1 + _pill_y2) * 0.5)+_reposy, _state_lbl);
-        draw_set_halign(fa_left);
-        draw_set_valign(fa_top);
 
         // PREV / NEXT — narrow, centred under the pill. Compact.
         var _pn_w = 48;
         var _pn_gap = 3;
         var _pn_y1 = _pill_y2 -14;
-        var _pn_y2 = _pn_y1 + 14;
+        var _pn_y2 = _pn_y1 + 18;
         var _prev_x1 = _mid_cx - _pn_w - _pn_gap * 0.5;
         var _prev_x2 = _prev_x1 + _pn_w;
         var _next_x1 = _mid_cx + _pn_gap * 0.5;
@@ -1732,14 +1584,12 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
 
         var _prev_hov = point_in_rectangle(_mx, _my, _prev_x1, _pn_y1, _prev_x2, _pn_y2);
         scr_ui_info(_prev_hov, "GO TO THE PREVIOUS FRAME, WRAPPING TO THE LAST (HOTKEY A)");
-        draw_set_color(_prev_hov ? make_color_rgb(30, 50, 80) : make_color_rgb(20, 25, 40));
-        draw_rectangle(_prev_x1, _pn_y1, _prev_x2, _pn_y2, false);
+        scr_editor_control(_prev_x1, _pn_y1, _prev_x2, _pn_y2, _prev_hov, false);
         draw_set_color(_prev_hov ? c_white : make_color_rgb(40, 40, 60));
-        draw_rectangle(_prev_x1, _pn_y1, _prev_x2, _pn_y2, true);
         draw_set_color(c_white);
         draw_set_halign(fa_center);
         draw_set_valign(fa_middle);
-        draw_text_l((_prev_x1 + _prev_x2) * 0.5, (_pn_y1 + _pn_y2) * 0.5, "< PREV");
+        scr_editor_label(_prev_x1, _pn_y1, _prev_x2, _pn_y2, "< PREV");
         draw_set_halign(fa_left);
         draw_set_valign(fa_top);
         if (_prev_hov && mouse_check_button_pressed(mb_left)
@@ -1749,14 +1599,12 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
 
         var _next_hov = point_in_rectangle(_mx, _my, _next_x1, _pn_y1, _next_x2, _pn_y2);
         scr_ui_info(_next_hov, "GO TO THE NEXT FRAME, WRAPPING TO THE FIRST (HOTKEY D)");
-        draw_set_color(_next_hov ? make_color_rgb(30, 50, 80) : make_color_rgb(20, 25, 40));
-        draw_rectangle(_next_x1, _pn_y1, _next_x2, _pn_y2, false);
+        scr_editor_control(_next_x1, _pn_y1, _next_x2, _pn_y2, _next_hov, false);
         draw_set_color(_next_hov ? c_white : make_color_rgb(40, 40, 60));
-        draw_rectangle(_next_x1, _pn_y1, _next_x2, _pn_y2, true);
         draw_set_color(c_white);
         draw_set_halign(fa_center);
         draw_set_valign(fa_middle);
-        draw_text_l((_next_x1 + _next_x2) * 0.5, (_pn_y1 + _pn_y2) * 0.5, "NEXT >");
+        scr_editor_label(_next_x1, _pn_y1, _next_x2, _pn_y2, "NEXT >");
         draw_set_halign(fa_left);
         draw_set_valign(fa_top);
         if (_next_hov && mouse_check_button_pressed(mb_left)
@@ -1766,17 +1614,17 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
 
         // ===== RIGHT COLUMN : frame management (2x2 compact buttons) =====
         var _fm_btn_w = 58;
-        var _fm_btn_h = 14;
+        var _fm_btn_h = 18;
         var _fm_gap_x = 3;
         var _fm_gap_y = 3;
         var _fm_grid_x = _anim_rx1 + (_anim_right_w - (_fm_btn_w * 2 + _fm_gap_x)) * 0.5;
         var _fm_grid_y = _anim_y1 + 4;
         // Definitions
         var _fm_btns = [
-            { lbl:"+ NEW",   col:0, row:0, action:"new",    enabled:true,                              fill_idle:make_color_rgb(40, 90, 64),  fill_hov:make_color_rgb(60, 130, 90),  border:make_color_rgb(120, 220, 160) },
-            { lbl:"DUP",     col:1, row:0, action:"dup",    enabled:(_frame_count_total > 0),          fill_idle:make_color_rgb(30, 40, 72),  fill_hov:make_color_rgb(50, 70, 120),  border:make_color_rgb(120, 160, 220) },
-            { lbl:"CLEAR",   col:0, row:1, action:"clear",  enabled:(_frame_count_total > 0),          fill_idle:make_color_rgb(72, 56, 32),  fill_hov:make_color_rgb(120, 90, 50),  border:make_color_rgb(220, 180, 120) },
-            { lbl:"DELETE",  col:1, row:1, action:"delete", enabled:(_frame_count_total > 1),          fill_idle:make_color_rgb(72, 24, 24),  fill_hov:make_color_rgb(140, 40, 40),  border:make_color_rgb(255, 100, 100) }
+            { lbl:"+ NEW",   col:0, row:0, action:"new",    enabled:true },
+            { lbl:"DUP",     col:1, row:0, action:"dup",    enabled:(_frame_count_total > 0) },
+            { lbl:"CLEAR",   col:0, row:1, action:"clear",  enabled:(_frame_count_total > 0) },
+            { lbl:"DELETE",  col:1, row:1, action:"delete", enabled:(_frame_count_total > 1) }
         ];
         for (var _fi = 0; _fi < array_length(_fm_btns); _fi++) {
             var _fb = _fm_btns[_fi];
@@ -1792,33 +1640,13 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
                 case "clear":  scr_ui_info(_fb_in, "REMOVE EVERY PLACEMENT FROM THIS FRAME (THE FRAME STAYS)"); break;
                 case "delete": scr_ui_info(_fb_in, _fb.enabled ? "DELETE THIS FRAME" : "DELETE THIS FRAME (NEEDS AT LEAST 2 FRAMES)"); break;
             }
-            // Fill
-            if (!_fb.enabled) {
-                draw_set_color(make_color_rgb(28, 28, 36));
-            } else if (_fb_hov) {
-                draw_set_color(_fb.fill_hov);
-            } else {
-                draw_set_color(_fb.fill_idle);
-            }
-            draw_rectangle(_fbx1, _fby1, _fbx2, _fby2, false);
-            // Border
-            if (!_fb.enabled) {
-                draw_set_color(make_color_rgb(50, 50, 60));
-            } else {
-                draw_set_color(_fb.border);
-            }
-            draw_rectangle(_fbx1, _fby1, _fbx2, _fby2, true);
-            // Label
+            scr_editor_control(_fbx1, _fby1, _fbx2, _fby2, _fb_hov, false, _fb.enabled);
             if (_fb.enabled) {
                 draw_set_color(c_white);
             } else {
-                draw_set_color(make_color_rgb(70, 70, 85));
+                draw_set_color(make_color_rgb(120, 132, 147));
             }
-            draw_set_halign(fa_center);
-            draw_set_valign(fa_middle);
-            draw_text_l((_fbx1 + _fbx2) * 0.5, (_fby1 + _fby2) * 0.5, _fb.lbl);
-            draw_set_halign(fa_left);
-            draw_set_valign(fa_top);
+            scr_editor_label(_fbx1, _fby1, _fbx2, _fby2, _fb.lbl);
             if (_fb.action == "new") scr_tour_capture("SPR:FRAME_NEW", _fbx1, _fby1, _fbx2, _fby2);
             // Click
             if (_fb_hov && mouse_check_button_pressed(mb_left)
@@ -1843,7 +1671,7 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
 
         // ----- TOP STRIP : LAYER BUTTONS + FRAME READOUT -----
         var _ts_h      = 22;
-        var _ts_y1     = _rsv_y1 + 10;
+        var _ts_y1     = _rsv_y1 + 6;
         var _ts_y2     = _ts_y1 + _ts_h;
         var _lyr_btn_w = 36;
         var _lyr_btn_g = 2;
@@ -1859,34 +1687,11 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
                 ? "EDIT THE BASE LAYER (BOTTOM). GRID CLICKS PLACE/SELECT ON IT. W/S OR WHEEL OVER GRID CHANGE LAYER"
                 : "EDIT LAYER " + string(_ly) + " (HIGHER DRAWS ON TOP). GRID CLICKS PLACE/SELECT ON IT. W/S CHANGE LAYER");
 
-            if (_ly == 0) {
-                draw_set_color(_ly_is_active
-                    ? make_color_rgb(120, 80, 30)
-                    : (_ly_hov ? make_color_rgb(70, 50, 20) : make_color_rgb(40, 30, 15)));
-            } else {
-                draw_set_color(_ly_is_active
-                    ? make_color_rgb(40, 90, 140)
-                    : (_ly_hov ? make_color_rgb(30, 50, 80) : make_color_rgb(20, 25, 40)));
-            }
-            draw_rectangle(_lbx1, _ts_y1, _lbx2, _ts_y2, false);
-
-            if (_ly_is_active) {
-                draw_set_color(make_color_rgb(255, 220, 120));
-                draw_rectangle(_lbx1,     _ts_y1,     _lbx2,     _ts_y2,     true);
-                draw_rectangle(_lbx1 + 1, _ts_y1 + 1, _lbx2 - 1, _ts_y2 - 1, true);
-            } else if (_ly_hov) {
-                draw_set_color(c_white);
-                draw_rectangle(_lbx1, _ts_y1, _lbx2, _ts_y2, true);
-            } else {
-                draw_set_color(make_color_rgb(40, 40, 60));
-                draw_rectangle(_lbx1, _ts_y1, _lbx2, _ts_y2, true);
-            }
+            scr_editor_control(_lbx1, _ts_y1, _lbx2, _ts_y2, _ly_hov, _ly_is_active);
 
             draw_set_color(c_white);
-            draw_set_halign(fa_center);
             var _lbl = (_ly == 0) ? "BASE" : ("L" + string(_ly));
-            draw_text_l(_lbx1 + _lyr_btn_w * 0.5, _ts_y1 + 2, _lbl);
-            draw_set_halign(fa_left);
+            scr_editor_label(_lbx1, _ts_y1, _lbx2, _ts_y2, _lbl);
 
             if (_ly_hov && mouse_check_button_pressed(mb_left)
             && !global.ui_click_consumed && !global.any_picker_open) {
@@ -1914,18 +1719,26 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
             }
         }
 
-        var _fr_x = _lyr_x + 8 * (_lyr_btn_w + _lyr_btn_g) + 50;
+        // State and frame readout share one pill on the layer-button row:
+        // state on the left, FRAME n / N on the right, one centre line.
+        var _fr_x1 = _lyr_x + 8 * (_lyr_btn_w + _lyr_btn_g) + 8;
+        var _fr_x2 = _rsv_x2 - 8;
+        var _fr_txt = string(_comp.active_frame + 1) + " / " + string(array_length(_comp.frames));
+        if (string_width_l(_state_lbl) + string_width_l(L("FRAME ") + _fr_txt) + 22 <= _fr_x2 - _fr_x1) {
+            _fr_txt = L("FRAME ") + _fr_txt;
+        }
+        scr_editor_panel(_fr_x1, _ts_y1, _fr_x2, _ts_y2, true);
+        draw_set_color(_state_col);
+        scr_editor_label(_fr_x1, _ts_y1, _fr_x2, _ts_y2, _state_lbl, fa_left, 6);
         draw_set_color(make_color_rgb(160, 160, 200));
-        draw_text_l(_fr_x, _ts_y1 + 8,
-            L("FRAME ") + string(_comp.active_frame+1)
-            + " / " + string(array_length(_comp.frames)));
+        scr_editor_label(_fr_x1, _ts_y1, _fr_x2, _ts_y2, _fr_txt, fa_right, 6);
 
         // ----- HORIZONTAL SPLIT : LEFT CONTROLS / RIGHT GRID -----
         var _ctrl_w   = 90;
         var _ctrl_x1  = _rsv_x1 + 8;
         var _ctrl_x2  = _ctrl_x1 + _ctrl_w;
-        var _ctrl_y1  = _ts_y2 + 8;
-        var _ctrl_y2  = _rsv_y2 - 8;
+        var _ctrl_y1  = _ts_y2 + 6;
+        var _ctrl_y2  = _rsv_y2 - 6;
 
         var _grid_x1  = _ctrl_x2 + 8;
         var _grid_x2  = _rsv_x2 - 8;
@@ -1946,7 +1759,9 @@ function scr_spred64_v2_draw(_asset, _vx1, _vy1, _vx2, _vy2, _mx, _my) {
         var _cell_max_w = floor((_grid_w_av - _grid_gap * 5) / 4);
         var _cell_max_h = floor((_grid_h_av - _grid_gap * 5) / 4);
         // Source preview is 48x42; integer scale
-        var _cell_scale = min(floor(_cell_max_w / 48), floor(_cell_max_h / 42));
+        // +1px slack per cell: the grid may borrow a few pixels of padding
+        // rather than dropping a whole scale step.
+        var _cell_scale = min(floor((_cell_max_w + 1) / 48), floor((_cell_max_h + 1) / 42));
         if (_cell_scale < 1) _cell_scale = 1;
         // Double the rendered cell size — _cell_scale stays the same so that
         // sprite scaling, offsets, and expand maths in pass 2 (which multiply
@@ -2345,10 +2160,7 @@ if (_layer_dir != 0) {
 
         // -------- LEFT CONTROLS COLUMN --------
         // Background panel for the controls column
-        draw_set_color(make_color_rgb(14, 14, 22));
-        draw_rectangle(_ctrl_x1, _ctrl_y1, _ctrl_x2, _ctrl_y2, false);
-        draw_set_color(make_color_rgb(40, 30, 15));
-        draw_rectangle(_ctrl_x1, _ctrl_y1, _ctrl_x2, _ctrl_y2, true);
+        scr_editor_panel(_ctrl_x1, _ctrl_y1, _ctrl_x2, _ctrl_y2, true);
 
         if (_has_active_cell) {
             var _ac = _cur_frame.cells[_comp.active_cell];
@@ -2389,19 +2201,9 @@ if (_layer_dir != 0) {
                     ? "RESET THE SELECTED PLACEMENT'S OFFSET TO 0,0"
                     : "NUDGE THE SELECTED PLACEMENT ONE C64 PIXEL " + ((_db.dx < 0) ? "LEFT" : ((_db.dx > 0) ? "RIGHT" : ((_db.dy < 0) ? "UP" : "DOWN"))));
 
-                if (_db.is_reset) {
-                    draw_set_color(_db_hov ? make_color_rgb(160, 40, 40) : make_color_rgb(80, 20, 20));
-                } else {
-                    draw_set_color(_db_hov ? make_color_rgb(60, 100, 160) : make_color_rgb(30, 50, 80));
-                }
-                draw_rectangle(_dbx1, _dby1, _dbx2, _dby2, false);
+                scr_editor_control(_dbx1, _dby1, _dbx2, _dby2, _db_hov);
                 draw_set_color(c_white);
-                draw_rectangle(_dbx1, _dby1, _dbx2, _dby2, true);
-                draw_set_halign(fa_center);
-                draw_set_valign(fa_middle);
-                draw_text_l((_dbx1 + _dbx2) * 0.5, (_dby1 + _dby2) * 0.5, _db.lbl);
-                draw_set_halign(fa_left);
-                draw_set_valign(fa_top);
+                scr_editor_label(_dbx1, _dby1, _dbx2, _dby2, _db.lbl);
 
                 if (_db_hov && mouse_check_button_pressed(mb_left)
                 && !global.ui_click_consumed && !global.any_picker_open) {
@@ -2460,62 +2262,15 @@ if (_layer_dir != 0) {
                     case "both": scr_ui_info(_b_hov, "EXPAND THE SELECTED PLACEMENT TO DOUBLE WIDTH AND HEIGHT"); break;
                 }
 
-                // Fill colour by kind / state
-                if (_b.kind == "exp") {
-                    var _eb_is_active = (_ac.expand == _b.op);
-                    if (_eb_is_active) {
-                        draw_set_color(make_color_rgb(40, 90, 140));
-                    } else if (_b_hov) {
-                        draw_set_color(make_color_rgb(30, 50, 80));
-                    } else {
-                        draw_set_color(make_color_rgb(20, 25, 40));
-                    }
-                } else if (_b.kind == "clear") {
-                    if (_b_hov) {
-                        draw_set_color(make_color_rgb(160, 40, 40));
-                    } else {
-                        draw_set_color(make_color_rgb(80, 20, 20));
-                    }
-                } else {
-                    // fx_todo — greyed, no hover response
-                    draw_set_color(make_color_rgb(30, 30, 38));
-                }
-                draw_rectangle(_stk_x1, _by1, _stk_x2, _by2, false);
+                var _eb_is_active = (_b.kind == "exp" && _ac.expand == _b.op);
+                scr_editor_control(_stk_x1, _by1, _stk_x2, _by2, _b_hov, _eb_is_active, _b.kind != "fx_todo");
 
-                // Border
-                if (_b.kind == "exp") {
-                    var _eb_is_active2 = (_ac.expand == _b.op);
-                    if (_eb_is_active2) {
-                        draw_set_color(make_color_rgb(120, 255, 120));
-                        draw_rectangle(_stk_x1,     _by1,     _stk_x2,     _by2,     true);
-                        draw_rectangle(_stk_x1 + 1, _by1 + 1, _stk_x2 - 1, _by2 - 1, true);
-                    } else if (_b_hov) {
-                        draw_set_color(c_white);
-                        draw_rectangle(_stk_x1, _by1, _stk_x2, _by2, true);
-                    } else {
-                        draw_set_color(make_color_rgb(40, 40, 60));
-                        draw_rectangle(_stk_x1, _by1, _stk_x2, _by2, true);
-                    }
-                } else if (_b.kind == "clear") {
-                    draw_set_color(c_white);
-                    draw_rectangle(_stk_x1, _by1, _stk_x2, _by2, true);
-                } else {
-                    // fx_todo
-                    draw_set_color(make_color_rgb(50, 50, 60));
-                    draw_rectangle(_stk_x1, _by1, _stk_x2, _by2, true);
-                }
-
-                // Label
                 if (_b.kind == "fx_todo") {
                     draw_set_color(make_color_rgb(80, 80, 95));
                 } else {
                     draw_set_color(c_white);
                 }
-                draw_set_halign(fa_center);
-                draw_set_valign(fa_middle);
-                draw_text_l((_stk_x1 + _stk_x2) * 0.5, (_by1 + _by2) * 0.5, _b.lbl);
-                draw_set_halign(fa_left);
-                draw_set_valign(fa_top);
+                scr_editor_label(_stk_x1, _by1, _stk_x2, _by2, _b.lbl);
 
                 // Click handling — fx_todo deliberately ignored
                 if (_b_hov && mouse_check_button_pressed(mb_left)
@@ -2539,23 +2294,9 @@ if (_layer_dir != 0) {
             var _clr_y2 = _clr_y1 + _clr_btn_h;
             var _clr_hov = point_in_rectangle(_mx, _my, _clr_x1, _clr_y1, _clr_x2, _clr_y2);
             scr_ui_info(_clr_hov, "REMOVE THE SELECTED PLACEMENT FROM THE GRID (SAME AS RIGHT CLICKING IT)");
-            // Fill — red for destructive
-            if (_clr_hov) {
-                draw_set_color(make_color_rgb(160, 40, 40));
-            } else {
-                draw_set_color(make_color_rgb(80, 20, 20));
-            }
-            draw_rectangle(_clr_x1, _clr_y1, _clr_x2, _clr_y2, false);
-            // Border
-            draw_set_color(make_color_rgb(255, 80, 80));
-            draw_rectangle(_clr_x1, _clr_y1, _clr_x2, _clr_y2, true);
-            // Label
+            scr_editor_control(_clr_x1, _clr_y1, _clr_x2, _clr_y2, _clr_hov);
             draw_set_color(c_white);
-            draw_set_halign(fa_center);
-            draw_set_valign(fa_middle);
-            draw_text_l((_clr_x1 + _clr_x2) * 0.5, (_clr_y1 + _clr_y2) * 0.5, "CLEAR");
-            draw_set_halign(fa_left);
-            draw_set_valign(fa_top);
+            scr_editor_label(_clr_x1, _clr_y1, _clr_x2, _clr_y2, "CLEAR");
             // Click
             if (_clr_hov && mouse_check_button_pressed(mb_left)
             && !global.ui_click_consumed && !global.any_picker_open) {
@@ -2567,7 +2308,7 @@ if (_layer_dir != 0) {
         } else {
             // No active cell — show a prompt centred in the controls column
 			
-            draw_set_color(make_color_rgb(100, 100, 120));
+            draw_set_color(make_color_rgb(127, 127, 147));
             draw_set_halign(fa_center);
             draw_set_valign(fa_middle);
             var _ph_cx = (_ctrl_x1 + _ctrl_x2) * 0.5;
@@ -2585,18 +2326,17 @@ if (_layer_dir != 0) {
         var _convert_y = _ctrl_y2 - 94;
         var _convert_hover = point_in_rectangle(_mx, _my, _convert_x1, _convert_y, _convert_x2, _convert_y + 44);
         scr_ui_info(_convert_hover, "MAKE SPRITE NODES FOR THIS FRAME; 2+ FRAMES IN RANGE ADD ANIMATE; SAME SET AGAIN ADDS ANOTHER");
-        draw_set_color(_convert_hover ? make_color_rgb(45,110,80) : make_color_rgb(25,65,50));
-        draw_rectangle(_convert_x1, _convert_y, _convert_x2, _convert_y + 44, false);
+        scr_editor_control(_convert_x1, _convert_y, _convert_x2, _convert_y + 44, _convert_hover, false);
         draw_set_color(make_color_rgb(100,200,150));
-        draw_rectangle(_convert_x1, _convert_y, _convert_x2, _convert_y + 44, true);
         draw_set_font_l(fnt_c64_tiny);
         draw_set_color(c_white);
         draw_set_halign(fa_center);
         draw_set_valign(fa_middle);
         var _convert_cx = (_convert_x1 + _convert_x2) * 0.5;
-        draw_text_l(_convert_cx, _convert_y + 10, "CONVERT");
-        draw_text_l(_convert_cx, _convert_y + 22, "TO");
-        draw_text_l(_convert_cx, _convert_y + 34, "NODES");
+        // Same +1 optical offset as scr_editor_label, centred on the 44px body.
+        draw_text_l(_convert_cx, _convert_y + 11, "CONVERT");
+        draw_text_l(_convert_cx, _convert_y + 23, "TO");
+        draw_text_l(_convert_cx, _convert_y + 35, "NODES");
         scr_tour_capture("SPR:CONVERT", _convert_x1, _convert_y, _convert_x2, _convert_y + 44);
         draw_set_halign(fa_left);
         draw_set_valign(fa_top);

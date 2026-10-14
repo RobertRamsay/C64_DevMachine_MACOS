@@ -202,12 +202,10 @@ function scr_vbmp_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
             case "COPYRGN":     _vb_tinfo = "COPY REGION TOOL - DRAG A CHAR-CELL SOURCE AREA, THEN CLICK WHERE TO COPY IT"; break;
         }
         scr_ui_info(_hov, _vb_tinfo);
-        draw_set_color(_hov ? make_color_rgb(80, 80, 110) : (_act ? make_color_rgb(20, 60, 60) : make_color_rgb(40, 40, 60)));
-        draw_rectangle(_tx, _ty, _tx + _tw, _ty + _th, false);
+        scr_editor_control(_tx, _ty, _tx + _tw, _ty + _th, _hov, _act);
         draw_set_color(_hov ? c_white : (_act ? c_aqua : make_color_rgb(90, 90, 110)));
-        draw_rectangle(_tx, _ty, _tx + _tw, _ty + _th, true);
         draw_set_color(_act ? c_aqua : c_white);
-        draw_text_l(_tx + 4, _ty + 3, _tn);
+        scr_editor_label(_tx, _ty, _tx + _tw, _ty + _th, _tn);
         if (_hov && mouse_check_button_pressed(mb_left)) {
             _m.tool = _tn;
             _m.draw_x1 = -1;    // cancel any in-progress 2-point op
@@ -234,12 +232,10 @@ function scr_vbmp_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
     _ty += 8;
     var _fhov = point_in_rectangle(_mx, _my, _tx, _ty, _tx + _tw, _ty + _th);
     scr_ui_info(_fhov, "VIEW - TOGGLE BETWEEN THE FULL 320x200 SCREEN AND A ZOOM OF THE 192x120 DRAWABLE WINDOW");
-    draw_set_color(_fhov ? make_color_rgb(80, 80, 110) : make_color_rgb(40, 40, 60));
-    draw_rectangle(_tx, _ty, _tx + _tw, _ty + _th, false);
+    scr_editor_control(_tx, _ty, _tx + _tw, _ty + _th, _fhov, false);
     draw_set_color(_fhov ? c_white : make_color_rgb(90, 90, 110));
-    draw_rectangle(_tx, _ty, _tx + _tw, _ty + _th, true);
     draw_set_color(c_aqua);
-    draw_text_l(_tx + 4, _ty + 3, (_m.vbmp_zoom == 1) ? L("VIEW: ZOOM") : L("VIEW: FULL"));
+    scr_editor_label(_tx, _ty, _tx + _tw, _ty + _th, (_m.vbmp_zoom == 1) ? L("VIEW: ZOOM") : L("VIEW: FULL"));
     if (_fhov && mouse_check_button_pressed(mb_left)) {
         _m.vbmp_zoom = (_m.vbmp_zoom + 1) mod 2;
         _m.draw_x1 = -1; // cancel any in-progress op on view change
@@ -249,12 +245,10 @@ function scr_vbmp_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
     // ── GRID TOGGLE (char-cell overlay) ──────────────────────────────────
     var _ghov = point_in_rectangle(_mx, _my, _tx, _ty, _tx + _tw, _ty + _th);
     scr_ui_info(_ghov, "GRID - TOGGLE AN 8x8 CHAR-CELL GRID OVER THE DRAWABLE WINDOW");
-    draw_set_color(_ghov ? make_color_rgb(80, 80, 110) : (_m.vbmp_grid ? make_color_rgb(20, 60, 60) : make_color_rgb(40, 40, 60)));
-    draw_rectangle(_tx, _ty, _tx + _tw, _ty + _th, false);
+    scr_editor_control(_tx, _ty, _tx + _tw, _ty + _th, _ghov, _m.vbmp_grid);
     draw_set_color(_ghov ? c_white : (_m.vbmp_grid ? c_aqua : make_color_rgb(90, 90, 110)));
-    draw_rectangle(_tx, _ty, _tx + _tw, _ty + _th, true);
     draw_set_color(_m.vbmp_grid ? c_aqua : c_white);
-    draw_text_l(_tx + 4, _ty + 3, _m.vbmp_grid ? L("GRID: ON") : L("GRID: OFF"));
+    scr_editor_label(_tx, _ty, _tx + _tw, _ty + _th, _m.vbmp_grid ? L("GRID: ON") : L("GRID: OFF"));
     if (_ghov && mouse_check_button_pressed(mb_left)) {
         _m.vbmp_grid = !_m.vbmp_grid;
     }
@@ -288,12 +282,10 @@ function scr_vbmp_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
     var _pw_btn = 22;
     var _prev_hov = point_in_rectangle(_mx, _my, _tx, _ty, _tx + _pw_btn, _ty + 18);
     scr_ui_info(_prev_hov, "PREVIOUS PAGE - STORE THIS PAGE AND SWITCH TO THE ONE BEFORE IT");
-    draw_set_color(_prev_hov ? make_color_rgb(80, 80, 110) : make_color_rgb(40, 40, 60));
-    draw_rectangle(_tx, _ty, _tx + _pw_btn, _ty + 18, false);
+    scr_editor_control(_tx, _ty, _tx + _pw_btn, _ty + 18, _prev_hov, false);
     draw_set_color(_prev_hov ? c_white : make_color_rgb(140, 140, 160));
-    draw_rectangle(_tx, _ty, _tx + _pw_btn, _ty + 18, true);
     draw_set_color(c_white);
-    draw_text_l(_tx + 6, _ty + 3, "<");
+    scr_editor_label(_tx, _ty, _tx + _pw_btn, _ty + 18, "<");
     if (_prev_hov && mouse_check_button_pressed(mb_left) && _m.active_page > 0) {
         scr_vbmp_page_store(_asset);
         scr_vbmp_page_load(_asset, _m.active_page - 1);
@@ -303,25 +295,18 @@ function scr_vbmp_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
     // n/N readout
     var _rd_x = _tx + _pw_btn + 4;
     var _rd_w = 40;
-    draw_set_color(make_color_rgb(20, 20, 32));
-    draw_rectangle(_rd_x, _ty, _rd_x + _rd_w, _ty + 18, false);
-    draw_set_color(make_color_rgb(70, 70, 90));
-    draw_rectangle(_rd_x, _ty, _rd_x + _rd_w, _ty + 18, true);
+    scr_editor_panel(_rd_x, _ty, _rd_x + _rd_w, _ty + 18, false);
     draw_set_color(c_aqua);
-    draw_set_halign(fa_center);
-    draw_text_l(_rd_x + _rd_w / 2, _ty + 3, string(_m.active_page) + "/" + string(_pg_count - 1));
-    draw_set_halign(fa_left);
+    scr_editor_label(_rd_x, _ty, _rd_x + _rd_w, _ty + 18, string(_m.active_page) + "/" + string(_pg_count - 1));
 
     // ▶ button
     var _nx_x = _rd_x + _rd_w + 4;
     var _next_hov = point_in_rectangle(_mx, _my, _nx_x, _ty, _nx_x + _pw_btn, _ty + 18);
     scr_ui_info(_next_hov, "NEXT PAGE - STORE THIS PAGE AND SWITCH TO THE ONE AFTER IT");
-    draw_set_color(_next_hov ? make_color_rgb(80, 80, 110) : make_color_rgb(40, 40, 60));
-    draw_rectangle(_nx_x, _ty, _nx_x + _pw_btn, _ty + 18, false);
+    scr_editor_control(_nx_x, _ty, _nx_x + _pw_btn, _ty + 18, _next_hov, false);
     draw_set_color(_next_hov ? c_white : make_color_rgb(140, 140, 160));
-    draw_rectangle(_nx_x, _ty, _nx_x + _pw_btn, _ty + 18, true);
     draw_set_color(c_white);
-    draw_text_l(_nx_x + 6, _ty + 3, ">");
+    scr_editor_label(_nx_x, _ty, _nx_x + _pw_btn, _ty + 18, ">");
     if (_next_hov && mouse_check_button_pressed(mb_left) && _m.active_page < _pg_count - 1) {
         scr_vbmp_page_store(_asset);
         scr_vbmp_page_load(_asset, _m.active_page + 1);
@@ -336,12 +321,10 @@ function scr_vbmp_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
     var _add_w = 34;
     var _add_hov = point_in_rectangle(_mx, _my, _add_x, _ty, _add_x + _add_w, _ty + 18);
     scr_ui_info(_add_hov, "ADD PAGE - APPEND A NEW BLANK PAGE WITH THE CURRENT COLOURS AND JUMP TO IT");
-    draw_set_color(_add_hov ? make_color_rgb(40, 120, 60) : make_color_rgb(25, 70, 35));
-    draw_rectangle(_add_x, _ty, _add_x + _add_w, _ty + 18, false);
+    scr_editor_control(_add_x, _ty, _add_x + _add_w, _ty + 18, _add_hov, false);
     draw_set_color(_add_hov ? c_white : make_color_rgb(100, 160, 110));
-    draw_rectangle(_add_x, _ty, _add_x + _add_w, _ty + 18, true);
     draw_set_color(c_white);
-    draw_text_l(_add_x , _ty , "+ADD");
+    scr_editor_label(_add_x, _ty, _add_x + _add_w, _ty + 18, "+ADD");
     if (_add_hov && mouse_check_button_pressed(mb_left)) {
         // Store current, append a fresh blank page inheriting current colours,
         // then jump to it.
@@ -363,11 +346,9 @@ function scr_vbmp_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
     if (_pg_count > 1) {
         var _del_hov = point_in_rectangle(_mx, _my, _del_x, _ty, _del_x + _del_w, _ty + 18);
         scr_ui_info(_del_hov, "DELETE PAGE - REMOVE THE CURRENT PAGE AND ITS COMMANDS (NO CONFIRM)");
-        draw_set_color(_del_hov ? make_color_rgb(200, 60, 60) : make_color_rgb(120, 30, 30));
-        draw_rectangle(_del_x, _ty, _del_x + _del_w, _ty + 18, false);
+        scr_editor_control(_del_x, _ty, _del_x + _del_w, _ty + 18, _del_hov, false);
         draw_set_color(c_white);
-        draw_rectangle(_del_x, _ty, _del_x + _del_w, _ty + 18, true);
-        draw_text_l(_del_x +2 , _ty , "DEL");
+        scr_editor_label(_del_x, _ty, _del_x + _del_w, _ty + 18, "DEL");
         if (_del_hov && mouse_check_button_pressed(mb_left)) {
             // Remove the active page; clamp active_page and load the neighbour.
             var _removed = _m.active_page;
@@ -391,15 +372,7 @@ function scr_vbmp_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
         var _bx = _tx + (_s * (_sw2 + 4));
         var _bhov = point_in_rectangle(_mx, _my, _bx, _ty, _bx + _sw2, _ty + 24);
         scr_ui_info(_bhov, (_s == 0) ? "BACKGROUND SLOT - LEFT CLICK TO DRAW IN BG COLOUR, RIGHT CLICK CYCLES THE BG COLOUR" : "COLOUR SLOT " + string(_s) + " - LEFT CLICK TO DRAW WITH IT, RIGHT CLICK CYCLES ITS C64 COLOUR");
-        draw_set_color(scr_c64_pepto_colour(_slots[_s]));
-        draw_rectangle(_bx, _ty, _bx + _sw2, _ty + 24, false);
-        if (_m.active_col == _s) {
-            draw_set_color(c_white);
-            draw_rectangle(_bx - 2, _ty - 2, _bx + _sw2 + 2, _ty + 26, true);
-        } else {
-            draw_set_color(make_color_rgb(90, 90, 110));
-            draw_rectangle(_bx, _ty, _bx + _sw2, _ty + 24, true);
-        }
+        scr_editor_swatch(_bx, _ty, _bx + _sw2, _ty + 24, scr_c64_pepto_colour(_slots[_s]), _bhov, _m.active_col == _s);
         draw_set_color(c_white);
         draw_text_l(_bx + 3, _ty + 26, _slot_lbl[_s]);
         if (_bhov && mouse_check_button_pressed(mb_left)) _m.active_col = _s;
@@ -417,7 +390,7 @@ function scr_vbmp_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
         }
     }
     _ty += 44;
-    draw_set_color(make_color_rgb(70, 70, 90));
+    draw_set_color(make_color_rgb(128, 128, 149));
     draw_text_l(_tx, _ty, "L=select  R=cycle colour");
     _ty += 20;
 
@@ -435,27 +408,24 @@ function scr_vbmp_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
             var _pact = (_m.dither_pat == _p);
             var _phov = point_in_rectangle(_mx, _my, _pbx, _pby, _pbx + _pat_bw, _pby + 18);
             scr_ui_info(_phov, "DITHER " + _pat_lbls[_p] + " - PATTERN USED BY THE FILL TOOL" + ((_p == 0) ? " (NO DITHER)" : " WITH THE 2ND COLOUR"));
-            draw_set_color(_phov ? make_color_rgb(80, 80, 110) : (_pact ? make_color_rgb(20, 60, 60) : make_color_rgb(40, 40, 60)));
-            draw_rectangle(_pbx, _pby, _pbx + _pat_bw, _pby + 18, false);
+            scr_editor_control(_pbx, _pby, _pbx + _pat_bw, _pby + 18, _phov, _pact);
             draw_set_color(_pact ? c_aqua : make_color_rgb(90, 90, 110));
-            draw_rectangle(_pbx, _pby, _pbx + _pat_bw, _pby + 18, true);
             draw_set_color(_pact ? c_aqua : c_white);
-            draw_text_l(_pbx + 4, _pby + 3, _pat_lbls[_p]);
+            scr_editor_label(_pbx, _pby, _pbx + _pat_bw, _pby + 18, _pat_lbls[_p]);
             if (_phov && mouse_check_button_pressed(mb_left)) _m.dither_pat = _p;
         }
         _ty += 3 * 20 + 4;
         // Second colour swatch (only meaningful when pattern > 0)
+        // Caption, swatch and slot number share the swatch's row centre.
         draw_set_color(c_ltgray);
-        draw_text_l(_tx, _ty, "2ND COL:");
         var _d2x = _tx + 74;
+        scr_editor_label(_tx, _ty - 2, _d2x, _ty + 16, "2ND COL:", fa_left, 0);
         var _d2hov = point_in_rectangle(_mx, _my, _d2x, _ty - 2, _d2x + 18, _ty + 16);
         scr_ui_info(_d2hov, "DITHER 2ND COLOUR - CLICK TO CYCLE WHICH SELECTOR SLOT (0-3) MIXES WITH THE ACTIVE COLOUR");
         var _d2slots = [_m.bg, _m.col1, _m.col2, _m.col3];
-        draw_set_color(scr_c64_pepto_colour(_d2slots[_m.dither_colb]));
-        draw_rectangle(_d2x, _ty - 2, _d2x + 18, _ty + 16, false);
+        scr_editor_swatch(_d2x, _ty - 2, _d2x + 18, _ty + 16, scr_c64_pepto_colour(_d2slots[_m.dither_colb]), _d2hov);
         draw_set_color(c_white);
-        draw_rectangle(_d2x, _ty - 2, _d2x + 18, _ty + 16, true);
-        draw_text_l(_d2x + 22, _ty, string(_m.dither_colb));
+        scr_editor_label(_d2x + 22, _ty - 2, _d2x + 60, _ty + 16, string(_m.dither_colb), fa_left, 0);
         // Left-click cycles which selector slot (0..3) is the 2nd colour
         if (_d2hov && mouse_check_button_pressed(mb_left)) {
             _m.dither_colb = (_m.dither_colb + 1) mod 4;
@@ -487,35 +457,29 @@ function scr_vbmp_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
             var _rcx = _tx;
             var _rc_hov = point_in_rectangle(_mx, _my, _rcx, _ty, _rcx + 25, _ty + 24);
             scr_ui_info(_rc_hov, "RECOLOUR COL3 - RIGHT CLICK CYCLES THE COLOUR-RAM COLOUR (0-15) USED BY RECOL_C");
-            draw_set_color(scr_c64_pepto_colour(vbmp_recol_c3));
-            draw_rectangle(_rcx, _ty, _rcx + 25, _ty + 24, false);
+            scr_editor_swatch(_rcx, _ty, _rcx + 25, _ty + 24, scr_c64_pepto_colour(vbmp_recol_c3), _rc_hov);
             draw_set_color(c_white);
-            draw_rectangle(_rcx, _ty, _rcx + 25, _ty + 24, true);
             draw_text_l(_rcx + 3, _ty + 26, "C3:" + string(vbmp_recol_c3));
             if (_rc_hov && mouse_check_button_pressed(mb_right)) vbmp_recol_c3 = (vbmp_recol_c3 + 1) mod 16;
         } else {
             var _rc1x = _tx;
             var _rc1_hov = point_in_rectangle(_mx, _my, _rc1x, _ty, _rc1x + 25, _ty + 24);
             scr_ui_info(_rc1_hov, "RECOLOUR COL1 - RIGHT CLICK CYCLES THE FIRST SCREEN-RAM COLOUR (0-15) USED BY RECOL_S");
-            draw_set_color(scr_c64_pepto_colour(vbmp_recol_c1));
-            draw_rectangle(_rc1x, _ty, _rc1x + 25, _ty + 24, false);
+            scr_editor_swatch(_rc1x, _ty, _rc1x + 25, _ty + 24, scr_c64_pepto_colour(vbmp_recol_c1), _rc1_hov);
             draw_set_color(c_white);
-            draw_rectangle(_rc1x, _ty, _rc1x + 25, _ty + 24, true);
             draw_text_l(_rc1x + 3, _ty + 26, "C1:" + string(vbmp_recol_c1));
             if (_rc1_hov && mouse_check_button_pressed(mb_right)) vbmp_recol_c1 = (vbmp_recol_c1 + 1) mod 16;
 
             var _rc2x = _tx + 35;
             var _rc2_hov = point_in_rectangle(_mx, _my, _rc2x, _ty, _rc2x + 25, _ty + 24);
             scr_ui_info(_rc2_hov, "RECOLOUR COL2 - RIGHT CLICK CYCLES THE SECOND SCREEN-RAM COLOUR (0-15) USED BY RECOL_S");
-            draw_set_color(scr_c64_pepto_colour(vbmp_recol_c2));
-            draw_rectangle(_rc2x, _ty, _rc2x + 25, _ty + 24, false);
+            scr_editor_swatch(_rc2x, _ty, _rc2x + 25, _ty + 24, scr_c64_pepto_colour(vbmp_recol_c2), _rc2_hov);
             draw_set_color(c_white);
-            draw_rectangle(_rc2x, _ty, _rc2x + 25, _ty + 24, true);
             draw_text_l(_rc2x + 3, _ty + 26, "C2:" + string(vbmp_recol_c2));
             if (_rc2_hov && mouse_check_button_pressed(mb_right)) vbmp_recol_c2 = (vbmp_recol_c2 + 1) mod 16;
         }
         _ty += 44;
-        draw_set_color(make_color_rgb(70, 70, 90));
+        draw_set_color(make_color_rgb(128, 128, 149));
         draw_text_l(_tx, _ty, "R=cycle colour  drag=cell area");
         _ty += 18;
     }
@@ -524,10 +488,9 @@ function scr_vbmp_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
     var _ubx = _tx;
     var _ub_hov = point_in_rectangle(_mx, _my, _ubx, _ty, _ubx + 80, _ty + 18);
     scr_ui_info(_ub_hov, "UNDO LAST - DELETE THE LAST COMMAND IN THIS PAGE'S LIST");
-    draw_set_color(_ub_hov ? make_color_rgb(120, 90, 40) : make_color_rgb(70, 50, 20));
-    draw_rectangle(_ubx, _ty, _ubx + 80, _ty + 18, false);
+    scr_editor_control(_ubx, _ty, _ubx + 80, _ty + 18, _ub_hov, false);
     draw_set_color(c_white);
-    draw_text_l(_ubx + 6, _ty + 3, "UNDO LAST");
+    scr_editor_label(_ubx, _ty, _ubx + 80, _ty + 18, "UNDO LAST");
     if (_ub_hov && mouse_check_button_pressed(mb_left) && array_length(_m.commands) > 0) {
         array_delete(_m.commands, array_length(_m.commands) - 1, 1);
         _m.last_emitted_col = -1; // force next commit to re-establish colour
@@ -545,10 +508,9 @@ function scr_vbmp_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
     var _cl_y  = _box_y + _box_h + 24;                    // just below box bottom edge
     var _cl_hov = point_in_rectangle(_mx, _my, _clbx, _cl_y, _clbx + _cl_w, _cl_y + 18);
     scr_ui_info(_cl_hov, "CLEAR - DELETE EVERY COMMAND ON THIS PAGE (NO CONFIRM)");
-    draw_set_color(_cl_hov ? make_color_rgb(200, 60, 60) : make_color_rgb(120, 30, 30));
-    draw_rectangle(_clbx, _cl_y, _clbx + _cl_w, _cl_y + 18, false);
+    scr_editor_control(_clbx, _cl_y, _clbx + _cl_w, _cl_y + 18, _cl_hov, false);
     draw_set_color(c_white);
-    draw_text_l(_clbx + 8, _cl_y + 3, "CLEAR");
+    scr_editor_label(_clbx, _cl_y, _clbx + _cl_w, _cl_y + 18, "CLEAR");
     if (_cl_hov && mouse_check_button_pressed(mb_left)) {
         _m.commands = [];
         _m.last_emitted_col = -1;
@@ -608,10 +570,7 @@ function scr_vbmp_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
     var _start = _m.cmd_scroll;
 
     // Faint column background so the list reads as its own panel
-    draw_set_color(make_color_rgb(14, 14, 22));
-    draw_rectangle(_clx - 4, _cly_list - 2, _clx + _col_w + 4, _cly_list + _rows_vis * _row_h + 2, false);
-    draw_set_color(make_color_rgb(50, 50, 70));
-    draw_rectangle(_clx - 4, _cly_list - 2, _clx + _col_w + 4, _cly_list + _rows_vis * _row_h + 2, true);
+    scr_editor_panel(_clx - 4, _cly_list - 2, _clx + _col_w + 4, _cly_list + _rows_vis * _row_h + 2, true);
 
     scr_ui_info(point_in_rectangle(_mx, _my, _clx - 4, _cly_list - 2, _clx + _col_w + 4, _cly_list + _rows_vis * _row_h + 2), "COMMAND LIST - EVERY DRAWING COMMAND ON THIS PAGE IN ORDER. MOUSE WHEEL SCROLLS");
     for (var _r = 0; _r < _rows_vis && (_start + _r) < _total; _r++) {
@@ -635,13 +594,14 @@ function scr_vbmp_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
         if (variable_struct_exists(_cmd, "sc"))  _lbl += " s" + string(_cmd.sc) + "," + string(_cmd.sr) + "->" + string(_cmd.dc) + "," + string(_cmd.dr) + " " + string(_cmd.w) + "x" + string(_cmd.h);
         // Per-command stream byte cost, right-aligned-ish before the [X] button.
         _lbl += "  <" + string(_vbmp_cmd_bytes(_cmd)) + "b>";
-        draw_text_l(_clx + 2, _ry + 1, _lbl);
+        scr_editor_label(_clx, _ry, _clx + _col_w - 24, _ry + _row_h, _lbl, fa_left, 2);
         // Delete button at the column's right edge
         var _delx = _clx + _col_w - 24;
         var _dhov = point_in_rectangle(_mx, _my, _delx, _ry, _delx + 24, _ry + _row_h);
         scr_ui_info(_dhov, "[X] - DELETE THIS COMMAND FROM THE LIST");
-        draw_set_color(_dhov ? c_red : make_color_rgb(120, 60, 60));
-        draw_text_l(_delx, _ry + 1, "[X]");
+        scr_editor_control(_delx, _ry, _delx + 24, _ry + _row_h, _dhov, false);
+        draw_set_color(_dhov ? c_red : make_color_rgb(174, 115, 115));
+        scr_editor_label(_delx, _ry, _delx + 24, _ry + _row_h, "X");
         if (_dhov && mouse_check_button_pressed(mb_left)) {
             array_delete(_m.commands, _idx, 1);
             _m.vbmp_dirty = true;

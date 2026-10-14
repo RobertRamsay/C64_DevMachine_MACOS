@@ -495,11 +495,10 @@ function scr_chr_editor_draw(_asset, _ox, _oy, _mc_mode, _show_fg_swatch = true,
     // FLIP X
     var _fxhov = point_in_rectangle(_mx, _my, _btn_x, _btn_y, _btn_x + _btn_w, _btn_y + _btn_h);
     scr_ui_info(_fxhov, "FLIP X: MIRRORS THE CHARACTER LEFT TO RIGHT (MC KEEPS PIXEL PAIRS INTACT). UNDOABLE");
-    draw_set_color(_fxhov ? make_color_rgb(80, 160, 200) : make_color_rgb(30, 60, 80));
-    draw_rectangle(_btn_x, _btn_y, _btn_x + _btn_w, _btn_y + _btn_h, false);
+    scr_editor_control(_btn_x, _btn_y, _btn_x + _btn_w, _btn_y + _btn_h, _fxhov, false);
     draw_set_color(c_white);
     draw_set_halign(fa_center);
-    draw_text_l(_btn_x + _btn_w * 0.5, _btn_y + 3, "FLIP X");
+    scr_editor_label(_btn_x, _btn_y, _btn_x + _btn_w, _btn_y + _btn_h, "FLIP X");
     draw_set_halign(fa_left);
     if (_fxhov && mouse_check_button_pressed(mb_left)) {
         scr_chr_undo_push(_asset);
@@ -529,11 +528,10 @@ function scr_chr_editor_draw(_asset, _ox, _oy, _mc_mode, _show_fg_swatch = true,
     // FLIP Y
     var _fyhov = point_in_rectangle(_mx, _my, _btn_x, _btn_y, _btn_x + _btn_w, _btn_y + _btn_h);
     scr_ui_info(_fyhov, "FLIP Y: MIRRORS THE CHARACTER TOP TO BOTTOM. UNDOABLE");
-    draw_set_color(_fyhov ? make_color_rgb(80, 160, 200) : make_color_rgb(30, 60, 80));
-    draw_rectangle(_btn_x, _btn_y, _btn_x + _btn_w, _btn_y + _btn_h, false);
+    scr_editor_control(_btn_x, _btn_y, _btn_x + _btn_w, _btn_y + _btn_h, _fyhov, false);
     draw_set_color(c_white);
     draw_set_halign(fa_center);
-    draw_text_l(_btn_x + _btn_w * 0.5, _btn_y + 3, "FLIP Y");
+    scr_editor_label(_btn_x, _btn_y, _btn_x + _btn_w, _btn_y + _btn_h, "FLIP Y");
     draw_set_halign(fa_left);
     if (_fyhov && mouse_check_button_pressed(mb_left)) {
         scr_chr_undo_push(_asset);
@@ -552,11 +550,10 @@ function scr_chr_editor_draw(_asset, _ox, _oy, _mc_mode, _show_fg_swatch = true,
     // CLEAR
     var _clhov = point_in_rectangle(_mx, _my, _btn_x, _btn_y, _btn_x + _btn_w, _btn_y + _btn_h);
     scr_ui_info(_clhov, "CLEAR: BLANKS ALL 8 ROWS OF THIS CHARACTER TO BACKGROUND. CTRL+Z UNDOES");
-    draw_set_color(_clhov ? make_color_rgb(180, 60, 60) : make_color_rgb(80, 25, 25));
-    draw_rectangle(_btn_x, _btn_y, _btn_x + _btn_w, _btn_y + _btn_h, false);
+    scr_editor_control(_btn_x, _btn_y, _btn_x + _btn_w, _btn_y + _btn_h, _clhov, false);
     draw_set_color(c_white);
     draw_set_halign(fa_center);
-    draw_text_l(_btn_x + _btn_w * 0.5, _btn_y + 3, "CLEAR");
+    scr_editor_label(_btn_x, _btn_y, _btn_x + _btn_w, _btn_y + _btn_h, "CLEAR");
     draw_set_halign(fa_left);
     if (_clhov && mouse_check_button_pressed(mb_left)) {
         scr_chr_undo_push(_asset);
@@ -572,15 +569,10 @@ function scr_chr_editor_draw(_asset, _ox, _oy, _mc_mode, _show_fg_swatch = true,
     // FILL (flood-fill toggle) — highlights green when active
     var _flhov = point_in_rectangle(_mx, _my, _btn_x, _btn_y, _btn_x + _btn_w, _btn_y + _btn_h);
     scr_ui_info(_flhov, "FILL: TOGGLES FLOOD-FILL MODE - LEFT-CLICK ON THE GRID FILLS THE TOUCHING AREA");
-    if (chr_fill_mode) {
-        draw_set_color(make_color_rgb(60, 200, 60));
-    } else {
-        draw_set_color(_flhov ? make_color_rgb(40, 120, 40) : make_color_rgb(25, 80, 25));
-    }
-    draw_rectangle(_btn_x, _btn_y, _btn_x + _btn_w, _btn_y + _btn_h, false);
-    draw_set_color(chr_fill_mode ? c_black : c_white);
+    scr_editor_control(_btn_x, _btn_y, _btn_x + _btn_w, _btn_y + _btn_h, _flhov, chr_fill_mode);
+    draw_set_color(chr_fill_mode ? c_white : c_white);
     draw_set_halign(fa_center);
-    draw_text_l(_btn_x + _btn_w * 0.5, _btn_y + 3, chr_fill_mode ? L("FILL: ON") : L("FILL"));
+    scr_editor_label(_btn_x, _btn_y, _btn_x + _btn_w, _btn_y + _btn_h, chr_fill_mode ? L("FILL: ON") : L("FILL"));
     draw_set_halign(fa_left);
     if (_flhov && mouse_check_button_pressed(mb_left)) {
         chr_fill_mode = chr_fill_mode ? false : true;
@@ -590,16 +582,7 @@ function scr_chr_editor_draw(_asset, _ox, _oy, _mc_mode, _show_fg_swatch = true,
     // WRAP (slide wrap toggle) - pixels leaving one edge re-enter on the other
     var _wrhov = point_in_rectangle(_mx, _my, _btn_x, _btn_y, _btn_x + _btn_w, _btn_y + _btn_h);
     scr_ui_info(_wrhov, "WRAP: WHEN ON, PIXELS SLID OFF ONE EDGE COME BACK ON THE OTHER; OFF, THEY ARE LOST");
-    if (chr_shift_wrap) {
-        draw_set_color(make_color_rgb(200, 160, 40));
-    } else {
-        if (_wrhov) {
-            draw_set_color(make_color_rgb(110, 90, 30));
-        } else {
-            draw_set_color(make_color_rgb(70, 55, 20));
-        }
-    }
-    draw_rectangle(_btn_x, _btn_y, _btn_x + _btn_w, _btn_y + _btn_h, false);
+    scr_editor_control(_btn_x, _btn_y, _btn_x + _btn_w, _btn_y + _btn_h, _wrhov, chr_shift_wrap);
     if (chr_shift_wrap) {
         draw_set_color(c_black);
     } else {
@@ -607,9 +590,9 @@ function scr_chr_editor_draw(_asset, _ox, _oy, _mc_mode, _show_fg_swatch = true,
     }
     draw_set_halign(fa_center);
     if (chr_shift_wrap) {
-        draw_text_l(_btn_x + _btn_w * 0.5, _btn_y + 3, L("WRAP: ON"));
+        scr_editor_label(_btn_x, _btn_y, _btn_x + _btn_w, _btn_y + _btn_h, L("WRAP: ON"));
     } else {
-        draw_text_l(_btn_x + _btn_w * 0.5, _btn_y + 3, L("WRAP: OFF"));
+        scr_editor_label(_btn_x, _btn_y, _btn_x + _btn_w, _btn_y + _btn_h, L("WRAP: OFF"));
     }
     draw_set_halign(fa_left);
     if (_wrhov && mouse_check_button_pressed(mb_left)) {
@@ -652,17 +635,13 @@ function scr_chr_editor_draw(_asset, _ox, _oy, _mc_mode, _show_fg_swatch = true,
                          || (_mc_mode == 2 && _swi < 4 && chr_active_ecm_bg == _swi);
         var _sw_x1 = _btn_x + 32;
         var _sw_y1 = _btn_y + _swi * (_sw_sz + 3);
-        draw_set_color(_sw_selected ? c_yellow : make_color_rgb(100, 100, 140));
-        draw_text_l(_btn_x, _sw_y1 + 3, _sw_labels[_swi] + ":");
-        draw_set_color(scr_c64_pepto_colour(_sw_col_idx));
-        draw_rectangle(_sw_x1, _sw_y1, _sw_x1 + _sw_sz, _sw_y1 + _sw_sz, false);
-        draw_set_color(_sw_selected ? c_yellow : c_white);
-        draw_rectangle(_sw_x1, _sw_y1, _sw_x1 + _sw_sz, _sw_y1 + _sw_sz, true);
-        if (_sw_selected) {
-            draw_set_color(c_yellow);
-            draw_rectangle(_sw_x1 - 2, _sw_y1 - 2, _sw_x1 + _sw_sz + 2, _sw_y1 + _sw_sz + 2, true);
-        }
         var _sw_hov = point_in_rectangle(_mx, _my, _sw_x1, _sw_y1, _sw_x1 + _sw_sz, _sw_y1 + _sw_sz);
+        draw_set_color(_sw_selected ? c_yellow : make_color_rgb(127, 127, 165));
+        // Caption centred on the swatch row it labels.
+        scr_editor_label(_btn_x, _sw_y1, _sw_x1, _sw_y1 + _sw_sz, _sw_labels[_swi] + ":", fa_left, 0);
+        // HR swatches are display-only, so they never show the hover frame.
+        scr_editor_swatch(_sw_x1, _sw_y1, _sw_x1 + _sw_sz, _sw_y1 + _sw_sz, scr_c64_pepto_colour(_sw_col_idx),
+            _sw_hov && _mc_mode != 0, _sw_selected);
         if (_mc_mode == 1) {
             scr_ui_info(_sw_hov, "MC " + _sw_labels[_swi] + " COLOUR: CLICK TO PAINT WITH THIS BIT PAIR (BG ERASES)");
         } else if (_mc_mode == 2) {

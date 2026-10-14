@@ -33,10 +33,10 @@ function scr_hud_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
     var _alt   = keyboard_check(vk_alt);
 
     var _c_lbl   = make_color_rgb(140, 150, 180);
-    var _c_dim   = make_color_rgb(95, 95, 115);
+    var _c_dim   = make_color_rgb(129, 129, 149);
     var _c_head  = make_color_rgb(90, 220, 190);
-    var _c_box   = make_color_rgb(24, 24, 36);
-    var _c_edge  = make_color_rgb(56, 56, 78);
+    var _c_box   = make_color_rgb(30, 40, 53);
+    var _c_edge  = make_color_rgb(66, 82, 103);
     var _c_btn   = make_color_rgb(38, 38, 58);
     var _c_btnh  = make_color_rgb(66, 66, 98);
     var _c_on    = make_color_rgb(160, 80, 20);
@@ -106,11 +106,10 @@ function scr_hud_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
         var _tx = c_white;
         if (_on) { _bg = _con; _tx = _ctx; }
         if (_hov && !_on) { _bg = _cbh; }
-        draw_set_color(_bg);
-        draw_rectangle(_x1, _y1, _x1 + _w, _y1 + _h, false);
+        scr_editor_control(_x1, _y1, _x1 + _w, _y1 + _h, _hov, _on);
         draw_set_color(_tx);
         draw_set_halign(fa_center);
-        draw_text_l(_x1 + _w * 0.5, _y1 + 3, _label);
+        scr_editor_label(_x1, _y1, _x1 + _w, _y1 + _h, _label);
         draw_set_halign(fa_left);
         return (_hov && mouse_check_button_pressed(mb_left));
     };
@@ -151,12 +150,12 @@ function scr_hud_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
         draw_set_color(_c_dim);
         draw_text_l(_tx, _tool_y + 3, _rf_lbl[_ri]);
         var _d = 0;
-        if (_button(_tx + 12, _tool_y, 14, 16, "-", false, _mx, _my, _c_btn, _c_btnh, _c_on, _c_ontx, "DECREASES " + _rf_info[_ri])) { _d = -1; }
+        if (_button(_tx + 12, _tool_y, 14, 20, "-", false, _mx, _my, _c_btn, _c_btnh, _c_on, _c_ontx, "DECREASES " + _rf_info[_ri])) { _d = -1; }
         draw_set_color(c_aqua);
         draw_set_halign(fa_center);
         draw_text_l(_tx + 38, _tool_y + 3, string(_rf_val[_ri]));
         draw_set_halign(fa_left);
-        if (_button(_tx + 50, _tool_y, 14, 16, "+", false, _mx, _my, _c_btn, _c_btnh, _c_on, _c_ontx, "INCREASES " + _rf_info[_ri])) { _d = 1; }
+        if (_button(_tx + 50, _tool_y, 14, 20, "+", false, _mx, _my, _c_btn, _c_btnh, _c_on, _c_ontx, "INCREASES " + _rf_info[_ri])) { _d = 1; }
         if (_d != 0) {
             if (_ri == 0) { _m.hud_x = clamp(_m.hud_x + _d, 0, 40 - _m.hud_w); }
             if (_ri == 1) { _m.hud_y = clamp(_m.hud_y + _d, 0, 25 - _m.hud_h); }
@@ -193,15 +192,13 @@ function scr_hud_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
     // CHARSET — click cycles, right-click clears
     _tx += 6;
     var _cb_w = 200;
-    var _chov = point_in_rectangle(_mx, _my, _tx, _tool_y, _tx + _cb_w, _tool_y + 16);
+    var _chov = point_in_rectangle(_mx, _my, _tx, _tool_y, _tx + _cb_w, _tool_y + 20);
     scr_ui_info(_chov, "CHARSET THE PANEL USES: CLICK = NEXT CHAR_SET ASSET, RIGHT-CLICK = NONE");
-    draw_set_color(make_color_rgb(20, 35, 25));
-    if (_chov) { draw_set_color(make_color_rgb(40, 80, 60)); }
-    draw_rectangle(_tx, _tool_y, _tx + _cb_w, _tool_y + 16, false);
+    scr_editor_control(_tx, _tool_y, _tx + _cb_w, _tool_y + 20, _chov);
     draw_set_color(make_color_rgb(150, 150, 150));
     var _cb_label = "CHARSET  -- PICK --";
     if (_m.chr_asset != "") { draw_set_color(c_lime); _cb_label = "CHARSET  " + _m.chr_asset; }
-    draw_text_l(_tx + 6, _tool_y + 3, _cb_label);
+    scr_editor_label(_tx, _tool_y, _tx + _cb_w, _tool_y + 20, _cb_label, fa_left, 6);
     if (_chov && (mouse_check_button_pressed(mb_left) || mouse_check_button_pressed(mb_right))) {
         var _sets = [];
         if (instance_exists(obj_asset_manager)) {
@@ -227,7 +224,7 @@ function scr_hud_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
     // SCREEN HR / MC
     var _sm_lbl = "SCREEN HR";
     if (_scr_mc) { _sm_lbl = "SCREEN MC"; }
-    if (_button(_tx, _tool_y, 90, 16, _sm_lbl, _scr_mc, _mx, _my, _c_btn, _c_btnh, make_color_rgb(20, 60, 80), make_color_rgb(80, 200, 255), "SCREEN TEXT MODE: HI-RES OR MULTICOLOUR ($D016 BIT 4); MC CELLS NEED COLOUR RAM BIT 3")) {
+    if (_button(_tx, _tool_y, 90, 20, _sm_lbl, _scr_mc, _mx, _my, _c_btn, _c_btnh, make_color_rgb(20, 60, 80), make_color_rgb(80, 200, 255), "SCREEN TEXT MODE: HI-RES OR MULTICOLOUR ($D016 BIT 4); MC CELLS NEED COLOUR RAM BIT 3")) {
         _m.hud_mc_mode = 1 - _m.hud_mc_mode;
     }
     _tx += 100;
@@ -235,10 +232,10 @@ function scr_hud_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
     // ZOOM
     draw_set_color(_c_lbl);
     draw_text_l(_tx, _tool_y + 3, "ZOOM");
-    if (_button(_tx + 36, _tool_y, 14, 16, "-", false, _mx, _my, _c_btn, _c_btnh, _c_on, _c_ontx, "ZOOMS THE SCREEN CANVAS OUT (1-3)")) { _m.zoom = max(1, _m.zoom - 1); }
+    if (_button(_tx + 36, _tool_y, 14, 20, "-", false, _mx, _my, _c_btn, _c_btnh, _c_on, _c_ontx, "ZOOMS THE SCREEN CANVAS OUT (1-3)")) { _m.zoom = max(1, _m.zoom - 1); }
     draw_set_color(c_aqua);
     draw_text_l(_tx + 55, _tool_y + 3, string(_m.zoom));
-    if (_button(_tx + 66, _tool_y, 14, 16, "+", false, _mx, _my, _c_btn, _c_btnh, _c_on, _c_ontx, "ZOOMS THE SCREEN CANVAS IN (1-3; LIMITED BY THE PANEL HEIGHT)")) { _m.zoom = min(3, _m.zoom + 1); }
+    if (_button(_tx + 66, _tool_y, 14, 20, "+", false, _mx, _my, _c_btn, _c_btnh, _c_on, _c_ontx, "ZOOMS THE SCREEN CANVAS IN (1-3; LIMITED BY THE PANEL HEIGHT)")) { _m.zoom = min(3, _m.zoom + 1); }
 
     // ===============================================================
     // CANVAS — the whole 40x25 screen
@@ -401,10 +398,7 @@ function scr_hud_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
 
     // ── TILE — the charset's own editor, on the active char ──
     var _tile_h = 196;
-    draw_set_color(_c_box);
-    draw_rectangle(_rcx, _ry0, _rcx + _rcw, _ry0 + _tile_h, false);
-    draw_set_color(_c_edge);
-    draw_rectangle(_rcx, _ry0, _rcx + _rcw, _ry0 + _tile_h, true);
+    scr_editor_panel(_rcx, _ry0, _rcx + _rcw, _ry0 + _tile_h, true);
     draw_set_color(_c_head);
     draw_text_l(_rcx + 8, _ry0 + 5, "TILE");
     draw_set_color(_c_dim);
@@ -461,10 +455,7 @@ function scr_hud_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
     // ── PAINT ──
     var _py0 = _ry0 + _tile_h + 10;
     var _paint_h = 118;
-    draw_set_color(_c_box);
-    draw_rectangle(_rcx, _py0, _rcx + _rcw, _py0 + _paint_h, false);
-    draw_set_color(_c_edge);
-    draw_rectangle(_rcx, _py0, _rcx + _rcw, _py0 + _paint_h, true);
+    scr_editor_panel(_rcx, _py0, _rcx + _rcw, _py0 + _paint_h, true);
     draw_set_color(_c_head);
     draw_text_l(_rcx + 8, _py0 + 5, "PAINT");
 
@@ -490,12 +481,8 @@ function scr_hud_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
         var _cy1 = _swy + (_ci div 8) * 21;
         var _chov2 = point_in_rectangle(_mx, _my, _cx1, _cy1, _cx1 + 18, _cy1 + 18);
         scr_ui_info(_chov2, "COLOUR " + string(_ci) + ": LEFT = PAINT COLOUR, RIGHT = SCREEN BACKGROUND $D021");
-        draw_set_color(scr_c64_pepto_colour(_ci));
-        draw_rectangle(_cx1, _cy1, _cx1 + 18, _cy1 + 18, false);
-        draw_set_color(make_color_rgb(60, 60, 80));
-        if ((_m.active_colour & 15) == _ci) { draw_set_color(c_white); }
-        if (_chov2) { draw_set_color(c_yellow); }
-        draw_rectangle(_cx1, _cy1, _cx1 + 18, _cy1 + 18, true);
+        scr_editor_swatch(_cx1, _cy1, _cx1 + 18, _cy1 + 18, scr_c64_pepto_colour(_ci),
+            _chov2, (_m.active_colour & 15) == _ci);
         if (_chov2 && mouse_check_button_pressed(mb_left)) {
             // On an MC screen with an MC cell active the swatch picks the
             // cell's own colour (0-7) and keeps bit 3; otherwise it is the
@@ -518,7 +505,7 @@ function scr_hud_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
         var _mc_on = ((_m.active_colour & 8) != 0);
         var _mcl = "CELL HR";
         if (_mc_on) { _mcl = "CELL MC"; }
-        if (_button(_cellx, _swy, 76, 16, _mcl, _mc_on, _mx, _my, _c_btn, _c_btnh, _c_on, _c_ontx, "PAINT HI-RES OR MULTICOLOUR CELLS (TOGGLES COLOUR RAM BIT 3 OF THE PAINT COLOUR)")) {
+        if (_button(_cellx, _swy, 76, 20, _mcl, _mc_on, _mx, _my, _c_btn, _c_btnh, _c_on, _c_ontx, "PAINT HI-RES OR MULTICOLOUR CELLS (TOGGLES COLOUR RAM BIT 3 OF THE PAINT COLOUR)")) {
             _m.active_colour = _m.active_colour ^ 8;
         }
         draw_set_color(_c_dim);
@@ -534,16 +521,17 @@ function scr_hud_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
     // Row 3: shared MC colours ($D022 / $D023) — click to step through the palette
     if (_scr_mc) {
         var _hy3 = _hy2 + 16;
+        // Captions centred on the 16px swatch row.
         draw_set_color(_c_dim);
-        draw_text_l(_swx, _hy3 + 3, "C1");
-        draw_set_color(scr_c64_pepto_colour(_col1));
-        draw_rectangle(_swx + 20, _hy3, _swx + 36, _hy3 + 16, false);
+        scr_editor_label(_swx, _hy3, _swx + 20, _hy3 + 16, "C1", fa_left, 0);
+        scr_editor_swatch(_swx + 20, _hy3, _swx + 36, _hy3 + 16, scr_c64_pepto_colour(_col1),
+            point_in_rectangle(_mx, _my, _swx + 20, _hy3, _swx + 36, _hy3 + 16));
         draw_set_color(_c_dim);
-        draw_text_l(_swx + 46, _hy3 + 3, "C2");
-        draw_set_color(scr_c64_pepto_colour(_col2));
-        draw_rectangle(_swx + 66, _hy3, _swx + 82, _hy3 + 16, false);
+        scr_editor_label(_swx + 46, _hy3, _swx + 66, _hy3 + 16, "C2", fa_left, 0);
+        scr_editor_swatch(_swx + 66, _hy3, _swx + 82, _hy3 + 16, scr_c64_pepto_colour(_col2),
+            point_in_rectangle(_mx, _my, _swx + 66, _hy3, _swx + 82, _hy3 + 16));
         draw_set_color(_c_dim);
-        draw_text_l(_swx + 92, _hy3 + 3, "SHARED MC COLOURS $D022 / $D023  -  CLICK = NEXT");
+        scr_editor_label(_swx + 92, _hy3, _rcx + _rcw, _hy3 + 16, "SHARED MC COLOURS $D022 / $D023  -  CLICK = NEXT", fa_left, 0);
         scr_ui_info(point_in_rectangle(_mx, _my, _swx + 20, _hy3, _swx + 36, _hy3 + 16), "SHARED MULTICOLOUR 1 ($D022): CLICK FOR THE NEXT COLOUR");
         scr_ui_info(point_in_rectangle(_mx, _my, _swx + 66, _hy3, _swx + 82, _hy3 + 16), "SHARED MULTICOLOUR 2 ($D023): CLICK FOR THE NEXT COLOUR");
         if (mouse_check_button_pressed(mb_left) && point_in_rectangle(_mx, _my, _swx + 20, _hy3, _swx + 36, _hy3 + 16)) {
@@ -560,23 +548,20 @@ function scr_hud_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
     var _fy0 = _py0 + _paint_h + 10;
     var _fh  = (_csy + _strip_h) - _fy0;
     if (_fh < 200) { _fh = 200; }
-    draw_set_color(_c_box);
-    draw_rectangle(_rcx, _fy0, _rcx + _rcw, _fy0 + _fh, false);
-    draw_set_color(_c_edge);
-    draw_rectangle(_rcx, _fy0, _rcx + _rcw, _fy0 + _fh, true);
+    scr_editor_panel(_rcx, _fy0, _rcx + _rcw, _fy0 + _fh, true);
     draw_set_color(_c_head);
     draw_text_l(_rcx + 8, _fy0 + 5, "FIELDS");
     draw_set_color(_c_dim);
     draw_text_l(_rcx + 60, _fy0 + 5, "CELLS THE GAME WRITES  -  EACH IS AN ENTRY POINT ON THE HUD NODE");
 
     var _aby = _fy0 + 20;
-    if (_button(_rcx + 8, _aby, 70, 16, "+ FIELD", false, _mx, _my, make_color_rgb(30, 80, 40), make_color_rgb(60, 160, 80), _c_on, _c_ontx, "ADDS A 2-CELL DIGITS FIELD AT THE TYPE CURSOR; EACH FIELD IS AN ENTRY POINT ON THE HUD NODE")) {
+    if (_button(_rcx + 8, _aby, 70, 20, "+ FIELD", false, _mx, _my, make_color_rgb(30, 80, 40), make_color_rgb(60, 160, 80), _c_on, _c_ontx, "ADDS A 2-CELL DIGITS FIELD AT THE TYPE CURSOR; EACH FIELD IS AN ENTRY POINT ON THE HUD NODE")) {
         array_push(_m.fields, { name: "FIELD" + string(array_length(_m.fields)), fx: _m.cur_x, fy: _m.cur_y,
                                 flen: 2, kind: 1, base: 48, pad: 0, full: 81, empty: 32 });
         _m.sel_field = array_length(_m.fields) - 1;
         global.addresses_dirty = true;
     }
-    if (_button(_rcx + 84, _aby, 60, 16, "DELETE", false, _mx, _my, make_color_rgb(80, 30, 30), make_color_rgb(170, 60, 60), _c_on, _c_ontx, "DELETES THE SELECTED FIELD")) {
+    if (_button(_rcx + 84, _aby, 60, 20, "DELETE", false, _mx, _my, make_color_rgb(80, 30, 30), make_color_rgb(170, 60, 60), _c_on, _c_ontx, "DELETES THE SELECTED FIELD")) {
         if (_m.sel_field >= 0 && _m.sel_field < array_length(_m.fields)) {
             array_delete(_m.fields, _m.sel_field, 1);
             _m.sel_field = -1;
@@ -629,18 +614,16 @@ function scr_hud_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
         draw_text_l(_ppx, _ppy + 3, "NAME");
         var _nbx1 = _ppx + 50;
         var _nbx2 = _ppx + _ppw;
-        var _nhov = point_in_rectangle(_mx, _my, _nbx1, _ppy, _nbx2, _ppy + 16);
+        var _nhov = point_in_rectangle(_mx, _my, _nbx1, _ppy, _nbx2, _ppy + 20);
         scr_ui_info(_nhov, "FIELD NAME: CLICK TO EDIT (A-Z, 0-9, _), ENTER KEEPS, ESC CANCELS");
-        draw_set_color(make_color_rgb(20, 35, 25));
-        if (_m.name_edit_active) { draw_set_color(make_color_rgb(20, 60, 30)); }
-        draw_rectangle(_nbx1, _ppy, _nbx2, _ppy + 16, false);
+        scr_editor_control(_nbx1, _ppy, _nbx2, _ppy + 20, _nhov, _m.name_edit_active);
         draw_set_color(c_lime);
         if (_m.name_edit_active) {
             var _blink = " ";
             if ((current_time mod 600) < 300) { _blink = "_"; }
-            draw_text_l(_nbx1 + 5, _ppy + 3, _m.name_edit_buf + _blink);
+            scr_editor_label(_nbx1, _ppy, _nbx2, _ppy + 20, _m.name_edit_buf + _blink, fa_left, 5);
         } else {
-            draw_text_l(_nbx1 + 5, _ppy + 3, _f2.name);
+            scr_editor_label(_nbx1, _ppy, _nbx2, _ppy + 20, _f2.name, fa_left, 5);
         }
         if (_nhov && mouse_check_button_pressed(mb_left) && !_m.name_edit_active) {
             _m.name_edit_active = true;
@@ -672,18 +655,18 @@ function scr_hud_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
                 keyboard_string     = "";
             }
         }
-        _ppy += 20;
+        _ppy += 24;
 
         // KIND + LEN on one row
         draw_set_color(_c_lbl);
         draw_text_l(_ppx, _ppy + 3, "KIND");
-        if (_button(_ppx + 50, _ppy, 70, 16, _kind_names[_f2.kind], false, _mx, _my, _c_btn, _c_btnh, _c_on, _c_ontx, "CYCLES FIELD KIND: TEXT (POSITION ONLY), DIGITS (NUMBER IN A), BAR (A CELLS FILLED)")) {
+        if (_button(_ppx + 50, _ppy, 70, 20, _kind_names[_f2.kind], false, _mx, _my, _c_btn, _c_btnh, _c_on, _c_ontx, "CYCLES FIELD KIND: TEXT (POSITION ONLY), DIGITS (NUMBER IN A), BAR (A CELLS FILLED)")) {
             _f2.kind = (_f2.kind + 1) mod 3;
             global.addresses_dirty = true;
         }
         draw_set_color(_c_lbl);
         draw_text_l(_ppx + 132, _ppy + 3, "LEN");
-        if (_button(_ppx + 162, _ppy, 14, 16, "-", false, _mx, _my, _c_btn, _c_btnh, _c_on, _c_ontx, "SHORTENS THE FIELD BY ONE CELL")) {
+        if (_button(_ppx + 162, _ppy, 14, 20, "-", false, _mx, _my, _c_btn, _c_btnh, _c_on, _c_ontx, "SHORTENS THE FIELD BY ONE CELL")) {
             _f2.flen = max(1, _f2.flen - 1);
             global.addresses_dirty = true;
         }
@@ -691,47 +674,47 @@ function scr_hud_editor(_asset, _vx1, _vy1, _vx2, _vy2, _cy, _mx, _my) {
         draw_set_halign(fa_center);
         draw_text_l(_ppx + 188, _ppy + 3, string(_f2.flen));
         draw_set_halign(fa_left);
-        if (_button(_ppx + 200, _ppy, 14, 16, "+", false, _mx, _my, _c_btn, _c_btnh, _c_on, _c_ontx, "LENGTHENS THE FIELD BY ONE CELL (UP TO THE PANEL EDGE)")) {
+        if (_button(_ppx + 200, _ppy, 14, 20, "+", false, _mx, _my, _c_btn, _c_btnh, _c_on, _c_ontx, "LENGTHENS THE FIELD BY ONE CELL (UP TO THE PANEL EDGE)")) {
             _f2.flen = min(_m.hud_w - _f2.fx, _f2.flen + 1);
             global.addresses_dirty = true;
         }
-        _ppy += 20;
+        _ppy += 24;
 
         if (_f2.kind == 1) {
             draw_set_color(_c_lbl);
             draw_text_l(_ppx, _ppy + 3, "ZERO");
-            if (_button(_ppx + 50, _ppy, 120, 16, "CHR " + string(_f2.base) + "  < ACTIVE", false, _mx, _my, _c_btn, _c_btnh, _c_on, _c_ontx, "SETS THE CHAR FOR DIGIT 0 TO THE ACTIVE CHAR (1-9 FOLLOW IT)")) {
+            if (_button(_ppx + 50, _ppy, 120, 20, "CHR " + string(_f2.base) + "  < ACTIVE", false, _mx, _my, _c_btn, _c_btnh, _c_on, _c_ontx, "SETS THE CHAR FOR DIGIT 0 TO THE ACTIVE CHAR (1-9 FOLLOW IT)")) {
                 _f2.base = _m.active_char;
                 global.addresses_dirty = true;
             }
-            _ppy += 20;
+            _ppy += 24;
             draw_set_color(_c_lbl);
             draw_text_l(_ppx, _ppy + 3, "LEAD");
             var _pad_lbl = "ZEROS";
             if (_f2.pad == 1) { _pad_lbl = "BLANK"; }
-            if (_button(_ppx + 50, _ppy, 70, 16, _pad_lbl, false, _mx, _my, _c_btn, _c_btnh, _c_on, _c_ontx, "LEADING DIGITS: SHOW ZEROS OR BLANKS")) {
+            if (_button(_ppx + 50, _ppy, 70, 20, _pad_lbl, false, _mx, _my, _c_btn, _c_btnh, _c_on, _c_ontx, "LEADING DIGITS: SHOW ZEROS OR BLANKS")) {
                 _f2.pad = 1 - _f2.pad;
                 global.addresses_dirty = true;
             }
-            _ppy += 20;
+            _ppy += 24;
             draw_set_color(_c_dim);
             draw_text_l(_ppx, _ppy, "A = 0-255, WRITTEN RIGHT-ALIGNED");
         }
         if (_f2.kind == 2) {
             draw_set_color(_c_lbl);
             draw_text_l(_ppx, _ppy + 3, "FULL");
-            if (_button(_ppx + 50, _ppy, 120, 16, "CHR " + string(_f2.full) + "  < ACTIVE", false, _mx, _my, _c_btn, _c_btnh, _c_on, _c_ontx, "SETS THE BAR FULL-CELL CHAR TO THE ACTIVE CHAR")) {
+            if (_button(_ppx + 50, _ppy, 120, 20, "CHR " + string(_f2.full) + "  < ACTIVE", false, _mx, _my, _c_btn, _c_btnh, _c_on, _c_ontx, "SETS THE BAR FULL-CELL CHAR TO THE ACTIVE CHAR")) {
                 _f2.full = _m.active_char;
                 global.addresses_dirty = true;
             }
-            _ppy += 20;
+            _ppy += 24;
             draw_set_color(_c_lbl);
             draw_text_l(_ppx, _ppy + 3, "EMPTY");
-            if (_button(_ppx + 50, _ppy, 120, 16, "CHR " + string(_f2.empty) + "  < ACTIVE", false, _mx, _my, _c_btn, _c_btnh, _c_on, _c_ontx, "SETS THE BAR EMPTY-CELL CHAR TO THE ACTIVE CHAR")) {
+            if (_button(_ppx + 50, _ppy, 120, 20, "CHR " + string(_f2.empty) + "  < ACTIVE", false, _mx, _my, _c_btn, _c_btnh, _c_on, _c_ontx, "SETS THE BAR EMPTY-CELL CHAR TO THE ACTIVE CHAR")) {
                 _f2.empty = _m.active_char;
                 global.addresses_dirty = true;
             }
-            _ppy += 20;
+            _ppy += 24;
             draw_set_color(_c_dim);
             draw_text_l(_ppx, _ppy, "A = HOW MANY CELLS TO FILL");
         }

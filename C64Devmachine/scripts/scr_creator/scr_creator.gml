@@ -674,11 +674,7 @@ function scr_creator_run_action(_act) {
 // --------------------------------------------------------------------
 
 function scr_creator_skin_panel(_x1, _y1, _w, _h) {
-    var _frm = 0;
-    if (instance_exists(obj_workspace_manager)) {
-        _frm = obj_workspace_manager.niceSliceFrm;
-    }
-    draw_sprite_stretched(spr_glassSlice, _frm, _x1, _y1, _w, _h);
+    scr_editor_panel(_x1, _y1, _x1 + _w, _y1 + _h);
 }
 
 function scr_creator_skin_btn_frame() {
@@ -695,31 +691,7 @@ function scr_creator_skin_btn_frame() {
 
 /// Themed button body. _on = selected/active, _hov = pointer over it.
 function scr_creator_skin_btn(_x1, _y1, _x2, _y2, _label, _on, _hov) {
-    var _frm = scr_creator_skin_btn_frame();
-    var _w   = max(1, _x2 - _x1);
-    var _h   = max(1, _y2 - _y1);
-    var _sx  = _w / sprite_get_width(spr_menu_button);
-    var _sy  = _h / sprite_get_height(spr_menu_button);
-    var _add = true;
-    if (instance_exists(obj_workspace_manager)) {
-        if (obj_workspace_manager.uiChromeStyle != 0) {
-            _add = false;
-        }
-    }
-    draw_sprite_ext(spr_menu_button, _frm, _x1, _y1, _sx, _sy, 0, c_white, 1);
-    if (_hov || _on) {
-        var _glow = 0.2;
-        if (_on) {
-            _glow = 0.35;
-        }
-        if (_add) {
-            gpu_set_blendmode(bm_add);
-        }
-        draw_sprite_ext(spr_menu_button, _frm, _x1, _y1, _sx, _sy, 0, c_white, _glow);
-        if (_add) {
-            gpu_set_blendmode(bm_normal);
-        }
-    }
+    scr_editor_control(_x1, _y1, _x2, _y2, _hov, _on);
     draw_set_colour(c_white);
     if (_on) {
         draw_set_colour(c_yellow);
@@ -1064,8 +1036,7 @@ function scr_creator_draw_editor(_n) {
             draw_set_colour(make_colour_rgb(120, 255, 140));
             draw_text(_px + 590, _ly + 13, "VALUE " + string(_cur.val));
             if (_p.kind == "COLOUR") {
-                draw_set_colour(scr_c64_pepto_colour(clamp(round(_cur.val), 0, 15)));
-                draw_rectangle(_px + 720, _ly + 3, _px + 760, _ly + 23, false);
+                scr_editor_colour_tile(_px + 720, _ly + 3, _px + 761, _ly + 24, scr_c64_pepto_colour(clamp(round(_cur.val), 0, 15)));
             }
         } else {
             draw_set_colour(make_colour_rgb(255, 110, 110));
@@ -1238,12 +1209,9 @@ function scr_creator_draw_view() {
             } else if (_p.kind == "COLOUR") {
                 for (var _c = 0; _c < 16; _c++) {
                     var _sx = _cx + _c * 30;
-                    draw_set_colour(scr_c64_pepto_colour(_c));
-                    draw_rectangle(_sx, _cy - 12, _sx + 24, _cy + 12, false);
+                    scr_editor_colour_tile(_sx, _cy - 12, _sx + 25, _cy + 13, scr_c64_pepto_colour(_c));
                     if (round(_cur.val) == _c) {
-                        draw_set_colour(c_white);
-                        draw_rectangle(_sx - 2, _cy - 14, _sx + 26, _cy + 14, true);
-                        draw_rectangle(_sx - 3, _cy - 15, _sx + 27, _cy + 15, true);
+                        scr_editor_colour_ring(_sx - 3, _cy - 15, _sx + 28, _cy + 16, c_white);
                     }
                     if (global.creator_click && point_in_rectangle(global.creator_mx, global.creator_my, _sx, _cy - 12, _sx + 24, _cy + 12)) {
                         scr_param_write(_n, _p, _c);
@@ -1915,12 +1883,9 @@ function scr_creator_draw_items(_items, _col) {
                 draw_text((_it.x1 + _it.x2) * 0.5, _my, _it.text);
                 break;
             case "swatch":
-                draw_set_colour(scr_c64_pepto_colour(_it.v));
-                draw_rectangle(_it.x1, _it.y1, _it.x2, _it.y2, false);
+                scr_editor_colour_tile(_it.x1, _it.y1, _it.x2 + 1, _it.y2 + 1, scr_c64_pepto_colour(_it.v));
                 if (_it.on) {
-                    draw_set_colour(c_white);
-                    draw_rectangle(_it.x1 - 2, _it.y1 - 2, _it.x2 + 2, _it.y2 + 2, true);
-                    draw_rectangle(_it.x1 - 3, _it.y1 - 3, _it.x2 + 3, _it.y2 + 3, true);
+                    scr_editor_colour_ring(_it.x1 - 3, _it.y1 - 3, _it.x2 + 4, _it.y2 + 4, c_white);
                 }
                 break;
             case "minus":

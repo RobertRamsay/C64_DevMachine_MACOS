@@ -17,22 +17,20 @@ function scr_asset_inline_editor_draw(_asset, _x1, _y1, _x2, _y2, _mx, _my, _acc
     var _text_h = _y2 - _y1 - _pad * 2;
     var _max_vis_lines = floor(_text_h / _line_h);
 
-    // Panel background
-    draw_set_color(make_color_rgb(14, 14, 22));
-    draw_rectangle(_x1, _y1, _x2, _y2, false);
-    draw_set_color(_accent);
-    draw_rectangle(_x1-1, _y1-1, _x2+1, _y2+1, true);
+    // Recessed editor shell; text geometry remains shared with Step.
+    scr_editor_panel(_x1 - 1, _y1 - 1, _x2 + 1, _y2 + 1, true);
 
     // Gutter background
-    draw_set_color(make_color_rgb(20, 20, 32));
+    draw_set_color(make_color_rgb(25, 35, 48));
     draw_rectangle(_x1, _y1, _x1 + _gutter, _y2, false);
 
     // Label strip at top
-    draw_set_color(make_color_rgb(30, 30, 48));
+    draw_set_color(make_color_rgb(38, 50, 65));
     draw_rectangle(_x1, _y1, _x2, _y1 + 18, false);
     draw_set_font_l(fnt_c64_tiny);
     draw_set_color(_accent);
-    draw_text_l(_x1 + _gutter + _pad, _y1 + 3, _label + L("  |  CTRL+A SELECT ALL  |  CTRL+C/V  |  ENTER NEW LINE"));
+    // Centred in the 18px label strip.
+    scr_editor_label(_x1 + _gutter, _y1, _x2, _y1 + 18, _label + L("  |  CTRL+A SELECT ALL  |  CTRL+C/V  |  ENTER NEW LINE"), fa_left, _pad);
 
     // ── Lay the text out as VISUAL rows ───────────────────────────────────
     // This replaces the old uniform horizontal squash. That scaled every line
@@ -126,7 +124,7 @@ function scr_asset_inline_editor_draw(_asset, _x1, _y1, _x2, _y2, _mx, _my, _acc
         // so the numbers still count real lines.
         if (!_row.iscont) {
             draw_set_font_l(fnt_c64_tiny);
-            draw_set_color(make_color_rgb(60, 70, 90));
+            draw_set_color(make_color_rgb(120, 131, 153));
             draw_text_l(_x1 + 4, _ly, string(_row.lnum + 1));
         }
         draw_set_font_l(fnt_C64_Angled);
