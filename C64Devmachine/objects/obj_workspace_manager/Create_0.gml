@@ -2,6 +2,7 @@
 global.lite=0;
 // CREATOR LAYER globals (lock state, panels). Before anything can step.
 scr_creator_init();
+scr_comment_arrows_init();
 
 global.text_prompt = undefined;
 // Language first: every text wrapper below depends on it.
@@ -316,6 +317,9 @@ global.conflict_popup_asset_a = "";
 global.conflict_popup_asset_b = "";
 global.conflict_popup_range_start = 0;
 global.conflict_popup_range_end   = 0;
+// "? SUGGEST FIX" callout (scr_conflict_suggest_open / _draw); undefined = closed.
+global.conflict_suggest = undefined;
+global.asset_addr_rects = {};
 
 // scan effect when building
 scan_active = false;
@@ -545,6 +549,7 @@ global.node_link_max_dist = 500;
 //  3. BUFFER & PATH PERSISTENCE 
 global.vice_path_cache = "";
 global.comments_visible = true;
+global.comment_arrows_on = true;
 p_buf                  = -1;
 
 //  4. SHELF PALETTE 
@@ -1187,6 +1192,7 @@ showPaletteHelper      = ini_read_real("Settings", "palette_helper",      0) == 
 global.visual_fx       = ini_read_real("Settings", "visual_fx",           1) == 1;
 global.node_destroy_fx = global.visual_fx;
 global.comments_visible = ini_read_real("Settings", "comments_visible",   1) == 1;
+global.comment_arrows_on = ini_read_real("Settings", "comment_arrows",     1) == 1;
 opcode_headers_on      = ini_read_real("Settings", "opcode_headers",      0) == 1;
 opcode_extra_height    = ini_read_real("Settings", "opcode_extra_height", 1) == 1;
 flow_line_style        = ini_read_real("Settings", "flow_line_style",     1);
@@ -1204,6 +1210,8 @@ if (_tour_after_restart >= 0) {
     tour_start_pending = _tour_after_restart;
     welcome_open       = false;
 }
+// Tours finished by hand, for the DONE stamps in the tour list
+scr_tour_done_load();
 
 // ---- SHOW CODE PANEL (floating live listing, left of the shortcuts column) ----
 // -1 on x is the "never positioned" marker; the draw script parks it beside the
@@ -1335,6 +1343,7 @@ global.code_import_release = 0;
 // frame out of date. Whoever does that asks for a couple of extra passes here
 // instead of trying to re-derive every height itself.
 global.relayout_frames = 0;
+editor_was_open = false;          // Step: catch-up relayout when an editor closes
 
 scr_uqmenu_load();
 

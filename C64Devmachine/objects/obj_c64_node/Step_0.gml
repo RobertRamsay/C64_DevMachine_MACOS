@@ -15,6 +15,7 @@ if (global.idle_active && global.idle_fade < 0.1) exit;
 
 if global.gui_mouse_y<50 exit; // skip menu bars clicks from hitting buttons etc
 if !global.canEditNode exit;
+if (global.mcp_turn_lock && !is_dragging) exit; // assistant's MCP turn
 if (obj_workspace_manager.gui_menu_open != -1) exit;
 
 // SHOW CODE panel owns the pointer — no node reacts to anything under it.
@@ -122,7 +123,7 @@ if (node_type == "COMMENT") {
                  && obj_workspace_manager.is_entering_text
                  && obj_workspace_manager.input_target_node == id
                  && obj_workspace_manager.input_target_index == 0);
-    if (!_cr_edit && !collapsed && global.comments_visible && !scr_node_is_hidden(id)
+    if (!_cr_edit && !collapsed && global.comments_visible && !scr_node_is_hidden(id) && !global.comment_arrow_hot
         && scr_workspace_mouse_check_button_pressed(mb_left) && !global.any_picker_open) {
         var _crx2 = x + x_indent + width;
         var _cry2 = y + height;
@@ -147,6 +148,8 @@ if (global.creator_tab_hot != noone && !is_dragging) exit;
 // And for a pinned param card drawn over the canvas.
 if (global.creator_card_hot && !is_dragging) exit;
 if (global.cbc_button_hot      && !is_dragging) exit;
+// And for a comment arrow being grabbed or dragged (scr_comment_arrows).
+if (global.comment_arrow_hot   && !is_dragging) exit;
 
 // =============================================================
 // INIT NODE [CLEAR] BUTTON

@@ -111,6 +111,7 @@ panel_y = 345;   // just under the shortcuts column (ends at y 340)
 panel_h         = _gui_h - panel_y + 200;
 panel_scroll    = 0;
 panel_max_scroll = 0;
+panel_sb_drag    = false;   // dragging the asset list scrollbar
 item_h          = 32;
 hover_idx       = -1;
 hover_pos       = -1;
@@ -990,6 +991,16 @@ map_sb_grab = 0;   // where on the thumb it was grabbed (px)
 
 // Bitmap open in edit mode; Step commits it when the viewer leaves it.
 bmp_edit_ref = undefined;
+
+// Asset open in the viewer panel and a fingerprint of its data; Step forces
+// an autosave when the panel closes with changes (scr_panel_autosave_check).
+// panel_as_check is raised by a panel SAVE button for the same check.
+panel_as_ref   = undefined;
+panel_as_fp    = "";
+panel_as_check = false;
+
+// Name of the asset whose editor REMOVE ASSET was clicked; Step deletes it.
+viewer_remove_req = "";
 
 // Asset panel drag handle: pointer over one this frame / move cursor shown
 asset_grip_hot    = false;

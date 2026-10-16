@@ -1,4 +1,6 @@
 scr_perf_node("gui", "(boxes)");
+// Hidden under an open asset editor or the code editor: don't draw.
+if (obj_workspace_manager.code_editor_open || (instance_exists(obj_asset_manager) && obj_asset_manager.viewer_open)) exit;
 // DRAW GUI BEGIN - event 74. (Draw_72 is Draw BEGIN, room space: the 8 Sep
 // move landed there by mistake, so this overlay drew in the wrong space and
 // was effectively invisible.) Was Draw GUI. This object sits at a nearer depth than
@@ -7,7 +9,8 @@ scr_perf_node("gui", "(boxes)");
 // runs for every instance before any Draw GUI event, so the manager's GUI
 // (and the asset panel / message boxes) now always paints over this.
 var _cam_zoom = obj_workspace_manager.cam_zoom;
-var _alpha = clamp((_cam_zoom - 2.5) / 0.5, 0, 1);
+// Full by zoom 2.5, in step with the node overview labels (obj_c64_node Draw_74).
+var _alpha = clamp((_cam_zoom - 2.0) / 0.5, 0, 1);
 if (_alpha <= 0) exit;
 
 var _cam_x = obj_workspace_manager.cam_x;

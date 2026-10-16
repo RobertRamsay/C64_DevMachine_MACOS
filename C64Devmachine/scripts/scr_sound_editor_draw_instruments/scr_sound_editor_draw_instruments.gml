@@ -936,6 +936,21 @@ function scr_sound_editor_draw_instruments(_m, _ix0, _iy0, _mx, _my, _ix1 = -1, 
         }
     }
 
+    // Steps inserted or deleted (typed, pasted or from the command menus)
+    // keep Ln / Rc:n pointing at the same steps: L7 becomes L8 when a step
+    // goes in above step 7. Compared against the text as of last frame.
+    if (_m.instr_edit_active) {
+        var _rm_prev = _m[$ "instr_remap_prev"];
+        if (is_string(_rm_prev) && _rm_prev != _m.instr_edit_buf) {
+            var _rm = scr_instrument_remap_loops(_rm_prev, _m.instr_edit_buf, _m.instr_edit_cursor);
+            _m.instr_edit_buf    = _rm.text;
+            _m.instr_edit_cursor = clamp(_rm.cursor, 0, string_length(_rm.text));
+        }
+        _m.instr_remap_prev = _m.instr_edit_buf;
+    } else {
+        _m.instr_remap_prev = undefined;
+    }
+
     // ── COMPILED PREVIEW / ERRORS ──
     scr_instrument_ensure_compiled(_sel_instr);
     var _pv_y = _tb_y1 + _tb_h + 16;
@@ -956,21 +971,37 @@ function scr_sound_editor_draw_instruments(_m, _ix0, _iy0, _mx, _my, _ix1 = -1, 
                 + "Pattern GXX: fine tune; HXX: pitch sweep; IXX: pulse sweep.");
         }
     }
-    var _err_n = array_length(_sel_instr.compiled.errors);
-    if (_err_n > 0) {
+    var _err_n = 0;
+    if (array_length(_sel_instr.compiled.errors) > 0) {
         draw_set_font_l(fnt_c64_pico);
-        draw_set_color(c_red);
-        // At most three error lines are shown so the legend keeps its place.
-        _err_n = min(_err_n, 3);
-        for (var _eri = 0; _eri < _err_n; _eri++) {
-            var _err_text = _sel_instr.compiled.errors[_eri];
-            while (string_length(_err_text) > 0 && string_width_l(_err_text) > _tb_w) _err_text = string_delete(_err_text, string_length(_err_text), 1);
-            draw_text_l(_tb_x0, _pv_y + 18 + _eri * 12, _err_text);
+        draw_set_color(c_orange);   // orange reads better than red on this panel
+        // Messages word-wrap to the panel width; at most three lines are
+        // shown so the legend keeps its place.
+        var _err_lines = [];
+        for (var _eri = 0; _eri < array_length(_sel_instr.compiled.errors) && array_length(_err_lines) < 3; _eri++) {
+            var _words = string_split(_sel_instr.compiled.errors[_eri], " ");
+            var _line = "";
+            for (var _wi = 0; _wi < array_length(_words); _wi++) {
+                var _try = (_line == "") ? _words[_wi] : _line + " " + _words[_wi];
+                if (_line != "" && string_width_l(_try) > _tb_w) {
+                    array_push(_err_lines, _line);
+                    _line = _words[_wi];
+                } else {
+                    _line = _try;
+                }
+            }
+            if (_line != "") array_push(_err_lines, _line);
+        }
+        _err_n = min(array_length(_err_lines), 3);
+        for (var _eli = 0; _eli < _err_n; _eli++) {
+            draw_text_l(_tb_x0, _pv_y + 18 + _eli * 12, _err_lines[_eli]);
         }
         draw_set_font_l(fnt_c64_tiny);
     }
 
     // ── COMMAND LEGEND ──
+    // The SFX Maker draws its own command list in its GUIDE column.
+    if (!variable_struct_exists(_m, "sfx_asset_name")) {
     var _lg_y = _pv_y + 32 + (_err_n * 12) + 10;
     draw_set_font_l(fnt_c64_pico);
     draw_set_color(make_color_rgb(110, 110, 130));
@@ -986,6 +1017,7 @@ function scr_sound_editor_draw_instruments(_m, _ix0, _iy0, _mx, _my, _ix1 = -1, 
     ];
     for (var _qgi = 0; _qgi < array_length(_qg); _qgi++) {
         draw_text_l(_tb_x0, _lg_y + _qgi * 12, _qg[_qgi]);
+    }
     }
     draw_set_font_l(fnt_c64_tiny);
 
@@ -1258,6 +1290,9 @@ function scr_sound_editor_cmd_pane(_m, _sel_instr, _p, _mx, _my) {
                 _m.instr_edit_buf    = _rc_new;
                 _m.instr_edit_cursor = min(_m.instr_edit_cursor, string_length(_rc_new));
             } else {
+                // committed straight away, so renumber the loops here (an open
+                // text is renumbered by the per-frame check after the keys)
+                _rc_new = scr_instrument_remap_loops(_rc_src, _rc_new, 0).text;
                 _m.instr_edit_active      = true;
                 _m.instr_edit_buf         = _rc_new;
                 _m.instr_edit_cursor      = 0;

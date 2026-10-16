@@ -23,6 +23,7 @@ ini_write_real("Settings", "opcode_helper", opcode_helper_on ? 1 : 0);
 ini_write_real("Settings", "palette_helper", showPaletteHelper ? 1 : 0);
 ini_write_real("Settings", "visual_fx", global.visual_fx ? 1 : 0);
 ini_write_real("Settings", "comments_visible", global.comments_visible ? 1 : 0);
+ini_write_real("Settings", "comment_arrows", global.comment_arrows_on ? 1 : 0);
 ini_write_real("Settings", "opcode_headers", opcode_headers_on ? 1 : 0);
 ini_write_real("Settings", "opcode_extra_height", opcode_extra_height ? 1 : 0);
 ini_close();

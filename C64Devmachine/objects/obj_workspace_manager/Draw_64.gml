@@ -605,6 +605,7 @@ if (gui_menu_open == 4) {
         { title: "GRID",            action: "GRID"            },
         { title: "EFFECTS",         action: "EFFECTS"         },
         { title: "COMMENTS",        action: "COMMENTS"        },
+        { title: "COMMENT ARROWS",  action: "COMMENT_ARROWS"  },
         { title: "SHOW CODE",       action: "SHOW_CODE"       },
         { title: "MINIMIZE ALL",    action: "MINIMIZE_ALL"    },
         { title: "EXPAND ALL",      action: "EXPAND_ALL"      },
@@ -689,6 +690,10 @@ if (gui_menu_open == 4) {
         if (_op.action == "COMMENTS") {
             _state_str = global.comments_visible ? "ON" : "OFF";
             _state_col = global.comments_visible ? c_lime : c_red;
+        }
+        if (_op.action == "COMMENT_ARROWS") {
+            _state_str = global.comment_arrows_on ? "ON" : "OFF";
+            _state_col = global.comment_arrows_on ? c_lime : c_red;
         }
         if (_op.action == "SHOW_CODE") {
             // showcode_enabled, not showcode_open. Open is the header's
@@ -854,6 +859,9 @@ if (gui_menu_open == 4) {
             else if (_op.action == "COMMENTS") {
                 global.comments_visible = !global.comments_visible;
             }
+            else if (_op.action == "COMMENT_ARROWS") {
+                global.comment_arrows_on = !global.comment_arrows_on;
+            }
             else if (_op.action == "SHOW_CODE") {
                 showcode_enabled = !showcode_enabled;
                 scr_show_code_save_ini();
@@ -979,6 +987,7 @@ if (gui_menu_open == 4) {
                 global.visual_fx       = true;
                 global.node_destroy_fx = true;
                 global.comments_visible = true;
+                global.comment_arrows_on = true;
                 opcode_headers_on      = false;
                 opcode_extra_height    = true;
                 with (obj_c64_node) { height_dirty = true; }
@@ -1000,6 +1009,7 @@ if (gui_menu_open == 4) {
             ini_write_real("Settings", "palette_helper", showPaletteHelper ? 1 : 0);
             ini_write_real("Settings", "visual_fx", global.visual_fx ? 1 : 0);
             ini_write_real("Settings", "comments_visible", global.comments_visible ? 1 : 0);
+            ini_write_real("Settings", "comment_arrows", global.comment_arrows_on ? 1 : 0);
             ini_write_real("Settings", "opcode_headers", opcode_headers_on ? 1 : 0);
             ini_write_real("Settings", "opcode_extra_height", opcode_extra_height ? 1 : 0);
             ini_close();
@@ -1247,6 +1257,9 @@ if (gui_menu_open == 7 || gui_menu_open == 8) {
         ,17 // GATE-GAME (logic gate puzzle)
         ,-3 // --- TEST ---
         ,16 // PARAMS TEST (Creator params / cards / panels test bed)
+        // ,18 // POLARITY (sisterly life sim: attraction / repulsion)
+        // ,19 // PUMPKINVILLE (Spooky jam 26: grow and guard pumpkins)
+        // ,20 // GOLAZO 64 (side-on 11-a-side football, multiplexed sprites)
         // ,1 // V.SHMUP (PRO)
         // ,2 // H.SHMUP (LITE)
         // ,3 // H.SHMUP (PRO)
@@ -1257,6 +1270,12 @@ if (gui_menu_open == 7 || gui_menu_open == 8) {
         // ,8 // TOP DOWN (LITE)
         // ,9 // TOP DOWN (PRO)
     ];
+    // LITE never shows the TEST header or anything listed under it.
+    if (global.lite) {
+        for (var _tti = 0; _tti < array_length(_visible_templates); _tti++) {
+            if (_visible_templates[_tti] == -3) { array_resize(_visible_templates, _tti); break; }
+        }
+    }
     // PORTS: negative entries are sub-headers (-1 GAMES, -2 MUSIC+GFX), not clickable
     var _port_headers = ["GAMES", "MUSIC+GFX", "TEST"];
     if (gui_menu_open == 8) {
@@ -2498,7 +2517,8 @@ scr_perf_node("gui", "ws: memory bar");
 
 var _bar_x1 = shelf_width + 60;
 var _bar_x2 = gui_w - 60;
-scr_draw_memory_bar(_bar_x1, _bar_x2, gui_h - 40);
+// The code editor covers the bar: skip it (and its cache rebuild) meanwhile.
+if (!code_editor_open) scr_draw_memory_bar(_bar_x1, _bar_x2, gui_h - 40);
 
  scr_code_editor_draw();
 
@@ -4264,6 +4284,11 @@ if (welcome_open) {
             draw_text_l(_rx1 + 36, _ry + 4, _tours[_ti].title);
             draw_set_color(make_color_rgb(140, 200, 200));
             draw_text_l(_rx1 + 36, _ry + 19, _tours[_ti].blurb);
+
+            // Finished with no skips or help: a DONE stamp over the top right corner
+            if (global.tour_done[_ti]) {
+                scr_tour_draw_done_stamp(_rx2 - 36, _ry + 4);
+            }
         }
 
         // Where to find this list again, bottom-left beside the BACK button
